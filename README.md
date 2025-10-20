@@ -48,11 +48,15 @@ Open-core under MIT: all source is public; advanced features are unlocked via Ap
 HarmoniaPlayer/
   HarmoniaPlayer.xcworkspace
   App/
-    macOS/    iOS/    Shared/
+    macOS/
+    iOS/
+    Shared/
   Features/
-    Free/     Pro/
+    Free/
+    Pro/
   Adapters/
-    AudioSession/  FileAccess/  ...
+    AudioSession/
+    FileAccess/  ...
   Packages/
     HarmoniaCore/
       Sources/HarmoniaCore/
