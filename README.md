@@ -32,6 +32,8 @@ Built on [**HarmoniaCore**](https://github.com/OneOfWolvesBilly/HarmoniaCore) â€
   - Non-destructive image editing along frame contours
   - Professional image adjustment (opacity, blur, color grading)
 
+> **Note**: Pro features and availability to be determined based on development progress and user feedback.
+
 ---
 
 ## Supported Formats
@@ -160,18 +162,6 @@ Harmonia Player Pro offers advanced UI customization inspired by **ttPlayer** wi
 - [Architecture Overview](./docs/architecture.md)
 - [Documentation Strategy](./docs/documentation.strategy.md)
 - [Changelog](./CHANGELOG.md)
-
----
-
-## Pricing
-
-- **Harmonia Player (Free)**: Full playback features for common formats, metadata reading
-- **Harmonia Player Pro (macOS)**: One-time purchase via App Store IAP
-  - FLAC & DSD support
-  - Metadata editing (batch editing, artwork management)
-  - Format conversion
-  - Advanced UI customization
-  - Price: TBD
 
 ---
 
