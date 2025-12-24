@@ -1,182 +1,172 @@
-# Harmonia Player
+# HarmoniaPlayer
 
-A minimalist high-fidelity music player for **macOS** and **iOS**.  
-Part of the [HarmoniaSuite](https://github.com/OneOfWolvesBilly/HarmoniaSuite) ecosystem.
+[![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2013+%20%7C%20iOS%2016+-lightgrey.svg)](https://developer.apple.com)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
 
-Harmonia Player follows an **open-core** model: the core player is **free**, with optional **Pro features** available via **App Store In-App Purchase (macOS only)**.  
-Built on [**HarmoniaCore**](https://github.com/OneOfWolvesBilly/HarmoniaCore) — a cross-platform audio framework.
+Reference music player application built with [HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore).
 
----
+## What is HarmoniaPlayer?
+
+**Harmonia Player** is a reference audio player product.
+
+This repository, **HarmoniaPlayer**, contains the application codebase built on top of **HarmoniaCore**, a cross-platform audio framework that provides identical behavior on Apple (Swift) and Linux (C++20) platforms.
+
+It serves as:
+
+1. **Reference Implementation** - Shows how to use HarmoniaCore APIs
+2. **Validation Tool** - Ensures HarmoniaCore works correctly
+3. **Standalone App** - Fully functional music player
+
+### Relationship with HarmoniaCore
+
+```
+┌─────────────────────────────────┐
+│  HarmoniaPlayer (this repo)     │  ← UI Application
+│  SwiftUI + AppKit/UIKit         │
+└──────────────┬──────────────────┘
+               │ uses via SPM
+┌──────────────▼──────────────────┐
+│  HarmoniaCore-Swift (package)   │  ← Swift Package
+│  Subtree from HarmoniaCore      │
+└──────────────┬──────────────────┘
+               │ extracted from
+┌──────────────▼──────────────────┐
+│  HarmoniaCore (main spec)       │  ← Main Repository
+│  apple-swift/ + linux-cpp/      │
+└─────────────────────────────────┘
+```
+
+**HarmoniaPlayer** provides the user interface.  
+**HarmoniaCore-Swift** provides the audio engine (SPM package).  
+**HarmoniaCore** contains specifications and implementations.
 
 ## Features
 
-### Core Features (Free)
-- ✅ Clean playback UI built with SwiftUI
-- ✅ Music library management and scanning (macOS)
-- ✅ Queue and playlist management
-- ✅ Gapless playback (where supported)
-- ✅ **Metadata reading** (ID3/MP4/Vorbis tags)
-- ✅ Album artwork display
-- ✅ EQ equalizer
-- ✅ ReplayGain support (macOS)
-- ✅ Keyboard shortcuts and media key support (macOS)
+### Current Development Status
 
-### Pro Features (macOS IAP)
-- 🎵 **FLAC playback** (24-bit, 192kHz+ support)
-- 🎵 **DSD playback** (DSF/DFF with DSD-to-PCM conversion)
-- ✏️ **Metadata editing** (batch tag editing, artwork management)
-- 🔄 **Format conversion** (batch convert between formats)
-- 🎨 **Advanced UI customization**:
-  - Custom background images
-  - Curved frame effects (bamboo-basket style borders)
-  - Non-destructive image editing along frame contours
-  - Professional image adjustment (opacity, blur, color grading)
+**Q4 2025 (Deliverables for NLnet Review):**
+- ✅ macOS Free - Basic playback with standard formats
+- ✅ iOS Free - Basic playback with standard formats
+- Supported formats: MP3, AAC, ALAC, WAV, AIFF
 
-> **Note**: Pro features and availability to be determined based on development progress and user feedback.
+**Q1 2026 (Planned):**
+- macOS Pro - Adds FLAC and DSD support
+- Note: iOS Pro not planned due to iTunes file transfer limitations
 
----
-
-## Supported Formats
-
-| Format | Codec | macOS (Free) | macOS Pro (IAP) | iOS |
-|--------|-------|--------------|-----------------|-----|
-| MP3 | MPEG-1 Layer III | ✅ | ✅ | ✅ |
-| AAC | MPEG-4 AAC | ✅ | ✅ | ✅ |
-| ALAC | Apple Lossless | ✅ | ✅ | ✅ |
-| WAV | PCM 16-24-bit | ✅ | ✅ | ❌* |
-| AIFF | PCM 16-24-bit | ✅ | ✅ | ❌* |
-| FLAC | Free Lossless | ❌ | ✅ | ❌ |
-| DSD | DSF/DFF | ❌ | ✅ | ❌ |
-
-\* *iOS can only access files in the system Media Library; WAV/AIFF typically not supported via Music app*
-
----
-
-## Feature Comparison
-
-| Feature | macOS (Free) | macOS Pro (IAP) | iOS |
-|---------|--------------|-----------------|-----|
-| **Playback Formats** |
-| MP3, AAC, ALAC, WAV, AIFF | ✅ | ✅ | ✅ (MP3/AAC/ALAC only) |
-| FLAC (Hi-Res) | ❌ | ✅ | ❌ |
-| DSD (DSF/DFF) | ❌ | ✅ | ❌ |
-| **Library Management** |
-| Direct File Access & Scanning | ✅ | ✅ | ❌ (Media Library only) |
-| Playlist Creation | ✅ | ✅ | ✅ |
-| Smart Playlists | ✅ | ✅ | ❌ |
-| **Metadata** |
-| Tag Reading | ✅ | ✅ | ✅ |
-| Tag Editing | ❌ | ✅ | ❌ |
-| Batch Tag Editing | ❌ | ✅ | ❌ |
-| Artwork Management | ❌ | ✅ | ❌ |
-| **Audio Features** |
-| EQ Equalizer | ✅ | ✅ | ✅ |
-| ReplayGain | ✅ | ✅ | ❌ |
-| Format Conversion | ❌ | ✅ | ❌ |
-| **UI Customization** |
-| Standard Themes | ✅ | ✅ | ✅ |
-| Custom Backgrounds | ❌ | ✅ | ❌ |
-| Curved Frame Effects | ❌ | ✅ | ❌ |
-| Advanced Image Editing | ❌ | ✅ | ❌ |
-
----
-
-## UI Customization (Pro Only)
-
-Harmonia Player Pro offers advanced UI customization inspired by **ttPlayer** with professional image editing capabilities:
-
-### Features
-- 🖼️ **Custom Background Images**: Import your own artwork as player background
-- 🎨 **Curved Frame Effects**: Apply bamboo-basket-style curved borders to your images
-- ✂️ **Non-Destructive Editing**: Adjust images along frame contours (similar to Photoshop's warp/distort)
-- 🎭 **Multiple Themes**: Save and switch between different custom layouts
-
-### How It Works
-1. Import your image as background
-2. Select a frame template (curved borders, rounded corners, etc.)
-3. Adjust image to fit the frame using control points
-4. Fine-tune opacity, blur, and color grading
-5. Save as a custom theme
-
-> **Note**: This feature is exclusive to **macOS Pro** and requires in-app purchase.
-
----
-
-## Platform-Specific Notes
-
-### macOS
-- ✅ Full feature support
-- ✅ Direct file access and library scanning
-- ✅ Metadata reading (free)
-- ✅ FLAC/DSD support, metadata editing, format conversion (Pro IAP)
-- ✅ Advanced UI customization (Pro IAP)
-
-### iOS
-- ⚠️ **Library Access Only**: Can only play music from your device's **Media Library** (Apple Music / iTunes-synced items)
-- ⚠️ **No Direct File Import**: iOS sandbox restrictions prevent accessing arbitrary audio files
-- ⚠️ **Limited Formats**: Only MP3, AAC, and ALAC are supported (no FLAC/DSD)
-- ⚠️ **Read-Only Metadata**: Can read tags but cannot edit them
-- ⚠️ **No Format Conversion**: iOS version is playback-only
-- ⚠️ **No UI Customization**: iOS version uses standard player interface
-
----
+**Q1-Q4 2026:**
+- Linux HarmoniaCore (C++20) implementation
 
 ## Installation
 
-### macOS
-1. Download from **Mac App Store** (coming soon)
-2. Or build from source:
+### Download Pre-Built App
+
+*(Not yet available - currently in development)*
+
+### Build from Source
+
 ```bash
-   git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
-   cd HarmoniaPlayer
-   open HarmoniaPlayer.xcworkspace
+# Clone repository
+git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
+cd HarmoniaPlayer
+
+# Open in Xcode
+open HarmoniaPlayer.xcodeproj
+
+# Select scheme: HarmoniaPlayer-macOS-Free
+# Product > Run (⌘R)
 ```
-   Select **HarmoniaPlayer-macOS** target and build/run.
 
-### iOS
-1. Download from **App Store** (coming soon)
-2. Or use TestFlight for beta testing (link TBA)
+**Requirements:**
+- macOS 13.0+
+- Xcode 15.0+
+- Swift 5.9+
 
----
+HarmoniaCore-Swift dependency is automatically fetched via SPM.
 
-## Development Status
+## Quick Start
 
-**Current Focus**: Harmonia Player (macOS) - MVP Development
+1. **Launch** HarmoniaPlayer
+2. **Add files** by clicking `+` or drag-and-drop
+3. **Double-click** a track to play
+4. **Use keyboard shortcuts**: `Space` to play/pause, `⌘→` for next track
 
-### Roadmap
-- 🎯 **Q4 2025 - Q1 2026**: Harmonia Player (macOS) - Beta Release
-- 🎯 **Q1 2026 - Q2 2026**: Harmonia Player (iOS) - Beta Release
-- 🎯 **Q2 2026**: Harmonia Player Pro (macOS) - IAP Features Release
-- 📋 **Q3 2026+**: Harmonia Core (C++20) for Linux support
-
-### Built On
-- [**HarmoniaCore**](https://github.com/OneOfWolvesBilly/HarmoniaCore) (Swift implementation)
-  - Cross-platform audio framework (Swift/C++20)
-  - Provides playback, decoding, and metadata services
-  - Real-time audio rendering with lock-free architecture
-
----
+See [User Guide](docs/user_guide.md) for detailed instructions.
 
 ## Documentation
 
-- [Architecture Overview](./docs/architecture.md)
-- [Documentation Strategy](./docs/documentation.strategy.md)
-- [Changelog](./CHANGELOG.md)
+- **[User Guide](docs/user_guide.md)** - How to use the app
+- **[Architecture](docs/architecture.md)** - System design
+- **[Development Guide](docs/development_guide.md)** - Contributing guide
+- **[Documentation Strategy](docs/documentation_strategy.md)** - Documentation policy
 
----
+## Development
+
+### Project Structure
+
+```
+HarmoniaPlayer/
+├── Shared/              # Cross-platform code (90%)
+│   ├── Models/          # Data models
+│   ├── Views/           # SwiftUI views
+│   └── Services/        # HarmoniaCore integration
+├── macOS/               # macOS-specific code
+│   ├── Free/            # macOS Free version
+│   └── Pro/             # macOS Pro version (v0.2+)
+├── iOS/                 # iOS-specific code (v0.3+)
+└── Tests/               # Unit and UI tests
+```
+
+### Contributing
+
+See [Development Guide](docs/development_guide.md) for:
+- Setting up development environment
+- Code style guidelines
+- Testing procedures
+- Pull request process
+
+### Milestones (Non-binding)
+
+HarmoniaPlayer is developed as a **reference and validation application**
+for exercising HarmoniaCore APIs in real-world scenarios.
+
+The following milestones are **non-binding targets**, evaluated based on
+validation readiness rather than delivery guarantees:
+
+- **Q4 2025 (Target)**  
+  Apple platform reference application for HarmoniaCore validation  
+  (used internally for architecture and behavior review)
+
+- **Future**  
+  Additional platform validation targets may be explored after
+  core behavior contracts stabilize.
+
+Note: HarmoniaPlayer is **not** a deliverable commitment of the NLnet Core grant.
+Its role is to support validation and integration of HarmoniaCore.
+
+## Related Projects
+
+- **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** - Main specification repository
+  - Contains Swift and C++20 implementations
+  - Platform-agnostic specifications
+  - Cross-platform behavior documentation
+
+- **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** - Swift package
+  - Extracted from `HarmoniaCore/apple-swift/`
+  - Used as dependency in this project
+  - Supports macOS 13+ and iOS 16+
 
 ## License
 
-MIT © 2025 Chih-hao (Billy) Chen — see [`LICENSE`](./LICENSE).
+MIT License - see [LICENSE.md](LICENSE.md)
 
-**Contact**: harmonia.audio.project@gmail.com
+Copyright (c) 2025 Chih-hao (Billy) Chen
 
----
+## Contact
 
-## Support Development
+- **Email**: [harmonia.audio.project@gmail.com](mailto:harmonia.audio.project@gmail.com)
+- **GitHub**: [@OneOfWolvesBilly](https://github.com/OneOfWolvesBilly)
+- **Project**: [HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)
 
-If you find Harmonia Player useful, consider supporting its development:
-
-[💖 PayPal](https://paypal.me/HarmoniaSuite) | [☕ Buy Me a Coffee](https://buymeacoffee.com/harmonia.suite.project)
-
----
+For any questions about the Harmonia Suite (HarmoniaCore, HarmoniaPlayer), please use the email above.
+- Issues: [Report bugs](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/issues)
