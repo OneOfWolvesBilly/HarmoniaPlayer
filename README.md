@@ -3,6 +3,7 @@
 [![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
 [![Platform](https://img.shields.io/badge/Platform-macOS%2013+%20%7C%20iOS%2016+-lightgrey.svg)](https://developer.apple.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
 
 Reference music player application built with [HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore).
 
@@ -43,25 +44,26 @@ It serves as:
 
 ## Features
 
-### Current Development Status
+### Current Development Status (2026-01-07)
 
-**Q4 2025 (Deliverables for NLnet Review):**
-- ✅ macOS Free - Basic playback with standard formats
-- ✅ iOS Free - Basic playback with standard formats
-- Supported formats: MP3, AAC, ALAC, WAV, AIFF
+**🚧 In Active Development:**
+- macOS Free version (v0.1) - Foundation in progress
+- iOS Free - Planned after macOS completion
+- Target formats: MP3, AAC, ALAC, WAV, AIFF
 
-**Q1 2026 (Planned):**
-- macOS Pro - Adds FLAC and DSD support
-- Note: iOS Pro not planned due to iTunes file transfer limitations
+**Development Timeline:**
+- **This Week (Jan 7-10):** Complete macOS Free v0.1
+- **Q1 2026 (Planned):** macOS Pro with FLAC/DSD support
+- **Q2 2026:** iOS Free version
+- **Q2-Q4 2026:** Linux HarmoniaCore (C++20) implementation
 
-**Q1-Q4 2026:**
-- Linux HarmoniaCore (C++20) implementation
+> **Note:** This is a reference implementation. Features marked as "planned" are non-binding targets for validation purposes.
 
 ## Installation
 
 ### Download Pre-Built App
 
-*(Not yet available - currently in development)*
+*(Not yet available - currently in active development)*
 
 ### Build from Source
 
@@ -71,7 +73,7 @@ git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
 cd HarmoniaPlayer
 
 # Open in Xcode
-open HarmoniaPlayer.xcodeproj
+open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 
 # Select scheme: HarmoniaPlayer-macOS-Free
 # Product > Run (⌘R)
@@ -86,35 +88,48 @@ HarmoniaCore-Swift dependency is automatically fetched via SPM.
 
 ## Quick Start
 
+*(App is not yet functional - in development)*
+
+When complete:
 1. **Launch** HarmoniaPlayer
 2. **Add files** by clicking `+` or drag-and-drop
 3. **Double-click** a track to play
 4. **Use keyboard shortcuts**: `Space` to play/pause, `⌘→` for next track
 
-See [User Guide](docs/user_guide.md) for detailed instructions.
+See [User Guide](docs/user_guide.md) for planned features.
 
 ## Documentation
 
-- **[User Guide](docs/user_guide.md)** - How to use the app
+- **[User Guide](docs/user_guide.md)** - Planned features and usage
 - **[Architecture](docs/architecture.md)** - System design
 - **[Development Guide](docs/development_guide.md)** - Contributing guide
 - **[Documentation Strategy](docs/documentation_strategy.md)** - Documentation policy
 
 ## Development
 
-### Project Structure
+### Repository Structure
 
 ```
-HarmoniaPlayer/
-├── Shared/              # Cross-platform code (90%)
-│   ├── Models/          # Data models
-│   ├── Views/           # SwiftUI views
-│   └── Services/        # HarmoniaCore integration
-├── macOS/               # macOS-specific code
-│   ├── Free/            # macOS Free version
-│   └── Pro/             # macOS Pro version (v0.2+)
-├── iOS/                 # iOS-specific code (v0.3+)
-└── Tests/               # Unit and UI tests
+HARMONIAPLAYER/
+├── App/
+│   └── HarmoniaPlayer/
+│       ├── HarmoniaPlayer/        # Source files
+│       │   ├── Shared/            # Cross-platform code (90%)
+│       │   │   ├── Models/        # Data models
+│       │   │   ├── Views/         # SwiftUI views
+│       │   │   └── Services/      # HarmoniaCore integration
+│       │   ├── macOS/             # macOS-specific code
+│       │   │   └── Free/          # macOS Free version
+│       │   ├── iOS/               # iOS-specific code (v0.3+)
+│       │   ├── Assets.xcassets
+│       │   ├── ContentView.swift
+│       │   └── HarmoniaPlayerApp.swift
+│       ├── Tests/                 # Unit and UI tests
+│       └── HarmoniaPlayer.xcodeproj/
+├── docs/                          # Documentation
+├── README.md
+├── CHANGELOG.md
+└── LICENSE
 ```
 
 ### Contributing
@@ -133,7 +148,7 @@ for exercising HarmoniaCore APIs in real-world scenarios.
 The following milestones are **non-binding targets**, evaluated based on
 validation readiness rather than delivery guarantees:
 
-- **Q4 2025 (Target)**  
+- **Q1 2026 (Target)**  
   Apple platform reference application for HarmoniaCore validation  
   (used internally for architecture and behavior review)
 
@@ -158,7 +173,7 @@ Its role is to support validation and integration of HarmoniaCore.
 
 ## License
 
-MIT License - see [LICENSE.md](LICENSE.md)
+MIT License - see [LICENSE](LICENSE)
 
 Copyright (c) 2025 Chih-hao (Billy) Chen
 
@@ -169,4 +184,6 @@ Copyright (c) 2025 Chih-hao (Billy) Chen
 - **Project**: [HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)
 
 For any questions about the Harmonia Suite (HarmoniaCore, HarmoniaPlayer), please use the email above.
-- Issues: [Report bugs](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/issues)
+
+- **Issues**: [Report bugs](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/issues)
+- **Discussions**: [Feature requests](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/discussions)

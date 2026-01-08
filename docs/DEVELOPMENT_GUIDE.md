@@ -59,8 +59,8 @@ HarmoniaPlayer (This Repo)
 git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
 cd HarmoniaPlayer
 
-# Open in Xcode
-open HarmoniaPlayer.xcodeproj
+# Open in Xcode (note the correct path)
+open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 
 # HarmoniaCore-Swift will be automatically fetched via SPM
 ```
@@ -87,47 +87,50 @@ let clock = MonotonicClockAdapter()
 ## 📂 Project Structure
 
 ```
-HarmoniaPlayer/
- ├─ Shared/                   # Cross-platform UI code
- │  ├─ Models/                # UI-level data models
- │  │  ├─ Track.swift
- │  │  ├─ Playlist.swift
- │  │  └─ AppState.swift
- │  ├─ Views/                 # SwiftUI views
- │  │  ├─ PlayerView.swift
- │  │  ├─ PlaylistView.swift
- │  │  └─ TrackRow.swift
- │  └─ Services/
- │     └─ CoreFactory.swift   # HarmoniaCore integration
- ├─ macOS/
- │  ├─ Free/                  # macOS Free app
- │  │  ├─ HarmoniaPlayer_macOSApp.swift
- │  │  ├─ ContentView.swift
- │  │  └─ Assets.xcassets
- │  └─ Pro/                   # macOS Pro app (v0.2+)
- ├─ iOS/                      # iOS apps (v0.3+)
- ├─ Commands/
- │  └─ PlayerCommands.swift   # Menu bar commands
- ├─ StoreKit/                 # IAP integration (future)
- │  ├─ IAPManager.swift
- │  └─ PaywallView.swift
- ├─ Tests/
- │  ├─ SharedTests/
- │  └─ macOSTests/
- ├─ docs/
- ├─ CHANGELOG.md
- ├─ LICENSE.md
- └─ README.md
+HARMONIAPLAYER/                   # Repository root
+├── App/
+│   └── HarmoniaPlayer/           # Xcode project
+│       ├── Shared/               # Cross-platform UI code (90%)
+│       │   ├── Models/           # UI-level data models
+│       │   │   ├── Track.swift
+│       │   │   ├── Playlist.swift
+│       │   │   ├── PlaybackState.swift
+│       │   │   ├── PlaybackError.swift
+│       │   │   └── AppState.swift
+│       │   ├── Views/            # SwiftUI views
+│       │   │   ├── PlayerView.swift
+│       │   │   ├── PlaylistView.swift
+│       │   │   └── TrackRow.swift
+│       │   └── Services/
+│       │       └── CoreFactory.swift   # HarmoniaCore integration
+│       ├── macOS/
+│       │   └── Free/             # macOS Free app
+│       │       ├── HarmoniaPlayer_macOSApp.swift
+│       │       └── ContentView.swift
+│       ├── iOS/                  # iOS apps (v0.3+)
+│       ├── Tests/
+│       │   ├── SharedTests/
+│       │   └── macOSTests/
+│       └── HarmoniaPlayer.xcodeproj/
+├── docs/                         # Documentation
+│   ├── architecture.md
+│   ├── development_guide.md
+│   ├── user_guide.md
+│   └── ...
+├── CHANGELOG.md
+├── LICENSE
+└── README.md
 ```
 
 **Key Principles:**
 - 90% of code in `Shared/` (cross-platform)
 - 10% in `macOS/` or `iOS/` (platform-specific)
 - HarmoniaCore provides all audio functionality
+- Documentation lives in repo root for easy access
 
 ---
 
-## 🔄 HarmoniaCore Integration
+## 📄 HarmoniaCore Integration
 
 ### Adding HarmoniaCore Dependency
 
@@ -254,7 +257,7 @@ dependencies: [
 
 ---
 
-## 🔑 Core Principles for IAP Integration
+## 🔒 Core Principles for IAP Integration
 
 ### Principle 1: Centralized IAP State Management
 
@@ -392,10 +395,10 @@ Product > Test (⌘U)
 ## 📚 Documentation References
 
 ### HarmoniaPlayer Docs (This Repo)
-- [Architecture](architecture.md) - App structure
-- [User Guide](user_guide.md) - How to use the app
-- [Development Guide](DEVELOPMENT_GUIDE.md) - This file
-- [Documentation Strategy](documentation_strategy.md) - Documentation policy
+- [Architecture](docs/architecture.md) - App structure
+- [User Guide](docs/user_guide.md) - How to use the app
+- [Development Guide](docs/development_guide.md) - This file
+- [Documentation Strategy](docs/documentation_strategy.md) - Documentation policy
 
 ### HarmoniaCore Specs (Main Repository)
 
