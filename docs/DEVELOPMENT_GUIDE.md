@@ -2,6 +2,8 @@
 
 This document explains the development setup, architecture, and IAP integration for HarmoniaPlayer.
 
+> **Note:** This guide reflects the planned architecture. Implementation has not yet begun.
+
 ---
 
 ## 🔗 Understanding the Repository Structure
@@ -40,6 +42,11 @@ HarmoniaCore (Main)
 HarmoniaPlayer (This Repo)
 └── depends on → HarmoniaCore-Swift (via SPM)
 ```
+
+**Key Architectural Documents:**
+- [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
+- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+- [HarmoniaPlayer Architecture](architecture.md)
 
 ---
 
@@ -96,13 +103,15 @@ HARMONIAPLAYER/                   # Repository root
 │       │   │   ├── Playlist.swift
 │       │   │   ├── PlaybackState.swift
 │       │   │   ├── PlaybackError.swift
+│       │   │   ├── ViewPreferences.swift
 │       │   │   └── AppState.swift
 │       │   ├── Views/            # SwiftUI views
 │       │   │   ├── PlayerView.swift
 │       │   │   ├── PlaylistView.swift
 │       │   │   └── TrackRow.swift
 │       │   └── Services/
-│       │       └── CoreFactory.swift   # HarmoniaCore integration
+│       │       ├── CoreFactory.swift   # HarmoniaCore service construction
+│       │       └── IAPManager.swift    # IAP management (macOS Pro)
 │       ├── macOS/
 │       │   └── Free/             # macOS Free app
 │       │       ├── HarmoniaPlayer_macOSApp.swift
@@ -114,6 +123,9 @@ HARMONIAPLAYER/                   # Repository root
 │       └── HarmoniaPlayer.xcodeproj/
 ├── docs/                         # Documentation
 │   ├── architecture.md
+│   ├── api_reference.md
+│   ├── implementation_guide_swift.md
+│   ├── module_boundary.md
 │   ├── development_guide.md
 │   ├── user_guide.md
 │   └── ...
@@ -127,6 +139,8 @@ HARMONIAPLAYER/                   # Repository root
 - 10% in `macOS/` or `iOS/` (platform-specific)
 - HarmoniaCore provides all audio functionality
 - Documentation lives in repo root for easy access
+
+**See:** [Module Boundaries](module_boundary.md) for dependency rules.
 
 ---
 
@@ -159,35 +173,35 @@ let package = Package(
 )
 ```
 
-### Using HarmoniaCore Services
+### Architecture Pattern: Dependency Injection
 
-**Example: AppState Integration**
+HarmoniaPlayer follows a clean Ports & Adapters architecture:
+
+```
+Views → AppState → CoreFactory → HarmoniaCore Services
+                 ↘ IAPManager
+```
+
+**Key Points:**
+- **Views** depend on AppState only
+- **AppState** receives services via dependency injection
+- **CoreFactory** constructs all HarmoniaCore services
+- **IAPManager** handles IAP state independently
+
+### Example: CoreFactory
 
 ```swift
 import HarmoniaCore
 
-@MainActor
-final class AppState: ObservableObject {
-    // MARK: - Published State
-    @Published var playbackState: PlaybackState = .stopped
-    @Published var currentTrack: Track?
-    @Published var currentTime: Double = 0
-    @Published var duration: Double = 0
-    
-    // MARK: - Services (from HarmoniaCore)
-    private let playbackService: PlaybackService
-    private let logger: LoggerPort
-    
-    // MARK: - Initialization
-    init() {
-        // Create HarmoniaCore services
-        let logger = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "App")
+struct CoreFactory {
+    /// Constructs PlaybackService with appropriate configuration
+    func makePlaybackService(isProUser: Bool) -> PlaybackService {
+        let logger = OSLogAdapter()
         let clock = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let audio = AVAudioEngineOutputAdapter(logger: logger)
         
-        self.logger = logger
-        self.playbackService = DefaultPlaybackService(
+        return DefaultPlaybackService(
             decoder: decoder,
             audio: audio,
             clock: clock,
@@ -195,22 +209,126 @@ final class AppState: ObservableObject {
         )
     }
     
-    // MARK: - Playback Control
-    func play() {
-        do {
-            try playbackService.play()
-            playbackState = playbackService.state
-        } catch {
-            logger.error("Failed to play: \(error)")
-        }
+    /// Constructs TagReaderService for metadata reading
+    func makeTagReaderService() -> TagReaderService {
+        let logger = OSLogAdapter()
+        let tagReaderPort = AVMetadataTagReaderAdapter(logger: logger)
+        return DefaultTagReaderService(tagReaderPort: tagReaderPort)
+    }
+}
+```
+
+### Example: AppState Integration
+
+**IMPORTANT:** AppState does NOT construct services directly. Services are injected via CoreFactory.
+
+```swift
+import HarmoniaCore
+
+@MainActor
+final class AppState: ObservableObject {
+    // MARK: - Published State
+    @Published private(set) var playbackState: PlaybackState = .idle
+    @Published private(set) var currentTrack: Track?
+    @Published private(set) var currentTime: TimeInterval = 0
+    @Published private(set) var duration: TimeInterval = 0
+    
+    @Published private(set) var playlist: Playlist = Playlist(
+        id: UUID(),
+        name: "Session",
+        tracks: []
+    )
+    
+    @Published var viewPreferences: ViewPreferences = ViewPreferences(
+        isWaveformVisible: true,
+        isPlaylistVisible: true,
+        layoutPreset: .standard
+    )
+    
+    @Published private(set) var lastError: PlaybackError?
+    @Published private(set) var isProUser: Bool = false
+    
+    // MARK: - Services (injected via CoreFactory)
+    private let playbackService: PlaybackService
+    private let tagReaderService: TagReaderService
+    private let iapManager: IAPManager
+    
+    // MARK: - Initialization (Dependency Injection)
+    init(factory: CoreFactory, iap: IAPManager) {
+        self.iapManager = iap
+        self.isProUser = iap.isProUser
+        
+        // CoreFactory constructs services based on Pro status
+        self.playbackService = factory.makePlaybackService(
+            isProUser: iap.isProUser
+        )
+        self.tagReaderService = factory.makeTagReaderService()
+    }
+    
+    // MARK: - Playback Control (synchronous, throws on error)
+    func play() throws {
+        try playbackService.play()
+        playbackState = .playing
+        lastError = nil
     }
     
     func pause() {
         playbackService.pause()
-        playbackState = playbackService.state
+        playbackState = .paused
+    }
+    
+    func stop() {
+        playbackService.stop()
+        playbackState = .stopped
+        currentTrack = nil
+    }
+    
+    func seek(to time: TimeInterval) throws {
+        try playbackService.seek(to: time)
+        currentTime = time
+    }
+    
+    // MARK: - File Loading with Metadata
+    func loadFiles(urls: [URL]) {
+        for url in urls {
+            do {
+                let track = try tagReaderService.readMetadata(for: url)
+                playlist.tracks.append(track)
+            } catch {
+                handleError(error)
+            }
+        }
+    }
+    
+    // MARK: - Error Handling
+    private func handleError(_ error: Error) {
+        if let coreError = error as? CoreError {
+            switch coreError {
+            case .notFound(let msg):
+                lastError = .fileNotFound(URL(string: msg) ?? URL(fileURLWithPath: "/"))
+            case .unsupported(let msg):
+                lastError = .unsupportedFormat(msg)
+            default:
+                lastError = .coreError(coreError.description)
+            }
+        } else {
+            lastError = .coreError(error.localizedDescription)
+        }
     }
 }
 ```
+
+**Key Architectural Points:**
+1. **Synchronous Core:** All HarmoniaCore methods are synchronous (no `async`)
+2. **Dependency Injection:** Services come from CoreFactory, not constructed in AppState
+3. **Error Handling:** Errors are thrown and mapped to UI-friendly types
+4. **Service Abstraction:** TagReaderService wraps HarmoniaCore's TagReaderPort for application use
+
+**See:**
+- [API Reference](api_reference.md) for interface definitions
+- [Implementation Guide (Swift)](implementation_guide_swift.md) for complete implementation examples
+- [Module Boundaries](module_boundary.md) for dependency rules
+- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) for service contracts
 
 ### Updating HarmoniaCore Dependency
 
@@ -257,73 +375,136 @@ dependencies: [
 
 ---
 
-## 🔒 Core Principles for IAP Integration
+## 🔒 IAP Integration (macOS Pro)
 
-### Principle 1: Centralized IAP State Management
+### Overview
 
-All purchase state is managed by **StoreKit/IAPManager.swift**:
+HarmoniaPlayer follows a clean separation for IAP:
+
+```
+UI Layer (Views)
+    ↓ observes isProUser
+Application Layer (AppState)
+    ↓ uses
+Integration Layer (IAPManager)
+    ↓ manages
+StoreKit 2
+```
+
+### IAPManager Interface
 
 ```swift
-final class IAPManager: ObservableObject {
-    static let shared = IAPManager()
-    @Published var isProUser: Bool = false
+protocol IAPManager: AnyObject {
+    var isProUser: Bool { get }
+    
+    func refreshEntitlements() async
+    func purchasePro() async throws
+}
+```
 
-    func purchasePro() async throws {
-        // StoreKit 2 purchase logic
+### Implementation Example
+
+```swift
+import StoreKit
+
+@MainActor
+final class StoreKitIAPManager: IAPManager, ObservableObject {
+    @Published private(set) var isProUser: Bool = false
+    
+    private let productID = "harmoniaplayer.pro"
+    
+    init() {
+        Task {
+            await refreshEntitlements()
+        }
     }
     
-    func restorePurchases() async throws {
-        // Restore logic
-    }
-}
-```
-
-### Principle 2: Runtime IAP Locking
-
-Every Pro entry point checks IAP status before execution:
-
-```swift
-import HarmoniaCore
-
-func loadTrack(url: URL) {
-    // Check if format requires Pro
-    if url.pathExtension == "flac" {
-        guard IAPManager.shared.isProUser else {
-            NotificationCenter.default.post(
-                name: .showPaywall,
-                object: "FLAC Playback"
-            )
-            return
+    func refreshEntitlements() async {
+        // Check current entitlements
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result {
+                if transaction.productID == productID {
+                    isProUser = true
+                    return
+                }
+            }
         }
-        // Use Pro decoder
-        #if HARMONIA_PRO
-        let decoder = ProDecoderAdapter(logger: logger)
-        #endif
-    } else {
-        // Free playback logic
-        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
+        isProUser = false
+    }
+    
+    func purchasePro() async throws {
+        guard let product = try await Product.products(for: [productID]).first else {
+            throw IAPError.productNotFound
+        }
+        
+        let result = try await product.purchase()
+        
+        switch result {
+        case .success(let verification):
+            if case .verified(_) = verification {
+                await refreshEntitlements()
+            }
+        case .userCancelled:
+            throw IAPError.userCancelled
+        case .pending:
+            throw IAPError.purchasePending
+        @unknown default:
+            throw IAPError.unknown
+        }
     }
 }
 ```
 
-### Principle 3: UI-Level Paywall Integration
+### Format Gating Pattern
 
-UI elements for Pro functionality should be disabled for non-Pro users:
+Pro features are gated at the AppState level, not in HarmoniaCore:
 
 ```swift
-struct AudioSettingsView: View {
-    @ObservedObject var iapManager = IAPManager.shared
-    @State private var bitPerfectEnabled = false
+func load(urls: [URL]) {
+    for url in urls {
+        // Check format requirements
+        let ext = url.pathExtension.lowercased()
+        let requiresPro = ["flac", "dsd", "dsf", "dff"].contains(ext)
+        
+        if requiresPro && !isProUser {
+            // Show paywall or skip
+            lastError = .unsupportedFormat("FLAC/DSD playback requires Pro")
+            continue
+        }
+        
+        // Proceed with loading
+        do {
+            let track = try enrichTrack(url: url)
+            playlist.tracks.append(track)
+        } catch {
+            handleError(error)
+        }
+    }
+}
+```
 
+### UI Integration
+
+```swift
+struct PlayerView: View {
+    @EnvironmentObject var appState: AppState
+    
     var body: some View {
         VStack {
-            Toggle("Bit-perfect Output", isOn: $bitPerfectEnabled)
-                .disabled(!iapManager.isProUser)
-                .opacity(iapManager.isProUser ? 1.0 : 0.4)
-
-            if !iapManager.isProUser {
-                Button("Unlock Pro Features") {
-                    // Show PaywallView
+            if !appState.isProUser {
+                proFeatureBanner
+            }
+            playlistView
+            transportControls
+        }
+    }
+    
+    private var proFeatureBanner: some View {
+        HStack {
+            Text("Upgrade to Pro for FLAC/DSD support")
+            Button("Upgrade") {
+                Task {
+                    try? await appState.iapManager.purchasePro()
                 }
             }
         }
@@ -331,52 +512,65 @@ struct AudioSettingsView: View {
 }
 ```
 
+**Important IAP Rules:**
+- ❌ Never construct services based on IAP inside HarmoniaCore
+- ✅ CoreFactory receives `isProUser` flag and chooses configuration
+- ✅ AppState enforces format restrictions before loading
+- ✅ UI shows upgrade prompts for Pro features
+
 ---
 
 ## 🎯 Development Workflow
 
 ### Adding a New Feature
 
-1. **Implement business logic in `Shared/`**
+1. **Define model in `Shared/Models/`**
    ```swift
-   // Shared/Models/AppState.swift
-   func addToPlaylist(_ track: Track) {
-       playlist.append(track)
+   // Shared/Models/PlaybackSpeed.swift
+   enum PlaybackSpeed: Double, CaseIterable {
+       case slow = 0.5
+       case normal = 1.0
+       case fast = 1.5
    }
    ```
 
-2. **Create UI in `Shared/Views/`**
+2. **Add to AppState**
    ```swift
-   // Shared/Views/PlaylistView.swift
-   struct PlaylistView: View {
+   @Published var playbackSpeed: PlaybackSpeed = .normal
+   
+   func setPlaybackSpeed(_ speed: PlaybackSpeed) {
+       self.playbackSpeed = speed
+       // Update playback service if needed
+   }
+   ```
+
+3. **Create UI in `Shared/Views/`**
+   ```swift
+   // Shared/Views/SpeedControlView.swift
+   struct SpeedControlView: View {
        @EnvironmentObject var appState: AppState
        
        var body: some View {
-           // UI implementation
+           Picker("Speed", selection: $appState.playbackSpeed) {
+               ForEach(PlaybackSpeed.allCases, id: \.self) { speed in
+                   Text("\(speed.rawValue)x").tag(speed)
+               }
+           }
        }
    }
-   ```
-
-3. **Add platform-specific code if needed**
-   ```swift
-   // macOS/Free/ContentView.swift
-   #if os(macOS)
-   .toolbar {
-       // macOS-specific toolbar
-   }
-   #endif
    ```
 
 4. **Write tests**
    ```swift
    // Tests/SharedTests/AppStateTests.swift
-   func testAddToPlaylist() {
-       let appState = AppState()
-       let track = Track(url: testURL, title: "Test")
+   func testPlaybackSpeedChange() {
+       let factory = CoreFactory()
+       let iap = MockIAPManager()
+       let appState = AppState(factory: factory, iap: iap)
        
-       appState.addToPlaylist(track)
+       appState.setPlaybackSpeed(.fast)
        
-       XCTAssertEqual(appState.playlist.count, 1)
+       XCTAssertEqual(appState.playbackSpeed, .fast)
    }
    ```
 
@@ -395,38 +589,29 @@ Product > Test (⌘U)
 ## 📚 Documentation References
 
 ### HarmoniaPlayer Docs (This Repo)
-- [Architecture](docs/architecture.md) - App structure
-- [User Guide](docs/user_guide.md) - How to use the app
-- [Development Guide](docs/development_guide.md) - This file
-- [Documentation Strategy](docs/documentation_strategy.md) - Documentation policy
+- [Architecture](architecture.md) - System architecture
+- [API Reference](api_reference.md) - Interface definitions
+- [Implementation Guide (Swift)](implementation_guide_swift.md) - Swift-specific patterns
+- [Module Boundaries](module_boundary.md) - Dependency rules
+- [User Guide](user_guide.md) - How to use the app
+- [Documentation Strategy](documentation_strategy.md) - Documentation policy
 
 ### HarmoniaCore Specs (Main Repository)
 
 **Platform-Agnostic Specifications:**
-- [Architecture Overview](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
-- [Adapters Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/02_adapters.md)
-- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
-- [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
-- [Models Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
+- [Architecture Overview](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md) - Ports & Adapters pattern
+- [Adapters Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/02_adapters.md) - Platform adapters
+- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md) - Port interfaces
+- [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) - Service contracts
+- [Models Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md) - Data models
 
 **Implementation Guides:**
 - [Apple Adapters Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/02_01_apple_adapters_impl.md)
 - [Ports Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/03_ports_impl.md)
 - [Services Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/04_services_impl.md)
-- [Models Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/05_models_impl.md)
 
 ### HarmoniaCore-Swift (Package)
 - [Swift Package README](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift/blob/main/README.md)
-
----
-
-## ⚠️ App Store Review Considerations
-
-| Phase | Recommendation |
-|-------|----------------|
-| **Initial submission** | Include only core functionality (Free). Keep Pro code present but not visually exposed until IAP is approved. |
-| **After IAP approval** | Enable visible Paywall and Pro feature entry points. |
-| **External payments** | ❌ Never include PayPal or Buy Me a Coffee links inside the app. Such links belong only in GitHub/README. |
 
 ---
 
@@ -434,7 +619,7 @@ Product > Test (⌘U)
 
 ### SwiftUI Views
 
-- Use `@EnvironmentObject` for shared state
+- Use `@EnvironmentObject` for AppState
 - Extract reusable components
 - Keep view bodies small and readable
 
@@ -447,7 +632,7 @@ struct PlayerView: View {
         VStack {
             albumArtView
             progressBar
-            stateIndicator
+            transportControls
         }
     }
     
@@ -457,29 +642,61 @@ struct PlayerView: View {
 }
 ```
 
+**Bad:**
+```swift
+struct PlayerView: View {
+    let playbackService: PlaybackService  // ❌ Don't inject services directly
+}
+```
+
 ### State Management
 
 - Use `@Published` for UI-observable state
-- Keep business logic in AppState or ViewModels
+- Keep business logic in AppState
 - Use `@MainActor` for UI updates
+
+**Good:**
+```swift
+@MainActor
+final class AppState: ObservableObject {
+    @Published private(set) var playbackState: PlaybackState
+    
+    func play() throws {
+        try playbackService.play()
+        playbackState = .playing
+    }
+}
+```
 
 ### Error Handling
 
-- Always handle `CoreError` cases
-- Provide user-friendly error messages
-- Log errors for debugging
+- Always handle errors from HarmoniaCore
+- Map to UI-friendly error types
+- Log for debugging
 
 ```swift
-do {
-    try playbackService.load(url: url)
-} catch let error as CoreError {
-    switch error {
-    case .notFound(let msg):
-        showAlert("File not found", message: msg)
-    case .unsupported(let msg):
-        showAlert("Format not supported", message: msg)
-    default:
-        showAlert("Error", message: error.description)
+func play() {
+    do {
+        try playbackService.play()
+        playbackState = .playing
+        lastError = nil
+    } catch {
+        handleError(error)
+    }
+}
+
+private func handleError(_ error: Error) {
+    if let coreError = error as? CoreError {
+        switch coreError {
+        case .notFound(let msg):
+            lastError = .fileNotFound(URL(string: msg) ?? URL(fileURLWithPath: "/"))
+        case .unsupported(let msg):
+            lastError = .unsupportedFormat(msg)
+        default:
+            lastError = .coreError(coreError.description)
+        }
+    } else {
+        lastError = .coreError(error.localizedDescription)
     }
 }
 ```
@@ -506,18 +723,47 @@ View logs in Console.app or Xcode Console.
 
 Set breakpoints in:
 - `AppState.play()` - Playback control
-- `PlaylistView.handleImport()` - File loading
+- `AppState.load(urls:)` - File loading
 - `PlayerView.body` - UI updates
+
+### Common Issues
+
+**Issue:** Service methods not found
+- **Solution:** Verify HarmoniaCore-Swift package is up to date
+
+**Issue:** "Cannot find type 'PlaybackService'"
+- **Solution:** Check `import HarmoniaCore` is present
+
+**Issue:** IAP not working in debug
+- **Solution:** Use StoreKit Configuration file for testing
+
+---
+
+## ⚠️ App Store Review Considerations
+
+| Phase | Recommendation |
+|-------|----------------|
+| **Initial submission** | Include only core functionality (Free). Keep Pro code present but not visually exposed until IAP is approved. |
+| **After IAP approval** | Enable visible Paywall and Pro feature entry points. |
+| **External payments** | ❌ Never include PayPal or Buy Me a Coffee links inside the app. Such links belong only in GitHub/README. |
 
 ---
 
 ## ✅ Summary
 
-- **Single public repo**: Transparent development
-- **HarmoniaCore-Swift dependency**: Provides all audio functionality
-- **IAP gating**: Protects Pro features without hiding code
+- **Dependency Injection**: Services injected via CoreFactory and IAPManager
+- **Synchronous Core**: HarmoniaCore uses synchronous APIs
+- **Module Boundaries**: Clear separation between UI, App, and Integration layers
+- **IAP Gating**: Format restrictions enforced in AppState, not in HarmoniaCore
 - **Cross-platform**: 90% shared code between macOS/iOS
-- **Fully compliant**: Satisfies Apple's IAP-only monetization guidelines
+- **Testing**: Unit tests with mocked services
+
+**Key Architectural Principles:**
+1. Views depend on AppState only
+2. AppState receives services via dependency injection
+3. CoreFactory constructs all HarmoniaCore services
+4. IAPManager manages purchase state independently
+5. Error handling through exceptions, not state
 
 ---
 

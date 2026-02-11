@@ -100,10 +100,17 @@ See [User Guide](docs/user_guide.md) for planned features.
 
 ## Documentation
 
-- **[User Guide](docs/user_guide.md)** - Planned features and usage
-- **[Architecture](docs/architecture.md)** - System design
-- **[Development Guide](docs/development_guide.md)** - Contributing guide
+### Architecture & Specifications
+- **[Architecture](docs/architecture.md)** - System design and C4 diagrams
+- **[API Specification](docs/api_spec_apple_swift.md)** - Application-facing API
+- **[Module Boundaries](docs/module_boundary.md)** - Dependency rules and constraints
+
+### Development
+- **[Development Guide](docs/development_guide.md)** - Setup and contribution guide
 - **[Documentation Strategy](docs/documentation_strategy.md)** - Documentation policy
+
+### User Documentation
+- **[User Guide](docs/user_guide.md)** - Planned features and usage
 
 ## Development
 
@@ -165,6 +172,12 @@ Its role is to support validation and integration of HarmoniaCore.
   - Contains Swift and C++20 implementations
   - Platform-agnostic specifications
   - Cross-platform behavior documentation
+  - **Key Specs:**
+    - [Architecture (Ports & Adapters)](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
+    - [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
+    - [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+    - [Models & Error Handling](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
+
 
 - **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** - Swift package
   - Extracted from `HarmoniaCore/apple-swift/`

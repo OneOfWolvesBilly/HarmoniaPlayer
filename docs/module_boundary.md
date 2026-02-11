@@ -17,6 +17,7 @@
   leaking into UI and application layers.
 - Make HarmoniaPlayer a good example of a **Ports & Adapters** style app
   consuming HarmoniaCore-Swift.
+- Ensure alignment with [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md).
 
 This document applies to the Apple / Swift implementation only. Linux / C++
 UI implementations will have corresponding module boundary documents in their
@@ -42,17 +43,24 @@ At a high level, the codebase is divided into the following logical modules.
    - `IAPManager` (macOS-only Pro unlock handling).
    - Any glue that wires services into the app.
 4. **Core Services (HarmoniaCore-Swift)**
-   - `PlaybackService` and other high-level services.
-   - Ports: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`.
-5. **Platform Adapters (HarmoniaCore-Swift)**
+   - `PlaybackService` - High-level audio service
+5. **Ports (HarmoniaCore-Swift)**
+   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`, `TagWriterPort`
+6. **Platform Adapters (HarmoniaCore-Swift)**
    - `AVAssetReaderDecoderAdapter`
    - `AVAudioEngineOutputAdapter`
+   - `AVMetadataTagReaderAdapter`
    - `MonotonicClockAdapter`
    - `OSLogAdapter`
+   - `SandboxFileAccessAdapter`
    - Future Apple-specific adapters.
 
 HarmoniaCore-Swift and its adapters live in a **separate package**. From the
 HarmoniaPlayer perspective, they are external dependencies.
+
+**See HarmoniaCore Ports & Adapters:**
+- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
+- [Adapters Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/02_adapters.md)
 
 ---
 
@@ -70,14 +78,19 @@ UI models)]
     integration[Integration Layer
 (CoreFactory, IAPManager)]
     services[Core Services
-(PlaybackService, etc.)]
+(PlaybackService)]
+    ports[Ports
+(DecoderPort, AudioOutputPort,
+TagReaderPort, etc.)]
     adapters[Platform Adapters
 (AV* / OSLog / Clock)]
 
     views --> app
     app --> integration
     integration --> services
-    services --> adapters
+    integration --> ports
+    services --> ports
+    ports --> adapters
 ```
 
 ### 3.2 Rules
@@ -90,27 +103,30 @@ UI models)]
    - Import HarmoniaCore-Swift directly.
    - Import or reference platform adapters.
    - Call `PlaybackService` or ports directly.
+   - Access any audio-related code.
 
 2. **Application Layer** may depend on:
    - HarmoniaPlayer UI models and ViewModels.
    - Integration Layer abstractions (`CoreFactory` interface, `IAPManager` interface).
-   - Core Service interfaces (e.g. `PlaybackService`, `TagReaderService`) injected
-     via constructor or environment.
+   - **PlaybackService interface only** (not concrete implementations).
+   - **TagReaderService interface** for metadata reading.
 
    Application Layer **must not**:
    - Instantiate platform adapters directly.
    - Call AVFoundation APIs directly.
    - Import OSLog, StoreKit, or other Apple-specific frameworks, except through
      small, well-defined interfaces.
+   - Directly use HarmoniaCore Ports (DecoderPort, AudioOutputPort, TagReaderPort, etc.).
 
 3. **Integration Layer** may depend on:
    - Core service interfaces and their concrete implementations.
-   - HarmoniaCore-Swift ports and platform adapters.
+   - **All HarmoniaCore-Swift ports and platform adapters**.
    - Platform-specific frameworks required to wire services (e.g. StoreKit).
 
    Integration Layer **must not**:
    - Contain UI rendering logic (no SwiftUI views).
    - Manipulate SwiftUI layout or view state directly.
+   - Expose Ports or Adapters to Application Layer (except TagReaderPort).
 
 4. **Core Services (HarmoniaCore-Swift)** may depend on:
    - Ports (protocols) that abstract decoding, audio output, logging, and clocks.
@@ -119,6 +135,7 @@ UI models)]
    Core Services **must not**:
    - Depend on SwiftUI, AppKit, UIKit, or any UI framework.
    - Depend on IAP or licensing logic.
+   - Know about Free vs Pro product variants.
 
 5. **Platform Adapters (HarmoniaCore-Swift)** may depend on:
    - AVFoundation, AudioToolbox, OSLog, and other Apple-specific frameworks.
@@ -131,7 +148,72 @@ UI models)]
 
 ---
 
-## 4. Forbidden Dependencies (Examples)
+## 4. Special Cases and Clarifications
+
+### 4.1 TagReaderService Usage
+
+**AppState uses TagReaderService (not TagReaderPort directly) for metadata reading.**
+
+**Rationale:** Metadata reading is needed during file import to populate Track models.
+TagReaderService is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
+
+**Usage Pattern:**
+```swift
+// In AppState or a helper
+@MainActor
+final class AppState: ObservableObject {
+    private let tagReaderService: TagReaderService
+    
+    init(factory: CoreFactory, iap: IAPManager) {
+        self.tagReaderService = factory.makeTagReaderService()
+        // ...
+    }
+    
+    func loadFiles(urls: [URL]) {
+        for url in urls {
+            do {
+                let track = try tagReaderService.readMetadata(for: url)
+                playlist.tracks.append(track)
+            } catch {
+                handleError(error)
+            }
+        }
+    }
+}
+```
+
+**Not allowed:**
+```swift
+// ❌ AppState must NOT use Ports directly
+let tagReader: TagReaderPort = factory.makeTagReader()  // FORBIDDEN
+```
+
+### 4.2 Error Mapping
+
+**Pattern:** AppState translates HarmoniaCore errors to UI-friendly errors.
+
+```swift
+// In AppState
+private func mapError(_ error: Error) -> PlaybackError {
+    if let coreError = error as? CoreError {
+        switch coreError {
+        case .notFound(let msg):
+            return .fileNotFound(URL(string: msg) ?? URL(fileURLWithPath: "/"))
+        case .unsupported(let msg):
+            return .unsupportedFormat(msg)
+        default:
+            return .coreError(coreError.description)
+        }
+    }
+    return .coreError(error.localizedDescription)
+}
+```
+
+**See:** [HarmoniaCore Error Models](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
+
+---
+
+## 5. Forbidden Dependencies (Examples)
 
 These are examples of **explicitly forbidden** dependencies to keep the
 architecture clean.
@@ -157,11 +239,15 @@ architecture clean.
    - ❌ `OSLogAdapter` must not depend on any view or `AppState`.
    - ✅ It only logs messages passed by services.
 
+6. **AppState directly using audio Ports**
+   - ❌ `AppState` must not use `DecoderPort`, `AudioOutputPort`, `ClockPort`, or `LoggerPort`.
+   - ✅ Exception: `TagReaderPort` is allowed for metadata reading only.
+
 ---
 
-## 5. Boundary Examples
+## 6. Boundary Examples
 
-### 5.1 UI -> AppState
+### 6.1 UI -> AppState
 
 ```swift
 struct PlayerView: View {
@@ -172,7 +258,13 @@ struct PlayerView: View {
             PlaylistView()
             TransportControlsView(
                 isPlaying: appState.playbackState == .playing,
-                onPlay: { appState.play() },
+                onPlay: { 
+                    do {
+                        try appState.play()
+                    } catch {
+                        // Handle error in UI
+                    }
+                },
                 onPause: { appState.pause() },
                 onStop: { appState.stop() }
             )
@@ -184,55 +276,75 @@ struct PlayerView: View {
 - `PlayerView` has **no knowledge** of `PlaybackService` or `DecoderPort`.
 - It only talks to `AppState`.
 
-### 5.2 AppState -> CoreFactory
+### 6.2 AppState -> CoreFactory -> Services
 
 ```swift
+@MainActor
 final class AppState: ObservableObject {
     private let playbackService: PlaybackService
+    private let tagReaderService: TagReaderService
 
     init(factory: CoreFactory, iap: IAPManager) {
-        if iap.isProUser {
-            self.playbackService = factory.makeProPlaybackService()
-        } else {
-            self.playbackService = factory.makeFreePlaybackService()
-        }
+        // CoreFactory decides which services to create based on Pro status
+        self.playbackService = factory.makePlaybackService(
+            isProUser: iap.isProUser
+        )
+        self.tagReaderService = factory.makeTagReaderService()
     }
 
-    func play() {
-        playbackService.play()
+    func play() throws {
+        try playbackService.play()
+        playbackState = .playing
+    }
+    
+    func loadFiles(urls: [URL]) {
+        for url in urls {
+            do {
+                let track = try tagReaderService.readMetadata(for: url)
+                playlist.tracks.append(track)
+            } catch {
+                handleError(error)
+            }
+        }
     }
 }
 ```
 
-- `AppState` does not know **how** `PlaybackService` is built, only that it
-  conforms to the `PlaybackService` interface.
+- `AppState` does not know **how** services are built, only that they conform to their interfaces.
+- `AppState` uses `TagReaderService`, not `TagReaderPort` directly.
 
-### 5.3 CoreFactory -> HarmoniaCore-Swift
+### 6.3 CoreFactory -> HarmoniaCore-Swift
 
 ```swift
 struct CoreFactory {
-    func makeFreePlaybackService() -> PlaybackService {
-        let logger = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+    func makePlaybackService(isProUser: Bool) -> PlaybackService {
+        let logger = OSLogAdapter()
         let clock = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let output = AVAudioEngineOutputAdapter(logger: logger)
 
         return DefaultPlaybackService(
             decoder: decoder,
-            audioOutput: output,
+            audio: output,
             clock: clock,
             logger: logger
         )
+    }
+    
+    func makeTagReaderService() -> TagReaderService {
+        let logger = OSLogAdapter()
+        let tagReaderPort = AVMetadataTagReaderAdapter(logger: logger)
+        return DefaultTagReaderService(tagReaderPort: tagReaderPort)
     }
 }
 ```
 
 - All platform-specific details are contained here.
-- The rest of the app only sees `PlaybackService`.
+- The rest of the app only sees `PlaybackService` and `TagReaderService` interfaces.
 
 ---
 
-## 6. Testing Strategy and Boundaries
+## 7. Testing Strategy and Boundaries
 
 The module boundaries strongly influence how tests should be written.
 
@@ -241,8 +353,7 @@ The module boundaries strongly influence how tests should be written.
    - Use mocked `AppState` / ViewModels.
 
 2. **Application Layer**
-   - Tested with unit tests using mocked `PlaybackService`, `TagReaderService`,
-     and `IAPManager`.
+   - Tested with unit tests using mocked `PlaybackService`, `TagReaderService`, and `IAPManager`.
    - Ensure business rules (e.g. format gating, playlist operations) are covered.
 
 3. **Integration Layer**
@@ -253,19 +364,90 @@ The module boundaries strongly influence how tests should be written.
    - Primarily tested in the HarmoniaCore-Swift repository.
    - HarmoniaPlayer should rely on those tests and treat the package as a
      tested dependency.
+   - **See:** [HarmoniaCore Testing Strategy](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md#testing-strategy)
 
 ---
 
-## 7. Summary
+## 8. Enforcement Checklist
 
-- Views depend on AppState / ViewModels only.
-- AppState depends on CoreFactory / IAPManager / service interfaces.
-- CoreFactory depends on HarmoniaCore-Swift services and platform adapters.
-- Platform adapters depend on Apple frameworks and HarmoniaCore-Swift port
+When reviewing code, check these rules:
+
+**UI Layer:**
+- [ ] No imports of `HarmoniaCore`
+- [ ] No direct calls to `PlaybackService`
+- [ ] No access to Ports or Adapters
+- [ ] Only depends on `AppState` and UI models
+
+**Application Layer:**
+- [ ] Uses `PlaybackService` interface only
+- [ ] Uses `TagReaderService` for metadata reading
+- [ ] No direct use of HarmoniaCore Ports
+- [ ] No AVFoundation, StoreKit, or OSLog imports
+- [ ] Errors are mapped to UI-friendly types
+
+**Integration Layer:**
+- [ ] No SwiftUI imports
+- [ ] No UI state manipulation
+- [ ] Properly wires Ports to Adapters
+- [ ] Contains all platform-specific code
+
+**HarmoniaCore-Swift Usage:**
+- [ ] Services are obtained through `CoreFactory`
+- [ ] No direct adapter instantiation outside Integration Layer
+- [ ] Free vs Pro decisions made in AppState, not in Core
+
+---
+
+## 9. Migration Path (If Violations Exist)
+
+If existing code violates these boundaries:
+
+1. **Identify the violation** - Which layer depends on what it shouldn't?
+2. **Create the proper interface** - Add to AppState or CoreFactory
+3. **Inject the dependency** - Pass it through constructor
+4. **Remove the direct dependency** - Replace with injected interface
+5. **Add tests** - Ensure the refactored code works
+
+Example:
+```swift
+// ❌ Before: View directly uses PlaybackService
+struct PlayerView: View {
+    let playbackService: PlaybackService
+}
+
+// ✅ After: View uses AppState
+struct PlayerView: View {
+    @EnvironmentObject var appState: AppState
+}
+```
+
+---
+
+## 10. Summary
+
+- **Views** depend on AppState / ViewModels only.
+- **AppState** depends on CoreFactory / IAPManager / PlaybackService interface / TagReaderService interface.
+- **CoreFactory** depends on HarmoniaCore-Swift services, ports, and platform adapters.
+- **Platform adapters** depend on Apple frameworks and HarmoniaCore-Swift port
   protocols.
-- Free vs Pro decisions live in the app, not in the core engine.
+- **Free vs Pro decisions** live in the app (AppState + IAPManager), not in the core engine.
+- **TagReaderService** is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
 
 Any pull request that crosses these boundaries (e.g. a view that imports
-HarmoniaCore-Swift, or an adapter that accesses SwiftUI) should be rejected or
-refactored to restore the module separation.
+HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using audio Ports)
+should be rejected or refactored to restore the module separation.
 
+---
+
+## 11. Cross-References
+
+**HarmoniaCore Architecture:**
+- [Ports & Adapters Pattern](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
+- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
+- [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+
+**HarmoniaPlayer Documentation:**
+- [Architecture](architecture.md) - System-level architecture
+- [API Reference](api_reference.md) - Interface definitions
+- [Implementation Guide (Swift)](implementation_guide_swift.md) - Swift-specific patterns
+- [Development Guide](development_guide.md) - Setup and guidelines
