@@ -248,7 +248,7 @@ Document in HarmoniaCore when:
 
 ...
 
-Last updated: 2025-01-15
+Last updated: 2026-01-15
 ```
 
 ✅ **Good:**

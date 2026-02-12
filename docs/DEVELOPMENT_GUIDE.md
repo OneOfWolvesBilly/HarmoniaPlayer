@@ -96,30 +96,33 @@ let clock = MonotonicClockAdapter()
 ```
 HARMONIAPLAYER/                   # Repository root
 ├── App/
-│   └── HarmoniaPlayer/           # Xcode project
-│       ├── Shared/               # Cross-platform UI code (90%)
-│       │   ├── Models/           # UI-level data models
-│       │   │   ├── Track.swift
-│       │   │   ├── Playlist.swift
-│       │   │   ├── PlaybackState.swift
-│       │   │   ├── PlaybackError.swift
-│       │   │   ├── ViewPreferences.swift
-│       │   │   └── AppState.swift
-│       │   ├── Views/            # SwiftUI views
-│       │   │   ├── PlayerView.swift
-│       │   │   ├── PlaylistView.swift
-│       │   │   └── TrackRow.swift
-│       │   └── Services/
-│       │       ├── CoreFactory.swift   # HarmoniaCore service construction
-│       │       └── IAPManager.swift    # IAP management (macOS Pro)
-│       ├── macOS/
-│       │   └── Free/             # macOS Free app
-│       │       ├── HarmoniaPlayer_macOSApp.swift
-│       │       └── ContentView.swift
-│       ├── iOS/                  # iOS apps (v0.3+)
-│       ├── Tests/
-│       │   ├── SharedTests/
-│       │   └── macOSTests/
+│   └── HarmoniaPlayer/           # Xcode project directory
+│       ├── HarmoniaPlayer/       # Main app target (source code)
+│       │   ├── Shared/           # Cross-platform UI code (90%)
+│       │   │   ├── Models/       # UI-level data models
+│       │   │   │   ├── Track.swift
+│       │   │   │   ├── Playlist.swift
+│       │   │   │   ├── PlaybackState.swift
+│       │   │   │   ├── PlaybackError.swift
+│       │   │   │   ├── ViewPreferences.swift
+│       │   │   │   └── AppState.swift
+│       │   │   ├── Views/        # SwiftUI views
+│       │   │   │   ├── PlayerView.swift
+│       │   │   │   ├── PlaylistView.swift
+│       │   │   │   └── TrackRow.swift
+│       │   │   └── Services/
+│       │   │       ├── CoreFactory.swift   # HarmoniaCore service construction
+│       │   │       └── IAPManager.swift    # IAP management (macOS Pro)
+│       │   ├── macOS/
+│       │   │   └── Free/         # macOS Free app
+│       │   │       ├── HarmoniaPlayerApp.swift
+│       │   │       └── ContentView.swift
+│       │   ├── iOS/              # iOS apps (v0.3+)
+│       │   └── Assets.xcassets
+│       ├── HarmoniaPlayerTests/  # Test target (Xcode default location)
+│       │   └── SharedTests/      # Shared test code
+│       │       ├── MockIAPManager.swift
+│       │       └── IAPManagerTests.swift
 │       └── HarmoniaPlayer.xcodeproj/
 ├── docs/                         # Documentation
 │   ├── architecture.md
@@ -562,7 +565,7 @@ struct PlayerView: View {
 
 4. **Write tests**
    ```swift
-   // Tests/SharedTests/AppStateTests.swift
+   // HarmoniaPlayerTests/SharedTests/AppStateTests.swift
    func testPlaybackSpeedChange() {
        let factory = CoreFactory()
        let iap = MockIAPManager()

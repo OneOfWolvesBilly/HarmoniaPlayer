@@ -458,19 +458,7 @@ Your layout preference is automatically saved and restored on next launch.
 
 ## What's Next?
 
-Check out the [Roadmap](../README.md#roadmap) to see upcoming features!
-
-**Q4 2025 (Current Development):**
-- ✨ macOS Free - Basic playback
-- ✨ iOS Free - Basic playback
-
-**Q1 2026:**
-- ✨ macOS Pro - FLAC and DSD support
-- ✨ Album art display
-- ✨ Enhanced UI
-
-**Q1-Q4 2026:**
-- ✨ Linux HarmoniaCore (C++20)
+For development plans and upcoming features, see the [Project Roadmap](../README.md#milestones-non-binding).
 
 ---
 
