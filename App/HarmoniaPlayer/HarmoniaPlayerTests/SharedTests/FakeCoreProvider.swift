@@ -28,7 +28,7 @@ final class FakeCoreProvider: CoreServiceProviding {
     
     /// Number of times makePlaybackService was called
     private(set) var makePlaybackServiceCallCount = 0
-    
+
     /// Last isProUser parameter passed to makePlaybackService
     private(set) var lastIsProUser: Bool?
     
@@ -52,7 +52,7 @@ final class FakeCoreProvider: CoreServiceProviding {
 // MARK: - Mock Services
 
 /// Minimal playback service for testing
-private final class FakePlaybackService: PlaybackService {
+final class FakePlaybackService: PlaybackService {
     var state: PlaybackState = .idle
     
     func load(url: URL) async throws {
@@ -85,7 +85,7 @@ private final class FakePlaybackService: PlaybackService {
 }
 
 /// Minimal tag reader for testing
-private final class FakeTagReaderService: TagReaderService {
+final class FakeTagReaderService: TagReaderService {
     func readMetadata(for url: URL) async throws -> Track {
         return Track(url: url)
     }

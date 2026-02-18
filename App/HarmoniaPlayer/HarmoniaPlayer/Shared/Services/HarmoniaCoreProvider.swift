@@ -47,7 +47,7 @@ struct HarmoniaCoreProvider: CoreServiceProviding {
 ///
 /// Returns minimal implementation to validate architecture.
 /// Real implementation added in Slice 4.
-private final class PlaceholderPlaybackService: PlaybackService {
+final class PlaceholderPlaybackService: PlaybackService {
     
     let isProUser: Bool
     var state: PlaybackState = .idle
@@ -91,7 +91,7 @@ private final class PlaceholderPlaybackService: PlaybackService {
 ///
 /// Returns minimal Track with filename as title.
 /// Real metadata extraction added in Slice 3.
-private final class PlaceholderTagReaderService: TagReaderService {
+final class PlaceholderTagReaderService: TagReaderService {
     
     func readMetadata(for url: URL) async throws -> Track {
         // Placeholder: return Track with filename as title
