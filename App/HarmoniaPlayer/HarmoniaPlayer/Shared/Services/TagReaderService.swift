@@ -15,7 +15,7 @@ import Foundation
 /// **Slice 1 Note:**
 /// In Foundation slice, this interface is defined but full metadata
 /// extraction is implemented in later slices.
-protocol TagReaderService {
+protocol TagReaderService: AnyObject {
     
     /// Read metadata from audio file
     ///

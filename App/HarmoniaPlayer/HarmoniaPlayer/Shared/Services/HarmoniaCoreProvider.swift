@@ -24,7 +24,7 @@ import Foundation
 /// - Only this class imports HarmoniaCore-Swift
 /// - Constructs adapters and services
 /// - Configures Free vs Pro decoders
-struct HarmoniaCoreProvider: CoreServiceProviding {
+final class HarmoniaCoreProvider: CoreServiceProviding {
     
     // MARK: - CoreServiceProviding
     

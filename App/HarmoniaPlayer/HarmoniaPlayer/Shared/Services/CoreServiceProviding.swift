@@ -23,7 +23,7 @@ import Foundation
 /// let factory = CoreFactory(provider: HarmoniaCoreProvider())
 /// let playback = factory.makePlaybackService(isProUser: true)
 /// ```
-protocol CoreServiceProviding {
+protocol CoreServiceProviding: AnyObject {
     
     /// Create a playback service configured for Free or Pro tier
     ///

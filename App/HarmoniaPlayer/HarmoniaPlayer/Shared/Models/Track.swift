@@ -32,29 +32,56 @@ struct Track: Identifiable, Equatable {
     
     /// Track duration in seconds (optional)
     var duration: TimeInterval?
+
+    /// URL to album artwork (optional, future use)
+    var artworkURL: URL?
     
-    /// Initialize with minimal information
+    /// Initialize with all fields
     ///
     /// - Parameters:
     ///   - id: Unique identifier (generates new UUID if not provided)
     ///   - url: File URL
-    ///   - title: Track title (defaults to filename)
+    ///   - title: Track title
     ///   - artist: Artist name (defaults to empty)
     ///   - album: Album name (defaults to empty)
     ///   - duration: Track duration
+    ///   - artworkURL: Artwork URL (defaults to nil)
     init(
         id: UUID = UUID(),
         url: URL,
-        title: String? = nil,
+        title: String,
         artist: String = "",
         album: String = "",
-        duration: TimeInterval? = nil
+        duration: TimeInterval? = nil,
+        artworkURL: URL? = nil
     ) {
         self.id = id
         self.url = url
-        self.title = title ?? url.deletingPathExtension().lastPathComponent
+        self.title = title
         self.artist = artist
         self.album = album
         self.duration = duration
+        self.artworkURL = artworkURL
     }
+
+    /// Convenience initializer that derives title from URL filename
+    ///
+    /// - Parameter url: File URL
+    init(url: URL) {
+        self.init(
+            url: url,
+            title: url.deletingPathExtension().lastPathComponent
+        )
+    }
+    
+    nonisolated static func == (lhs: Track, rhs: Track) -> Bool {
+        lhs.id == rhs.id &&
+        lhs.url == rhs.url &&
+        lhs.title == rhs.title &&
+        lhs.artist == rhs.artist &&
+        lhs.album == rhs.album &&
+        lhs.duration == rhs.duration &&
+        lhs.artworkURL == rhs.artworkURL
+    }
+
 }

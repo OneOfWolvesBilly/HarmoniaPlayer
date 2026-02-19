@@ -40,9 +40,6 @@ final class AppState: ObservableObject {
     /// Feature flags (derived from IAP)
     let featureFlags: CoreFeatureFlags
     
-    /// Core service factory
-    private let coreFactory: CoreFactory
-    
     // MARK: - Services
     
     /// Playback service (placeholder in Slice 1)
@@ -89,7 +86,7 @@ final class AppState: ObservableObject {
         self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
         
         // Step 3: Create factory with flags
-        self.coreFactory = CoreFactory(
+        let coreFactory = CoreFactory(
             featureFlags: featureFlags,
             provider: provider
         )
@@ -99,6 +96,10 @@ final class AppState: ObservableObject {
         self.tagReaderService = coreFactory.makeTagReaderService()
         
         // Step 5: Expose Pro unlock state
-        self.isProUnlocked = featureFlags.supportsFLAC
+        self.isProUnlocked = iapManager.isProUnlocked
     }
+    
+    // WORKAROUND: Xcode 26 beta - swift::TaskLocal::StopLookupScope bug
+    // Remove when Xcode 26 stable is released
+    nonisolated deinit {}
 }

@@ -20,7 +20,7 @@ import Foundation
 ///
 /// **Thread Safety:**
 /// All methods are async and safe to call from any thread.
-protocol PlaybackService {
+protocol PlaybackService: AnyObject {
     
     /// Load and prepare a track for playback
     ///
