@@ -164,13 +164,23 @@ implement Playlist model with TDD
 ## Slice2-C: Playlist Operations in AppState
 
 ### Goal
-Add playlist state and operations to AppState without implementing playback.
+Add playlist state, playlist operations, and current-track state to AppState
+without implementing actual audio playback.
 
 ### Scope
 - Add `@Published` playlist state
 - Implement CRUD operations for tracks
+- Add `@Published` currentTrack state ← **pulled forward from Slice 2-D**
+- Implement `play(trackID:)` for track selection ← **pulled forward from Slice 2-D**
 - Maintain architectural boundaries
 - No actual file I/O or audio operations
+
+> **Note — why currentTrack is introduced here, not in Slice 2-D:**
+> The Slice 2-C tests for `clearPlaylist()` and `removeTrack(_:)` require a
+> pre-condition of "currentTrack is set". To set it without additional test
+> infrastructure, `play(trackID:)` must exist in the same slice.
+> Keeping both together avoids a temporary workaround in tests.
+> Slice 2-D therefore becomes a **tests-only** slice (no AppState changes).
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify)
@@ -189,6 +199,12 @@ final class AppState: ObservableObject {
     
     @Published private(set) var playlist: Playlist
     
+    // MARK: - Current Track State (Slice 2-C)
+    //
+    // Pulled forward from Slice 2-D because clearPlaylist() and
+    // removeTrack(_:) tests require the ability to pre-set currentTrack.
+    @Published private(set) var currentTrack: Track?
+    
     // MARK: - Playlist Operations (Slice 2-C)
     
     /// Load audio files into playlist
@@ -205,10 +221,20 @@ final class AppState: ObservableObject {
     
     /// Reorder tracks (for drag-and-drop support)
     func moveTrack(fromOffsets: IndexSet, toOffset: Int)
+
+    // MARK: - Track Selection (Slice 2-C, tested further in Slice 2-D)
+
+    /// Select a track by ID (does not start playback)
+    /// - Note: Actual playback control added in Slice 4
+    func play(trackID: Track.ID)
 }
 ```
 
 ### Implementation notes
+
+**Initialization**
+- `playlist` initialised to `Playlist(name: "Session")` with empty tracks
+- `currentTrack` initialised to `nil`
 
 **load(urls:)**
 - Create Track instances with URL-derived titles
@@ -218,25 +244,35 @@ final class AppState: ObservableObject {
 
 **clearPlaylist()**
 - Reset playlist.tracks to empty array
-- Set currentTrack to nil (track no longer exists in playlist)
+- Set currentTrack to nil
 
 **removeTrack(_:)**
-- Find and remove track by ID
+- Check currentTrack **before** removing from array
+- If removed track matches currentTrack, set currentTrack to nil
+- Find and remove track by ID from playlist.tracks
 - No effect if ID not found
-- If removed track is currentTrack, set currentTrack to nil
 
 **moveTrack(fromOffsets:toOffset:)**
-- Use standard Swift array reordering
+- Use standard Swift `Array.move(fromOffsets:toOffset:)`
 - Typical pattern for SwiftUI List reordering
 
+**play(trackID:)**
+- Find track in playlist by ID using `first { $0.id == trackID }`
+- Set currentTrack to found track, or nil if not found
+- Does NOT call playbackService.play() (Slice 4)
+- Does NOT load audio (Slice 4)
+
 ### Done criteria
-- AppState compiles with new playlist state
+- AppState compiles with new playlist and currentTrack state
 - Unit tests verify:
-  - Initial playlist is empty
-  - load() adds tracks with correct titles
+  - Initial playlist is empty (pre-condition test)
+  - Initial currentTrack is nil (pre-condition test)
+  - load() adds tracks with correct URL-derived titles
+  - load() is additive (appends to existing tracks)
   - clearPlaylist() empties the list and sets currentTrack to nil
   - removeTrack() removes correct track; sets currentTrack to nil if it was selected
   - removeTrack() with invalid ID has no effect
+  - removeTrack() with different ID leaves currentTrack unchanged
   - moveTrack() reorders correctly
 - Operations do not trigger any HarmoniaCore calls
 - No file I/O performed
@@ -244,77 +280,70 @@ final class AppState: ObservableObject {
 
 ### Suggested commit message
 ```
-implement playlist operations in AppState with TDD
+implement playlist operations and track selection in AppState with TDD
 
-- Add playlist state to AppState
+- Add playlist state (Slice 2-C)
 - Implement load, clear, remove, move operations
+- Add currentTrack state (pulled forward from Slice 2-D)
+- Implement play(trackID:) for track selection (no audio, Slice 4)
 - Use URL-derived titles (metadata extraction in Slice 3)
 ```
 
 ---
 
-## Slice2-D: Track Selection
+## Slice2-D: Track Selection (Tests Only)
 
 ### Goal
-Allow selection of a specific track as the "current" track without actual playback.
+Verify `play(trackID:)` behaviour across edge cases with a dedicated test file.
+
+> **Note:** `currentTrack` state and `play(trackID:)` were implemented in
+> Slice 2-C. This slice adds **only** the test file — AppState.swift is
+> **not modified** here.
 
 ### Scope
-- Add `@Published` currentTrack state
-- Implement track selection by ID
-- Handle invalid ID gracefully
-- No actual playback (Slice 4)
+- Write dedicated test suite for `play(trackID:)` behaviour
+- Verify all edge cases (valid ID, invalid ID, empty playlist, switch track)
+- Verify `play(trackID:)` does not call `playbackService`
+- No AppState implementation changes (already done in Slice 2-C)
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateTrackSelectionTests.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` — **no changes**
 
 ### Tests
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateTrackSelectionTests.swift` (new or extend existing)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateTrackSelectionTests.swift` (new)
 
-### Public API additions
+### Verified behaviour
 
 ```swift
-@MainActor
-final class AppState: ObservableObject {
-    // ... existing state ...
-    
-    // MARK: - Current Track State (Slice 2-D)
-    
-    @Published private(set) var currentTrack: Track?
-    
-    // MARK: - Track Selection (Slice 2-D)
-    
-    /// Select a track by ID (does not start playback)
-    /// - Note: Actual playback control added in Slice 4
-    func play(trackID: Track.ID)
-}
+// These are already implemented; this slice only adds tests:
+
+@Published private(set) var currentTrack: Track?
+
+func play(trackID: Track.ID)
+// - Sets currentTrack to matching track, or nil if not found
+// - Does NOT call playbackService.play() (Slice 4)
 ```
 
-### Implementation notes
-
-**play(trackID:)**
-- Find track in playlist by ID
-- Set currentTrack to found track
-- If ID not found, set currentTrack to nil
-- Does NOT call playbackService.play() (Slice 4)
-- Does NOT load audio (Slice 4)
-
 ### Done criteria
-- AppState compiles with currentTrack state
-- Unit tests verify:
+- Dedicated test file compiles and all tests pass
+- Tests verify:
   - Initial currentTrack is nil
   - play(trackID:) sets currentTrack correctly
+  - play(trackID:) switches currentTrack when called again
   - play(trackID:) with invalid ID sets currentTrack to nil
+  - play(trackID:) on empty playlist sets currentTrack to nil
   - No playback service calls made
 - No dependency on playback orchestration
 - State changes are deterministic
 
 ### Suggested commit message
 ```
-implement track selection in AppState with TDD
+add track selection tests with TDD (Slice 2-D)
 
-- Add currentTrack state to AppState
-- Implement play(trackID:) for track selection
-- No actual playback (Slice 4)
+- Test play(trackID:) edge cases in dedicated test file
+- Verify no playback service calls
+- AppState unchanged (implemented in Slice 2-C)
 ```
 
 ---
@@ -326,6 +355,10 @@ implement track selection in AppState with TDD
 - No file I/O dependencies
 - No audio device dependencies
 - Pure state management tests
+- **Swift 6 / Xcode 26:** AppState is `@MainActor`. Test classes that test
+  AppState must also be annotated `@MainActor`. XCTest executes
+  `@MainActor`-isolated test classes on the main actor automatically, so no
+  `await MainActor.run {}` wrappers are needed in individual test methods.
 
 ---
 
@@ -356,16 +389,19 @@ implement track selection in AppState with TDD
 
 | Test | Given | When | Then |
 |------|-------|------|------|
+| `testInitial_PlaylistIsEmpty` | Fresh AppState | Read playlist | playlist.isEmpty == true |
+| `testInitial_CurrentTrackIsNil` | Fresh AppState | Read currentTrack | currentTrack == nil |
 | `testLoad_EmptyPlaylist_AddsTrack` | Empty playlist + [URL] | load(urls:) | Playlist has 1 track |
 | `testLoad_ExistingPlaylist_AppendsTrack` | Playlist with 1 track + [URL] | load(urls:) | Playlist has 2 tracks |
 | `testLoad_MultipleURLs_AddsAll` | Empty playlist + [URL1, URL2] | load(urls:) | Playlist has 2 tracks |
+| `testLoad_DerivesTitleFromFilename` | URL `/tmp/my-song.mp3` | load(urls:) | track.title == "my-song" |
 | `testClearPlaylist_WithTracks_EmptiesPlaylist` | Playlist with 3 tracks | clearPlaylist() | Playlist is empty |
 | `testClearPlaylist_NilsCurrentTrack` | Playlist with currentTrack set | clearPlaylist() | currentTrack is nil |
 | `testRemoveTrack_ExistingID_RemovesTrack` | Playlist with 3 tracks | removeTrack(id) | Playlist has 2 tracks |
 | `testRemoveTrack_InvalidID_NoChange` | Playlist with 3 tracks | removeTrack(invalid) | Playlist still has 3 tracks |
 | `testRemoveTrack_CurrentTrack_NilsCurrentTrack` | currentTrack set + remove same ID | removeTrack(currentTrack.id) | currentTrack is nil |
 | `testRemoveTrack_OtherTrack_KeepsCurrentTrack` | currentTrack set + remove different ID | removeTrack(otherId) | currentTrack unchanged |
-| `testMoveTrack_ValidIndices_Reorders` | Playlist [A,B,C] | moveTrack(0→2) | Playlist is [B,C,A] |
+| `testMoveTrack_ValidIndices_Reorders` | Playlist [A,B,C] | moveTrack(0→3) | Playlist is [B,C,A] |
 
 ---
 
@@ -388,7 +424,8 @@ implement track selection in AppState with TDD
 - ✅ All Slice 2 tests green
 - ✅ Track and Playlist models defined and tested
 - ✅ AppState has playlist state and operations
-- ✅ Track selection implemented (no playback)
+- ✅ AppState has currentTrack state (implemented in Slice 2-C)
+- ✅ Track selection implemented via play(trackID:) (no playback)
 - ✅ No file I/O performed
 - ✅ No audio device dependencies
 - ✅ No HarmoniaCore playback calls
@@ -406,7 +443,7 @@ Expected output:
 Slice 1 tests: All passing
 Slice 2-A tests: All passing
 Slice 2-B tests: All passing
-Slice 2-C tests: All passing
+Slice 2-C tests: All passing (13 tests)
 Slice 2-D tests: All passing
 ```
 
