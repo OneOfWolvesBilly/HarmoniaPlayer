@@ -22,6 +22,10 @@ import Combine
 /// - Uses dependency injection via initializer
 /// - All services created through CoreFactory
 ///
+/// **Slice history:**
+/// - Slice 1-D: Initial wiring (isProUnlocked, playbackService, tagReaderService)
+/// - Slice 1-E: Added viewPreferences and lastError
+///
 /// **Usage:**
 /// ```swift
 /// let iapManager = MockIAPManager(isProUnlocked: false)
@@ -73,6 +77,28 @@ final class AppState: ObservableObject {
     /// Set via `play(trackID:)`. Does **not** trigger audio playback.
     @Published private(set) var currentTrack: Track?
 
+    // MARK: - UI Preference State (Slice 1-E)
+
+    /// UI layout and visibility preferences
+    ///
+    /// Initialised to `.defaultPreferences` at app launch.
+    /// Mutable so views and actions can update it directly:
+    /// ```swift
+    /// appState.viewPreferences.layoutPreset = .compact
+    /// ```
+    @Published var viewPreferences: ViewPreferences = .defaultPreferences
+
+    // MARK: - Error State (Slice 1-E)
+
+    /// Most recent playback error
+    ///
+    /// `nil` on init. Set by playback logic in Slice 4 and later.
+    /// Views observe this to present error banners or alerts.
+    ///
+    /// **Note:** Nothing sets this in Slice 1-E; the property is defined
+    /// here so Slice 4 can assign it without modifying the published surface.
+    @Published private(set) var lastError: PlaybackError?
+
     // MARK: - Initialization
 
     /// Initialize AppState with dependencies
@@ -117,6 +143,9 @@ final class AppState: ObservableObject {
         // Step 6: Initialise playlist state
         self.playlist = Playlist(name: "Session")
         self.currentTrack = nil
+
+        // Note: viewPreferences and lastError use property-level defaults;
+        // no explicit assignment needed in init.
     }
 
     // WORKAROUND: Xcode 26 beta - swift::TaskLocal::StopLookupScope bug

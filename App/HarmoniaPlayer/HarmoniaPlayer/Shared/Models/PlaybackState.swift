@@ -17,10 +17,12 @@ import Foundation
 /// - `playing`: Audio is playing
 /// - `paused`: Playback paused (position preserved)
 /// - `stopped`: Playback stopped (position reset)
+/// - `error(PlaybackError)`: Playback failed
 enum PlaybackState: Equatable {
     case idle
     case loading
     case playing
     case paused
     case stopped
+    case error(PlaybackError)   // Slice 1-E
 }

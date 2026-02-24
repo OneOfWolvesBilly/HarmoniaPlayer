@@ -21,6 +21,18 @@ import XCTest
 @MainActor
 final class AppStateTests: XCTestCase {
 
+    // MARK: - Helpers
+
+    /// Creates a minimal AppState for testing.
+    ///
+    /// - Parameter isProUnlocked: Simulates Free (`false`, default) or Pro (`true`) IAP state.
+    /// - Returns: A fully wired `AppState` backed by `FakeCoreProvider`.
+    private func makeSUT(isProUnlocked: Bool = false) -> AppState {
+        let iap = MockIAPManager(isProUnlocked: isProUnlocked)
+        let provider = FakeCoreProvider()
+        return AppState(iapManager: iap, provider: provider)
+    }
+
     // MARK: - Tests: Free User
 
     func testInit_FreeUser_WiresDependenciesCorrectly() {
@@ -161,5 +173,46 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(proAppState.featureFlags.supportsFLAC)
         XCTAssertTrue(proAppState.featureFlags.supportsDSD)
         XCTAssertTrue(proAppState.isProUnlocked)
+    }
+
+    // MARK: - Tests: Initial View Preferences (Slice 1-E)
+
+    /// Verifies that `viewPreferences` is set to `.defaultPreferences` on init,
+    /// without any caller needing to configure it explicitly.
+    func testAppState_InitialViewPreferences_MatchesDefault() {
+        // Given / When: Fresh AppState
+        let sut = makeSUT()
+
+        // Then: viewPreferences equals the documented default
+        XCTAssertEqual(sut.viewPreferences, ViewPreferences.defaultPreferences,
+                       "viewPreferences should equal .defaultPreferences on init")
+    }
+
+    /// Verifies that `viewPreferences` is mutable after init,
+    /// allowing views and actions to update the layout at runtime.
+    func testAppState_ViewPreferences_IsMutable() {
+        // Given: Fresh AppState with default preferences
+        let sut = makeSUT()
+
+        // When: Layout preset is changed
+        sut.viewPreferences.layoutPreset = .compact
+
+        // Then: Change is reflected
+        XCTAssertEqual(sut.viewPreferences.layoutPreset, .compact,
+                       "viewPreferences.layoutPreset should be writable")
+    }
+
+    // MARK: - Tests: Initial Error State (Slice 1-E)
+
+    /// Verifies that `lastError` is `nil` on init.
+    /// Nothing in Slice 1 sets this property; it is defined here
+    /// for Slice 4 (playback) to assign.
+    func testAppState_InitialLastError_IsNil() {
+        // Given / When: Fresh AppState
+        let sut = makeSUT()
+
+        // Then: No error present before any playback attempt
+        XCTAssertNil(sut.lastError,
+                     "lastError should be nil on init")
     }
 }
