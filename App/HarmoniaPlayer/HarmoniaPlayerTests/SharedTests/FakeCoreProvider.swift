@@ -13,7 +13,7 @@ import Foundation
 /// Records method calls for verification in tests.
 /// Returns mock service implementations.
 ///
-/// **Usage:**
+/// **Usage — call count only:**
 /// ```swift
 /// let fake = FakeCoreProvider()
 /// let factory = CoreFactory(featureFlags: flags, provider: fake)
@@ -21,6 +21,14 @@ import Foundation
 ///
 /// XCTAssertEqual(fake.makePlaybackServiceCallCount, 1)
 /// XCTAssertTrue(fake.lastIsProUser!)
+/// ```
+///
+/// **Usage — identity check:**
+/// ```swift
+/// let knownFake = FakeTagReaderService()
+/// let provider = FakeCoreProvider(tagReader: knownFake)
+/// let sut = AppState(iapManager: MockIAPManager(), provider: provider)
+/// XCTAssertTrue(sut.tagReaderService === knownFake)
 /// ```
 final class FakeCoreProvider: CoreServiceProviding {
     
@@ -34,7 +42,18 @@ final class FakeCoreProvider: CoreServiceProviding {
     
     /// Number of times makeTagReaderService was called
     private(set) var makeTagReaderServiceCallCount = 0
-    
+
+    // MARK: - Stubs
+
+    /// The TagReaderService instance returned by makeTagReaderService().
+    var tagReaderServiceStub: TagReaderService
+
+    // MARK: - Initialization
+
+    init(tagReader: TagReaderService = FakeTagReaderService()) {
+        self.tagReaderServiceStub = tagReader
+    }
+
     // MARK: - CoreServiceProviding
     
     func makePlaybackService(isProUser: Bool) -> PlaybackService {
@@ -45,7 +64,7 @@ final class FakeCoreProvider: CoreServiceProviding {
     
     func makeTagReaderService() -> TagReaderService {
         makeTagReaderServiceCallCount += 1
-        return FakeTagReaderService()
+        return tagReaderServiceStub
     }
 }
 
@@ -81,12 +100,5 @@ final class FakePlaybackService: PlaybackService {
     
     func duration() async -> TimeInterval {
         return 0
-    }
-}
-
-/// Minimal tag reader for testing
-final class FakeTagReaderService: TagReaderService {
-    func readMetadata(for url: URL) async throws -> Track {
-        return Track(url: url)
     }
 }

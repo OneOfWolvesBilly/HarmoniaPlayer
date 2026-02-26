@@ -67,6 +67,36 @@ final class CoreFactoryTests: XCTestCase {
         XCTAssertEqual(fakeProvider.makeTagReaderServiceCallCount, 1,
                        "Should call provider once")
     }
+
+    // MARK: - Tests: Slice 1-F — TagReader Wiring Verification
+
+    func testCoreFactory_CallsMakeTagReaderService_Once() {
+        // Given
+        let flags = CoreFeatureFlags(isPro: false)
+        let fakeProvider = FakeCoreProvider()
+        let factory = CoreFactory(featureFlags: flags, provider: fakeProvider)
+
+        // When
+        _ = factory.makeTagReaderService()
+
+        // Then
+        XCTAssertEqual(fakeProvider.makeTagReaderServiceCallCount, 1,
+                       "makeTagReaderService should be called exactly once")
+    }
+
+    func testCoreFactory_TagReaderService_IsNotNil() {
+        // Given
+        let flags = CoreFeatureFlags(isPro: false)
+        let fakeProvider = FakeCoreProvider()
+        let factory = CoreFactory(featureFlags: flags, provider: fakeProvider)
+
+        // When
+        let service = factory.makeTagReaderService()
+
+        // Then
+        XCTAssertTrue(service is FakeTagReaderService,
+                      "makeTagReaderService should return the provider's FakeTagReaderService instance")
+    }
     
     // MARK: - Tests: No Audio Device Dependency
     

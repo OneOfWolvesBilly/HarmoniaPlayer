@@ -215,4 +215,68 @@ final class AppStateTests: XCTestCase {
         XCTAssertNil(sut.lastError,
                      "lastError should be nil on init")
     }
+
+    // MARK: - Tests: Slice 1-F — TagReader Wiring Verification
+
+    /// `makeTagReaderService()` is called exactly once during `AppState.init`.
+    func testAppState_Init_CallsMakeTagReaderService() {
+        // Given
+        let iap = MockIAPManager(isProUnlocked: false)
+        let provider = FakeCoreProvider()
+
+        // When
+        _ = AppState(iapManager: iap, provider: provider)
+
+        // Then
+        XCTAssertEqual(provider.makeTagReaderServiceCallCount, 1,
+                       "AppState.init should call makeTagReaderService exactly once")
+    }
+
+    /// `tagReaderService` is non-nil after `AppState.init`.
+    func testAppState_TagReaderService_IsNotNil() {
+        // Given / When
+        let sut = makeSUT()
+
+        // Then
+        XCTAssertNotNil(sut.tagReaderService,
+                        "tagReaderService should be non-nil after init")
+    }
+
+    /// `tagReaderService` stored in AppState is the exact instance the provider returned.
+    ///
+    /// Injects a known `FakeTagReaderService` via `FakeCoreProvider(tagReader:)`
+    /// so the `===` identity check is unambiguous.
+    func testAppState_TagReaderService_IsFromProvider() {
+        // Given: A known fake injected into the provider
+        let knownFake = FakeTagReaderService()
+        let provider = FakeCoreProvider(tagReader: knownFake)
+        let iap = MockIAPManager(isProUnlocked: false)
+
+        // When
+        let sut = AppState(iapManager: iap, provider: provider)
+
+        // Then: AppState holds the exact instance the provider returned
+        XCTAssertTrue(
+            sut.tagReaderService === knownFake,
+            "AppState should wire the exact TagReaderService instance returned by the provider"
+        )
+    }
+
+    /// No `TagReaderService` methods are called during `AppState.init`.
+    ///
+    /// Injects a known `FakeTagReaderService` and checks its call count
+    /// remains 0 after init completes.
+    func testAppState_TagReaderService_NoMethodsCalled() {
+        // Given: A known fake injected into the provider
+        let knownFake = FakeTagReaderService()
+        let provider = FakeCoreProvider(tagReader: knownFake)
+        let iap = MockIAPManager(isProUnlocked: false)
+
+        // When
+        _ = AppState(iapManager: iap, provider: provider)
+
+        // Then: No metadata reads triggered by init
+        XCTAssertEqual(knownFake.readMetadataCallCount, 0,
+                       "AppState.init must not call readMetadata — no eager fetch in Slice 1")
+    }
 }
