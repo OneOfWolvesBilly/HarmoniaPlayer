@@ -39,6 +39,8 @@ Upgrade `FakeTagReaderService` to support per-URL metadata stubs and error
 stubs, enabling deterministic test setups for Slice 3-B and 3-C.
 
 ### Scope
+- Move `FakeTagReaderService`, `FakeCoreProvider`, and `MockIAPManager`
+  from `SharedTests/` to `FakeInfrastructure/`
 - Add `stubbedMetadata: [URL: Track]` for configuring return values
 - Add `stubbedErrors: [URL: Error]` for simulating failures
 - Add call recording (`readMetadataCallCount`, `requestedURLs`)
@@ -46,7 +48,9 @@ stubs, enabling deterministic test setups for Slice 3-B and 3-C.
 - No changes to `TagReaderService` protocol or `AppState`
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeTagReaderService.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeTagReaderService.swift` (move + modify)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` (move)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/MockIAPManager.swift` (move)
 
 ### Tests
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/FakeTagReaderServiceTests.swift` (new)
@@ -77,13 +81,17 @@ final class FakeTagReaderService: TagReaderService {
 ### Done criteria
 - `FakeTagReaderService` compiles in test target
 - Stub errors take precedence over stub metadata
-- Call recording is accurate
+- Call recording is accurate (`readMetadataCallCount` and `requestedURLs`)
 - `FakeCoreProvider.makeTagReaderService()` returns the upgraded fake
+- `FakeTagReaderService`, `FakeCoreProvider`, and `MockIAPManager`
+  moved to `FakeInfrastructure/`
 
 ### Suggested commit message
 ```
 feat(slice-3a): upgrade FakeTagReaderService with stub support with TDD
 
+- Move FakeCoreProvider, FakeTagReaderService, and MockIAPManager
+  from SharedTests/ to FakeInfrastructure/
 - Add stubbedMetadata and stubbedErrors per URL for deterministic test setup
 - Add requestedURLs call recording to complement existing readMetadataCallCount
 - Add FakeTagReaderServiceTests
@@ -246,7 +254,8 @@ feat: graceful fallback for metadata errors in AppState.load (Slice 3-C)
 
 ### Required before Slice 4
 
-- ✅ `FakeTagReaderService` supports `stubbedMetadata` and `stubbedErrors`
+- ✅ `FakeTagReaderService` supports `stubbedMetadata`, `stubbedErrors`, and `requestedURLs`
+- ✅ `FakeTagReaderService`, `FakeCoreProvider`, and `MockIAPManager` moved to `FakeInfrastructure/`
 - ✅ `AppState.load(urls:)` is `async`
 - ✅ `TagReaderService.readMetadata(for:)` called for each URL
 - ✅ Real metadata replaces URL-derived placeholders on success
