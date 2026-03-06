@@ -36,7 +36,7 @@ import Foundation
 ///     showGenericErrorAlert()
 /// }
 /// ```
-enum PlaybackError: Error, Equatable {
+enum PlaybackError: Error, Equatable, Sendable {
     case unsupportedFormat
     case failedToOpenFile
     case failedToDecode

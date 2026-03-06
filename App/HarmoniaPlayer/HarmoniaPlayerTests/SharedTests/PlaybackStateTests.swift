@@ -9,6 +9,7 @@
 import XCTest
 @testable import HarmoniaPlayer
 
+@MainActor
 final class PlaybackStateTests: XCTestCase {
 
     // MARK: - error case: Equatable

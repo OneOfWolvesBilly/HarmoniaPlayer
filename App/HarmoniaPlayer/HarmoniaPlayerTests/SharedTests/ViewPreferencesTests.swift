@@ -8,6 +8,7 @@
 import XCTest
 @testable import HarmoniaPlayer
 
+@MainActor
 final class ViewPreferencesTests: XCTestCase {
 
     // MARK: - Default Values

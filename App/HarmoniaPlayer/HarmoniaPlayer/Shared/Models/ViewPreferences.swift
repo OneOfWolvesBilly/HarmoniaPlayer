@@ -16,7 +16,7 @@ import Foundation
 /// - `compact`: Playlist only — minimal, distraction-free layout
 /// - `standard`: Playlist + Now Playing — everyday use
 /// - `waveformFocused`: All panels — waveform, playlist, and track info
-enum LayoutPreset: String, CaseIterable, Equatable {
+enum LayoutPreset: String, CaseIterable, Equatable, Sendable {
     case compact
     case standard
     case waveformFocused
@@ -40,7 +40,7 @@ enum LayoutPreset: String, CaseIterable, Equatable {
 /// // Mutate
 /// appState.viewPreferences.layoutPreset = .compact
 /// ```
-struct ViewPreferences: Equatable {
+struct ViewPreferences: Equatable, Sendable {
     var isWaveformVisible: Bool
     var isPlaylistVisible: Bool
     var layoutPreset: LayoutPreset

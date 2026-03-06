@@ -18,7 +18,7 @@ import Foundation
 /// - `paused`: Playback paused (position preserved)
 /// - `stopped`: Playback stopped (position reset)
 /// - `error(PlaybackError)`: Playback failed
-enum PlaybackState: Equatable {
+enum PlaybackState: Equatable, Sendable {
     case idle
     case loading
     case playing
