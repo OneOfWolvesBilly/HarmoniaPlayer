@@ -35,7 +35,7 @@ import Foundation
 /// - Immutable struct (all properties are `let`)
 /// - No dependencies on HarmoniaCore (app-layer logic)
 /// - Single source of truth for feature availability
-struct CoreFeatureFlags {
+struct CoreFeatureFlags: Sendable {
     
     // MARK: - Audio Format Support
     

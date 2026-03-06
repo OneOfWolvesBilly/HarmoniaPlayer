@@ -13,7 +13,7 @@ import Foundation
 ///
 /// **Note:** This is a minimal version for Slice 1 (Foundation).
 /// Full metadata support will be added in later slices.
-struct Track: Identifiable, Equatable {
+struct Track: Identifiable, Equatable, Sendable {
     
     /// Unique identifier
     let id: UUID

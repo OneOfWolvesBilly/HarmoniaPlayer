@@ -14,9 +14,11 @@ import XCTest
 /// so that Slice 3-B and 3-C tests can rely on this fake with confidence.
 ///
 /// **Swift 6 / Xcode 26 note:**
-/// `readMetadata(for:)` is `async throws`. Test methods that call it must
-/// be `async`. No `@MainActor` is required here because `FakeTagReaderService`
-/// itself is not `@MainActor`-isolated.
+/// `@MainActor` is required because test methods access `Track` properties
+/// inside `XCTAssertEqual` autoclosures. Xcode 26 beta infers `@MainActor`
+/// on `Track` properties due to their use in `AppState`, causing warnings
+/// when accessed from a nonisolated context.
+@MainActor
 final class FakeTagReaderServiceTests: XCTestCase {
 
     // MARK: - Helpers
