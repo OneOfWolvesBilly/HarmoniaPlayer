@@ -23,7 +23,7 @@ import Foundation
 /// var playlist = Playlist(name: "Session")
 /// playlist.tracks.append(track)
 /// ```
-struct Playlist: Identifiable, Equatable {
+struct Playlist: Identifiable, Equatable, Sendable {
 
     // MARK: - Identity
 

@@ -20,6 +20,10 @@ private func makeURLs(_ names: [String]) -> [URL] {
 ///
 /// @MainActor required because AppState is @MainActor isolated.
 /// XCTest executes @MainActor test classes on the main actor automatically.
+///
+/// **Slice 3-B update:**
+/// All calls to `load(urls:)` are now `async` — test methods that invoke
+/// `sut.load(urls:)` are marked `async` accordingly.
 @MainActor
 final class AppStatePlaylistTests: XCTestCase {
 
@@ -54,43 +58,43 @@ final class AppStatePlaylistTests: XCTestCase {
 
     // MARK: - load(urls:)
 
-    func testLoad_EmptyPlaylist_AddsTrack() {
-        sut.load(urls: makeURLs(["song"]))
+    func testLoad_EmptyPlaylist_AddsTrack() async {
+        await sut.load(urls: makeURLs(["song"]))
 
         XCTAssertEqual(sut.playlist.count, 1)
     }
 
-    func testLoad_ExistingPlaylist_AppendsTrack() {
-        sut.load(urls: makeURLs(["a"]))
-        sut.load(urls: makeURLs(["b"]))
+    func testLoad_ExistingPlaylist_AppendsTrack() async {
+        await sut.load(urls: makeURLs(["a"]))
+        await sut.load(urls: makeURLs(["b"]))
 
         XCTAssertEqual(sut.playlist.count, 2)
     }
 
-    func testLoad_MultipleURLs_AddsAll() {
-        sut.load(urls: makeURLs(["a", "b"]))
+    func testLoad_MultipleURLs_AddsAll() async {
+        await sut.load(urls: makeURLs(["a", "b"]))
 
         XCTAssertEqual(sut.playlist.count, 2)
     }
 
-    func testLoad_DerivesTitleFromFilename() {
-        sut.load(urls: [URL(fileURLWithPath: "/tmp/my-song.mp3")])
+    func testLoad_DerivesTitleFromFilename() async {
+        await sut.load(urls: [URL(fileURLWithPath: "/tmp/my-song.mp3")])
 
         XCTAssertEqual(sut.playlist.tracks.first?.title, "my-song")
     }
 
     // MARK: - clearPlaylist()
 
-    func testClearPlaylist_WithTracks_EmptiesPlaylist() {
-        sut.load(urls: makeURLs(["a", "b", "c"]))
+    func testClearPlaylist_WithTracks_EmptiesPlaylist() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
 
         sut.clearPlaylist()
 
         XCTAssertTrue(sut.playlist.isEmpty)
     }
 
-    func testClearPlaylist_NilsCurrentTrack() {
-        sut.load(urls: makeURLs(["a"]))
+    func testClearPlaylist_NilsCurrentTrack() async {
+        await sut.load(urls: makeURLs(["a"]))
         sut.play(trackID: sut.playlist.tracks[0].id)
         XCTAssertNotNil(sut.currentTrack)           // pre-condition
 
@@ -101,8 +105,8 @@ final class AppStatePlaylistTests: XCTestCase {
 
     // MARK: - removeTrack(_:)
 
-    func testRemoveTrack_ExistingID_RemovesTrack() {
-        sut.load(urls: makeURLs(["a", "b", "c"]))
+    func testRemoveTrack_ExistingID_RemovesTrack() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
         let targetID = sut.playlist.tracks[1].id
 
         sut.removeTrack(targetID)
@@ -111,16 +115,16 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertFalse(sut.playlist.tracks.contains { $0.id == targetID })
     }
 
-    func testRemoveTrack_InvalidID_NoChange() {
-        sut.load(urls: makeURLs(["a", "b", "c"]))
+    func testRemoveTrack_InvalidID_NoChange() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
 
         sut.removeTrack(UUID())
 
         XCTAssertEqual(sut.playlist.count, 3)
     }
 
-    func testRemoveTrack_CurrentTrack_NilsCurrentTrack() {
-        sut.load(urls: makeURLs(["a"]))
+    func testRemoveTrack_CurrentTrack_NilsCurrentTrack() async {
+        await sut.load(urls: makeURLs(["a"]))
         let id = sut.playlist.tracks[0].id
         sut.play(trackID: id)
         XCTAssertNotNil(sut.currentTrack)           // pre-condition
@@ -130,8 +134,8 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertNil(sut.currentTrack)
     }
 
-    func testRemoveTrack_OtherTrack_KeepsCurrentTrack() {
-        sut.load(urls: makeURLs(["a", "b"]))
+    func testRemoveTrack_OtherTrack_KeepsCurrentTrack() async {
+        await sut.load(urls: makeURLs(["a", "b"]))
         let trackA = sut.playlist.tracks[0]
         let trackBID = sut.playlist.tracks[1].id
         sut.play(trackID: trackA.id)
@@ -143,8 +147,8 @@ final class AppStatePlaylistTests: XCTestCase {
 
     // MARK: - moveTrack(fromOffsets:toOffset:)
 
-    func testMoveTrack_ValidIndices_Reorders() {
-        sut.load(urls: makeURLs(["a", "b", "c"]))
+    func testMoveTrack_ValidIndices_Reorders() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
         let originalFirstID = sut.playlist.tracks[0].id
 
         // [A, B, C] → [B, C, A]

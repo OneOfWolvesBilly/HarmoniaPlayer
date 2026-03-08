@@ -18,6 +18,10 @@ import XCTest
 /// `@MainActor` isolation is declared at the class level. XCTest executes
 /// `@MainActor`-isolated test classes on the main actor automatically, so
 /// no `await MainActor.run {}` wrappers are needed in individual test methods.
+///
+/// **Slice 3-B update:**
+/// `loadThreeTracks()` helper is now `async` because `AppState.load(urls:)`
+/// is now `async`. Test methods that call it are updated to `async` accordingly.
 @MainActor
 final class AppStateTrackSelectionTests: XCTestCase {
 
@@ -42,13 +46,15 @@ final class AppStateTrackSelectionTests: XCTestCase {
     // MARK: - Helpers
 
     /// Loads three tracks into the SUT's playlist and returns them.
-    private func loadThreeTracks() -> (Track, Track, Track) {
+    ///
+    /// Marked `async` because `AppState.load(urls:)` is now async (Slice 3-B).
+    private func loadThreeTracks() async -> (Track, Track, Track) {
         let urls = [
             URL(fileURLWithPath: "/tmp/track-a.mp3"),
             URL(fileURLWithPath: "/tmp/track-b.mp3"),
             URL(fileURLWithPath: "/tmp/track-c.mp3"),
         ]
-        sut.load(urls: urls)
+        await sut.load(urls: urls)
         let tracks = sut.playlist.tracks
         return (tracks[0], tracks[1], tracks[2])
     }
@@ -60,8 +66,8 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// Given a playlist with 3 tracks,
     /// when `play(trackID:)` is called with a valid ID,
     /// then `currentTrack` is set to the matching track.
-    func testPlay_ValidID_SetsCurrentTrack() {
-        let (trackA, _, _) = loadThreeTracks()
+    func testPlay_ValidID_SetsCurrentTrack() async {
+        let (trackA, _, _) = await loadThreeTracks()
 
         sut.play(trackID: trackA.id)
 
@@ -73,8 +79,8 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// Given `currentTrack` is already set to track A,
     /// when `play(trackID:)` is called with track B's ID,
     /// then `currentTrack` switches to track B.
-    func testPlay_SwitchTrack_UpdatesCurrentTrack() {
-        let (trackA, trackB, _) = loadThreeTracks()
+    func testPlay_SwitchTrack_UpdatesCurrentTrack() async {
+        let (trackA, trackB, _) = await loadThreeTracks()
         sut.play(trackID: trackA.id)
         XCTAssertEqual(sut.currentTrack, trackA, "Pre-condition: currentTrack should be track A")
 
@@ -88,8 +94,8 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// Given a playlist with 3 tracks and a currentTrack already set,
     /// when `play(trackID:)` is called with an ID not in the playlist,
     /// then `currentTrack` is nil.
-    func testPlay_InvalidID_ClearsCurrentTrack() {
-        let (trackA, _, _) = loadThreeTracks()
+    func testPlay_InvalidID_ClearsCurrentTrack() async {
+        let (trackA, _, _) = await loadThreeTracks()
         sut.play(trackID: trackA.id)
         XCTAssertNotNil(sut.currentTrack, "Pre-condition: currentTrack should be set")
 
@@ -118,8 +124,8 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// then no calls are made to the playback service.
     ///
     /// Playback orchestration is deferred to Slice 4.
-    func testPlay_DoesNotCallPlaybackService() {
-        let (trackA, _, _) = loadThreeTracks()
+    func testPlay_DoesNotCallPlaybackService() async {
+        let (trackA, _, _) = await loadThreeTracks()
 
         sut.play(trackID: trackA.id)
 

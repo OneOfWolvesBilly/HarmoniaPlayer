@@ -8,28 +8,15 @@
 import Foundation
 import Combine
 
-/// Application state container (composition root)
+/// Central application state container.
 ///
-/// **Responsibilities:**
-/// - Wire all dependencies (IAP → Flags → Factory → Services)
-/// - Expose minimal published state for UI
-/// - **No behavior** - wiring only
-/// - Playlist state and operations
-/// - Track selection
-///
-/// **Design:**
-/// - Single source of truth for app-wide state
-/// - Uses dependency injection via initializer
-/// - All services created through CoreFactory
-///
-/// **Slice history:**
-/// - Slice 1-D: Initial wiring (isProUnlocked, playbackService, tagReaderService)
-/// - Slice 1-E: Added viewPreferences and lastError
+/// Wires all dependencies (IAP → FeatureFlags → CoreFactory → Services)
+/// and exposes published state for SwiftUI views to observe.
+/// All services are created through CoreFactory via dependency injection.
 ///
 /// **Usage:**
 /// ```swift
-/// let iapManager = MockIAPManager(isProUnlocked: false)
-/// let appState = AppState(iapManager: iapManager, provider: FakeCoreProvider())
+/// let appState = AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider())
 ///
 /// // In SwiftUI
 /// ContentView()
@@ -56,30 +43,29 @@ final class AppState: ObservableObject {
 
     // MARK: - Published State
 
-    /// Whether Pro features are unlocked
+    /// Whether Pro features are unlocked.
     ///
     /// Derived from feature flags. UI can observe this for Pro gating.
     @Published private(set) var isProUnlocked: Bool
 
     // MARK: - Playlist State
 
-    /// Session playlist
+    /// Session playlist.
     ///
     /// Initialised as an empty playlist named "Session".
     /// Operations: `load(urls:)`, `clearPlaylist()`, `removeTrack(_:)`, `moveTrack(fromOffsets:toOffset:)`.
     @Published private(set) var playlist: Playlist
 
-    /// Currently selected track
+    /// Currently selected track.
     ///
     /// `nil` when no track is selected, or after the selected track
     /// is removed from the playlist or the playlist is cleared.
-    ///
-    /// Set via `play(trackID:)`. Does **not** trigger audio playback.
+    /// Set via `play(trackID:)`. Does not trigger audio playback.
     @Published private(set) var currentTrack: Track?
 
-    // MARK: - UI Preference State (Slice 1-E)
+    // MARK: - UI Preference State
 
-    /// UI layout and visibility preferences
+    /// UI layout and visibility preferences.
     ///
     /// Initialised to `.defaultPreferences` at app launch.
     /// Mutable so views and actions can update it directly:
@@ -88,20 +74,17 @@ final class AppState: ObservableObject {
     /// ```
     @Published var viewPreferences: ViewPreferences = .defaultPreferences
 
-    // MARK: - Error State (Slice 1-E)
+    // MARK: - Error State
 
-    /// Most recent playback error
+    /// Most recent playback error.
     ///
-    /// `nil` on init. Set by playback logic in Slice 4 and later.
+    /// `nil` on init. Set by playback logic when an error occurs.
     /// Views observe this to present error banners or alerts.
-    ///
-    /// **Note:** Nothing sets this in Slice 1-E; the property is defined
-    /// here so Slice 4 can assign it without modifying the published surface.
     @Published private(set) var lastError: PlaybackError?
 
     // MARK: - Initialization
 
-    /// Initialize AppState with dependencies
+    /// Creates AppState and wires all dependencies.
     ///
     /// - Parameters:
     ///   - iapManager: IAP manager
@@ -154,37 +137,33 @@ final class AppState: ObservableObject {
 
     // MARK: - Playlist Operations
 
-    /// Load audio files into the playlist
+    /// Appends enriched tracks to the playlist by reading metadata for each URL.
     ///
-    /// Creates `Track` instances with URL-derived titles and appends them to
-    /// the existing playlist. Additive: calling this multiple times accumulates
-    /// tracks.
+    /// Calls `TagReaderService.readMetadata(for:)` per URL and appends the
+    /// returned `Track` (title, artist, album, duration) in order.
+    /// On failure, falls back to a URL-derived `Track`.
     ///
-    /// - Parameter urls: Audio file URLs to add
-    ///
-    /// **Notes:**
-    /// - Titles are derived from the filename (without extension).
-    /// - No format validation or metadata extraction is performed here.
-    func load(urls: [URL]) {
-        let newTracks = urls.map { Track(url: $0) }
-        playlist.tracks.append(contentsOf: newTracks)
+    /// - Parameter urls: Audio file URLs to add.
+    func load(urls: [URL]) async {
+        for url in urls {
+            // Falls back to URL-derived Track if metadata cannot be read.
+            let track = (try? await tagReaderService.readMetadata(for: url)) ?? Track(url: url)
+            playlist.tracks.append(track)
+        }
     }
 
-    /// Clear all tracks from the playlist
-    ///
-    /// Resets the playlist to an empty state and clears `currentTrack`.
+    /// Resets the playlist to empty and clears `currentTrack`.
     func clearPlaylist() {
         playlist.tracks = []
         currentTrack = nil
     }
 
-    /// Remove a specific track by ID
+    /// Removes the track with the given ID from the playlist.
     ///
-    /// - Parameter trackID: The `UUID` of the track to remove
+    /// No-op if `trackID` is not found. Sets `currentTrack` to `nil`
+    /// if the removed track was selected.
     ///
-    /// **Behaviour:**
-    /// - No-op if `trackID` is not found in the playlist.
-    /// - Sets `currentTrack` to `nil` if the removed track was selected.
+    /// - Parameter trackID: The `UUID` of the track to remove.
     func removeTrack(_ trackID: Track.ID) {
         if currentTrack?.id == trackID {
             currentTrack = nil
@@ -192,14 +171,14 @@ final class AppState: ObservableObject {
         playlist.tracks.removeAll { $0.id == trackID }
     }
 
-    /// Reorder tracks (for SwiftUI `List` drag-and-drop support)
+    /// Reorders tracks in the playlist.
+    ///
+    /// Signature is compatible with SwiftUI's `onMove` callback.
+    /// Implemented without SwiftUI import to maintain module boundary.
     ///
     /// - Parameters:
     ///   - fromOffsets: Source indices
     ///   - toOffset: Destination offset
-    ///
-    /// **Note:** Implemented without SwiftUI import to maintain module boundary.
-    /// The signature is compatible with SwiftUI's `onMove` callback.
     func moveTrack(fromOffsets: IndexSet, toOffset: Int) {
         let itemsToMove = fromOffsets.map { playlist.tracks[$0] }
         var result = playlist.tracks.enumerated()
@@ -212,14 +191,11 @@ final class AppState: ObservableObject {
 
     // MARK: - Track Selection
 
-    /// Select a track by ID
+    /// Sets `currentTrack` to the track matching `trackID`, or `nil` if not found.
     ///
-    /// - Parameter trackID: The `UUID` of the track to select
+    /// Does not trigger audio playback.
     ///
-    /// Sets `currentTrack` to the matching track, or `nil` if the ID is
-    /// not found in the playlist.
-    ///
-    /// **Note:** Does **not** start audio playback.
+    /// - Parameter trackID: The `UUID` of the track to select.
     func play(trackID: Track.ID) {
         currentTrack = playlist.tracks.first { $0.id == trackID }
     }
