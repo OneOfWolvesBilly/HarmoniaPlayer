@@ -243,6 +243,21 @@ final class AppState: ObservableObject {
         currentTime = 0
     }
 
+    /// Seek to an absolute position in the current track.
+    ///
+    /// On success: updates `currentTime`.
+    /// On error: sets `lastError`. `playbackState` is not changed.
+    ///
+    /// - Parameter seconds: Target playback position in seconds.
+    func seek(to seconds: TimeInterval) async {
+        do {
+            try await playbackService.seek(to: seconds)
+            currentTime = seconds
+        } catch {
+            lastError = mapToPlaybackError(error)
+        }
+    }
+
     // MARK: - Track Selection
 
     /// Loads and plays the track matching `trackID`.

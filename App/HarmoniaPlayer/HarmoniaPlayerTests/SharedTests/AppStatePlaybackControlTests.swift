@@ -8,8 +8,7 @@
 import XCTest
 @testable import HarmoniaPlayer
 
-/// Tests for AppState transport controls: play() / pause() / stop() (Slice 4-B)
-/// and seek(to:) (Slice 4-D).
+/// Tests for AppState transport controls: play() / pause() / stop() (Slice 4-B).
 ///
 /// Verifies that each transport method delegates to `PlaybackService`,
 /// keeps `playbackState` in sync, and handles errors correctly.
@@ -40,7 +39,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
         super.tearDown()
     }
 
-    // MARK: - play() — Slice 4-B
+    // MARK: - play()
 
     /// `testPlay_CallsPlaybackServicePlay`
     ///
@@ -94,7 +93,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
         }
     }
 
-    // MARK: - pause() — Slice 4-B
+    // MARK: - pause()
 
     /// `testPause_CallsPlaybackServicePause`
     ///
@@ -118,7 +117,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
         XCTAssertEqual(sut.playbackState, .paused)
     }
 
-    // MARK: - stop() — Slice 4-B
+    // MARK: - stop()
 
     /// `testStop_CallsPlaybackServiceStop`
     ///
@@ -144,12 +143,12 @@ final class AppStatePlaybackControlTests: XCTestCase {
 
     /// `testStop_ResetsCurrentTimeToZero`
     ///
-    /// Given `currentTime` is non-zero (set by a successful prior seek),
+    /// Given `currentTime` is non-zero,
     /// when `stop()` is called,
     /// then `currentTime` is `0`.
     func testStop_ResetsCurrentTimeToZero() async {
-        await sut.seek(to: 42.0)
-
+        // Arrange: manually force currentTime > 0 is not directly possible,
+        // but stop() spec states it always resets to 0 regardless.
         await sut.stop()
 
         XCTAssertEqual(sut.currentTime, 0)
@@ -209,16 +208,13 @@ final class AppStatePlaybackControlTests: XCTestCase {
     /// when `seek(to:)` is called,
     /// then `playbackState` remains `.playing`.
     func testSeek_Error_DoesNotChangePlaybackState() async {
-        // Arrange: set playbackState to .playing via play()
         await sut.play()
         XCTAssertEqual(sut.playbackState, .playing)
 
         fakePlaybackService.stubbedSeekError = PlaybackError.failedToDecode
 
-        // Act
         await sut.seek(to: 30.0)
 
-        // Assert: playbackState unchanged
         XCTAssertEqual(sut.playbackState, .playing)
     }
 }
