@@ -74,6 +74,25 @@ final class AppState: ObservableObject {
     /// ```
     @Published var viewPreferences: ViewPreferences = .defaultPreferences
 
+    // MARK: - Playback State (Slice 4-A)
+
+    /// Current playback state.
+    ///
+    /// Initialised to `.idle`. Updated by playback control methods
+    /// (`play()`, `pause()`, `stop()`, `play(trackID:)`).
+    @Published private(set) var playbackState: PlaybackState = .idle
+
+    /// Current playback position in seconds.
+    ///
+    /// Initialised to `0`. Updated on successful `seek(to:)` and
+    /// reset to `0` by `stop()`.
+    @Published private(set) var currentTime: TimeInterval = 0
+
+    /// Duration of the currently loaded track in seconds.
+    ///
+    /// Initialised to `0`. Updated after a successful `load` in `play(trackID:)`.
+    @Published private(set) var duration: TimeInterval = 0
+
     // MARK: - Error State
 
     /// Most recent playback error.
