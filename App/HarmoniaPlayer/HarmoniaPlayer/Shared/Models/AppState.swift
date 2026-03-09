@@ -213,6 +213,36 @@ final class AppState: ObservableObject {
         playlist.tracks = result
     }
 
+    // MARK: - Transport Controls
+
+    /// Start playback of the currently loaded track.
+    ///
+    /// No-op if no track has been loaded via `play(trackID:)`.
+    /// On error: sets `lastError` and `playbackState = .error(mapped)`.
+    func play() async {
+        do {
+            try await playbackService.play()
+            playbackState = .playing
+        } catch {
+            let mapped = mapToPlaybackError(error)
+            lastError = mapped
+            playbackState = .error(mapped)
+        }
+    }
+
+    /// Pause playback. Playback position is preserved.
+    func pause() async {
+        await playbackService.pause()
+        playbackState = .paused
+    }
+
+    /// Stop playback. Resets `currentTime` to 0.
+    func stop() async {
+        await playbackService.stop()
+        playbackState = .stopped
+        currentTime = 0
+    }
+
     // MARK: - Track Selection
 
     /// Sets `currentTrack` to the track matching `trackID`, or `nil` if not found.
@@ -222,5 +252,12 @@ final class AppState: ObservableObject {
     /// - Parameter trackID: The `UUID` of the track to select.
     func play(trackID: Track.ID) {
         currentTrack = playlist.tracks.first { $0.id == trackID }
+    }
+
+    // MARK: - Private Helpers
+
+    private func mapToPlaybackError(_ error: Error) -> PlaybackError {
+        if let playbackError = error as? PlaybackError { return playbackError }
+        return .coreError(error.localizedDescription)
     }
 }

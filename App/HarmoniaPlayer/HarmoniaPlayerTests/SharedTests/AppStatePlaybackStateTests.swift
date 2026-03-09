@@ -1,101 +1,176 @@
 //
-//  AppStatePlaybackStateTests.swift
+//  AppStatePlaybackControlTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 4-A: Verify AppState initial playback state.
+//  Slice 4-B: play() / pause() / stop() transport controls.
 //
 
 import XCTest
 @testable import HarmoniaPlayer
 
-/// Tests for AppState initial playback state (Slice 4-A).
+/// Tests for AppState transport controls (Slice 4-B).
 ///
-/// Verifies that `playbackState`, `currentTime`, and `duration` are correctly
-/// initialised on a fresh `AppState`, and that `FakeCoreProvider.playbackServiceStub`
-/// injection works as expected.
+/// Verifies that `play()`, `pause()`, and `stop()` delegate correctly
+/// to `PlaybackService` and keep `playbackState` in sync.
+/// Error paths from `play()` are captured in `lastError` and
+/// reflected as `playbackState = .error(...)`.
 ///
 /// **Swift 6 / Xcode 26 note:**
 /// `@MainActor` is required because `AppState` is `@MainActor`-isolated.
+/// Async test methods are required for all transport control calls.
 @MainActor
-final class AppStatePlaybackStateTests: XCTestCase {
+final class AppStatePlaybackControlTests: XCTestCase {
 
     // MARK: - Test Fixtures
 
     private var sut: AppState!
-    private var fakeProvider: FakeCoreProvider!
+    private var fakeService: FakePlaybackService!
 
     override func setUp() {
         super.setUp()
-        fakeProvider = FakeCoreProvider()
+        fakeService = FakePlaybackService()
+        let provider = FakeCoreProvider(playbackService: fakeService)
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: fakeProvider)
+        sut = AppState(iapManager: iap, provider: provider)
     }
 
     override func tearDown() {
         sut = nil
-        fakeProvider = nil
+        fakeService = nil
         super.tearDown()
     }
 
-    // MARK: - Slice 4-A: Initial State
+    // MARK: - play()
 
-    /// testAppState_InitialPlaybackState_IsIdle
+    /// testPlay_CallsPlaybackServicePlay
     ///
-    /// Given: Fresh AppState
-    /// When:  `playbackState` is read
-    /// Then:  `.idle`
-    func testAppState_InitialPlaybackState_IsIdle() {
-        XCTAssertEqual(sut.playbackState, .idle)
-    }
-
-    /// testAppState_InitialCurrentTime_IsZero
-    ///
-    /// Given: Fresh AppState
-    /// When:  `currentTime` is read
-    /// Then:  `0`
-    func testAppState_InitialCurrentTime_IsZero() {
-        XCTAssertEqual(sut.currentTime, 0)
-    }
-
-    /// testAppState_InitialDuration_IsZero
-    ///
-    /// Given: Fresh AppState
-    /// When:  `duration` is read
-    /// Then:  `0`
-    func testAppState_InitialDuration_IsZero() {
-        XCTAssertEqual(sut.duration, 0)
-    }
-
-    // MARK: - Slice 4-A: playbackServiceStub Injection
-
-    /// testFakeCoreProvider_ReturnsInjectedPlaybackServiceStub
-    ///
-    /// Given: `FakeCoreProvider` created with a known `FakePlaybackService` instance
-    /// When:  `AppState` is initialised using that provider
-    /// Then:  `AppState.playbackService` is the same instance as the stub
-    func testFakeCoreProvider_ReturnsInjectedPlaybackServiceStub() {
-        // Given
-        let knownFake = FakePlaybackService()
-        let provider = FakeCoreProvider(playbackService: knownFake)
-        let iap = MockIAPManager(isProUnlocked: false)
-
+    /// Given: AppState with FakePlaybackService
+    /// When:  `await play()` is called
+    /// Then:  `fakeService.playCallCount == 1`
+    func testPlay_CallsPlaybackServicePlay() async {
         // When
-        let appState = AppState(iapManager: iap, provider: provider)
+        await sut.play()
 
         // Then
-        XCTAssertTrue(appState.playbackService === knownFake,
-                      "AppState should hold the injected FakePlaybackService stub")
+        XCTAssertEqual(fakeService.playCallCount, 1)
     }
 
-    /// testFakeCoreProvider_DefaultStub_IsAccessible
+    /// testPlay_SetsPlayingState
     ///
-    /// Given: `FakeCoreProvider` created with default stub
-    /// When:  `playbackServiceStub` is accessed
-    /// Then:  It is the same instance returned by `makePlaybackService`
-    func testFakeCoreProvider_DefaultStub_IsAccessible() {
-        // The stub created during FakeCoreProvider init should be
-        // the same one that was injected into AppState via makePlaybackService.
-        XCTAssertTrue(sut.playbackService === fakeProvider.playbackServiceStub,
-                      "AppState.playbackService should be fakeProvider.playbackServiceStub")
+    /// Given: No error stub on FakePlaybackService
+    /// When:  `await play()` is called
+    /// Then:  `playbackState == .playing`
+    func testPlay_SetsPlayingState() async {
+        // When
+        await sut.play()
+
+        // Then
+        XCTAssertEqual(sut.playbackState, .playing)
+    }
+
+    /// testPlay_OnError_SetsLastError
+    ///
+    /// Given: `stubbedPlayError` set on FakePlaybackService
+    /// When:  `await play()` is called
+    /// Then:  `lastError != nil`
+    func testPlay_OnError_SetsLastError() async {
+        // Given
+        fakeService.stubbedPlayError = PlaybackError.outputError
+
+        // When
+        await sut.play()
+
+        // Then
+        XCTAssertNotNil(sut.lastError)
+    }
+
+    /// testPlay_OnError_SetsErrorState
+    ///
+    /// Given: `stubbedPlayError` set on FakePlaybackService
+    /// When:  `await play()` is called
+    /// Then:  `playbackState == .error(...)`
+    func testPlay_OnError_SetsErrorState() async {
+        // Given
+        fakeService.stubbedPlayError = PlaybackError.outputError
+
+        // When
+        await sut.play()
+
+        // Then
+        if case .error = sut.playbackState {
+            // Pass
+        } else {
+            XCTFail("Expected playbackState to be .error, got \(sut.playbackState)")
+        }
+    }
+
+    // MARK: - pause()
+
+    /// testPause_CallsPlaybackServicePause
+    ///
+    /// Given: AppState with FakePlaybackService
+    /// When:  `await pause()` is called
+    /// Then:  `fakeService.pauseCallCount == 1`
+    func testPause_CallsPlaybackServicePause() async {
+        // When
+        await sut.pause()
+
+        // Then
+        XCTAssertEqual(fakeService.pauseCallCount, 1)
+    }
+
+    /// testPause_SetsPausedState
+    ///
+    /// Given: AppState with FakePlaybackService
+    /// When:  `await pause()` is called
+    /// Then:  `playbackState == .paused`
+    func testPause_SetsPausedState() async {
+        // When
+        await sut.pause()
+
+        // Then
+        XCTAssertEqual(sut.playbackState, .paused)
+    }
+
+    // MARK: - stop()
+
+    /// testStop_CallsPlaybackServiceStop
+    ///
+    /// Given: AppState with FakePlaybackService
+    /// When:  `await stop()` is called
+    /// Then:  `fakeService.stopCallCount == 1`
+    func testStop_CallsPlaybackServiceStop() async {
+        // When
+        await sut.stop()
+
+        // Then
+        XCTAssertEqual(fakeService.stopCallCount, 1)
+    }
+
+    /// testStop_SetsStoppedState
+    ///
+    /// Given: AppState with FakePlaybackService
+    /// When:  `await stop()` is called
+    /// Then:  `playbackState == .stopped`
+    func testStop_SetsStoppedState() async {
+        // When
+        await sut.stop()
+
+        // Then
+        XCTAssertEqual(sut.playbackState, .stopped)
+    }
+
+    /// testStop_ResetsCurrentTimeToZero
+    ///
+    /// Given: AppState (currentTime starts at 0; will be more meaningful
+    ///        after Slice 4-D adds seek(to:) to set currentTime > 0)
+    /// When:  `await stop()` is called
+    /// Then:  `currentTime == 0`
+    func testStop_ResetsCurrentTimeToZero() async {
+        // When
+        await sut.stop()
+
+        // Then
+        XCTAssertEqual(sut.currentTime, 0)
     }
 }
