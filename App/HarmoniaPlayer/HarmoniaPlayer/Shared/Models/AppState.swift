@@ -141,14 +141,19 @@ final class AppState: ObservableObject {
     ///
     /// Calls `TagReaderService.readMetadata(for:)` per URL and appends the
     /// returned `Track` (title, artist, album, duration) in order.
-    /// On failure, falls back to a URL-derived `Track`.
+    /// On failure, falls back to a URL-derived `Track` and sets `lastError`
+    /// to `.failedToOpenFile`.
     ///
     /// - Parameter urls: Audio file URLs to add.
     func load(urls: [URL]) async {
         for url in urls {
-            // Falls back to URL-derived Track if metadata cannot be read.
-            let track = (try? await tagReaderService.readMetadata(for: url)) ?? Track(url: url)
-            playlist.tracks.append(track)
+            do {
+                let track = try await tagReaderService.readMetadata(for: url)
+                playlist.tracks.append(track)
+            } catch {
+                playlist.tracks.append(Track(url: url))
+                lastError = .failedToOpenFile
+            }
         }
     }
 
