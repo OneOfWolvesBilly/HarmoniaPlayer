@@ -69,7 +69,7 @@ final class AppStateTrackSelectionTests: XCTestCase {
     func testPlay_ValidID_SetsCurrentTrack() async {
         let (trackA, _, _) = await loadThreeTracks()
 
-        sut.play(trackID: trackA.id)
+        await sut.play(trackID: trackA.id)
 
         XCTAssertEqual(sut.currentTrack, trackA)
     }
@@ -81,10 +81,10 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// then `currentTrack` switches to track B.
     func testPlay_SwitchTrack_UpdatesCurrentTrack() async {
         let (trackA, trackB, _) = await loadThreeTracks()
-        sut.play(trackID: trackA.id)
+        await sut.play(trackID: trackA.id)
         XCTAssertEqual(sut.currentTrack, trackA, "Pre-condition: currentTrack should be track A")
 
-        sut.play(trackID: trackB.id)
+        await sut.play(trackID: trackB.id)
 
         XCTAssertEqual(sut.currentTrack, trackB)
     }
@@ -96,10 +96,10 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// then `currentTrack` is nil.
     func testPlay_InvalidID_ClearsCurrentTrack() async {
         let (trackA, _, _) = await loadThreeTracks()
-        sut.play(trackID: trackA.id)
+        await sut.play(trackID: trackA.id)
         XCTAssertNotNil(sut.currentTrack, "Pre-condition: currentTrack should be set")
 
-        sut.play(trackID: UUID()) // unknown ID
+        await sut.play(trackID: UUID()) // unknown ID
 
         XCTAssertNil(sut.currentTrack)
     }
@@ -109,32 +109,12 @@ final class AppStateTrackSelectionTests: XCTestCase {
     /// Given an empty playlist,
     /// when `play(trackID:)` is called with any ID,
     /// then `currentTrack` is nil.
-    func testPlay_EmptyPlaylist_ClearsCurrentTrack() {
+    func testPlay_EmptyPlaylist_ClearsCurrentTrack() async {
         XCTAssertTrue(sut.playlist.isEmpty, "Pre-condition: playlist should be empty")
 
-        sut.play(trackID: UUID())
+        await sut.play(trackID: UUID())
 
         XCTAssertNil(sut.currentTrack)
     }
 
-    /// Slice2-D: `testPlay_DoesNotCallPlaybackService`
-    ///
-    /// Given any playlist state,
-    /// when `play(trackID:)` is called,
-    /// then no calls are made to the playback service.
-    ///
-    /// Playback orchestration is deferred to Slice 4.
-    func testPlay_DoesNotCallPlaybackService() async {
-        let (trackA, _, _) = await loadThreeTracks()
-
-        sut.play(trackID: trackA.id)
-
-        // FakeCoreProvider records makePlaybackService calls at construction time.
-        // Verifying the count stays at 1 (set during AppState.init) confirms
-        // play(trackID:) does not trigger any additional service creation or calls.
-        XCTAssertEqual(fakeProvider.makePlaybackServiceCallCount, 1,
-            "play(trackID:) must not trigger additional playback service creation")
-        XCTAssertEqual(sut.currentTrack, trackA,
-            "currentTrack should still be set (sanity check)")
-    }
 }

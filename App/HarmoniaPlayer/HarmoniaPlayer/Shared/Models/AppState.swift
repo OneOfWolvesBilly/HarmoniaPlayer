@@ -245,13 +245,33 @@ final class AppState: ObservableObject {
 
     // MARK: - Track Selection
 
-    /// Sets `currentTrack` to the track matching `trackID`, or `nil` if not found.
+    /// Loads and plays the track matching `trackID`.
     ///
-    /// Does not trigger audio playback.
+    /// Sets `currentTrack`, calls `playbackService.load(url:)`, updates `duration`,
+    /// then calls `playbackService.play()`. Transitions `playbackState` through
+    /// `.loading` → `.playing` on success, or `.error` on failure.
     ///
-    /// - Parameter trackID: The `UUID` of the track to select.
-    func play(trackID: Track.ID) {
-        currentTrack = playlist.tracks.first { $0.id == trackID }
+    /// No service calls are made if `trackID` is not found in the playlist.
+    ///
+    /// - Parameter trackID: The `UUID` of the track to load and play.
+    func play(trackID: Track.ID) async {
+        guard let track = playlist.tracks.first(where: { $0.id == trackID }) else {
+            currentTrack = nil
+            return
+        }
+        currentTrack = track
+        playbackState = .loading
+
+        do {
+            try await playbackService.load(url: track.url)
+            duration = await playbackService.duration()
+            try await playbackService.play()
+            playbackState = .playing
+        } catch {
+            let mapped = mapToPlaybackError(error)
+            lastError = mapped
+            playbackState = .error(mapped)
+        }
     }
 
     // MARK: - Private Helpers

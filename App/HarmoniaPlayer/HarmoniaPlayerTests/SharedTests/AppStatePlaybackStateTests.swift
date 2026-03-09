@@ -1,176 +1,205 @@
 //
-//  AppStatePlaybackControlTests.swift
+//  AppStatePlaybackTrackTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 4-B: play() / pause() / stop() transport controls.
+//  Created on 2026-03-09.
 //
 
 import XCTest
 @testable import HarmoniaPlayer
 
-/// Tests for AppState transport controls (Slice 4-B).
+/// Tests for AppState.play(trackID:) load-and-play orchestration (Slice 4-C)
 ///
-/// Verifies that `play()`, `pause()`, and `stop()` delegate correctly
-/// to `PlaybackService` and keep `playbackState` in sync.
-/// Error paths from `play()` are captured in `lastError` and
-/// reflected as `playbackState = .error(...)`.
+/// Verifies that `play(trackID:)` sets `currentTrack`, calls
+/// `playbackService.load(url:)` and `playbackService.play()` in order,
+/// updates `duration` after successful load, and propagates errors into
+/// `lastError` and `playbackState`.
 ///
 /// **Swift 6 / Xcode 26 note:**
-/// `@MainActor` is required because `AppState` is `@MainActor`-isolated.
-/// Async test methods are required for all transport control calls.
+/// Test class is `@MainActor` — XCTest runs `@MainActor`-isolated classes on
+/// the main actor automatically, so no `await MainActor.run {}` wrappers are
+/// needed in individual test methods.
 @MainActor
-final class AppStatePlaybackControlTests: XCTestCase {
+final class AppStatePlaybackTrackTests: XCTestCase {
 
     // MARK: - Test Fixtures
 
     private var sut: AppState!
-    private var fakeService: FakePlaybackService!
+    private var fakePlaybackService: FakePlaybackService!
 
     override func setUp() {
         super.setUp()
-        fakeService = FakePlaybackService()
-        let provider = FakeCoreProvider(playbackService: fakeService)
+        fakePlaybackService = FakePlaybackService()
+        let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: false)
         sut = AppState(iapManager: iap, provider: provider)
     }
 
     override func tearDown() {
         sut = nil
-        fakeService = nil
+        fakePlaybackService = nil
         super.tearDown()
     }
 
-    // MARK: - play()
+    // MARK: - Helpers
 
-    /// testPlay_CallsPlaybackServicePlay
-    ///
-    /// Given: AppState with FakePlaybackService
-    /// When:  `await play()` is called
-    /// Then:  `fakeService.playCallCount == 1`
-    func testPlay_CallsPlaybackServicePlay() async {
-        // When
-        await sut.play()
-
-        // Then
-        XCTAssertEqual(fakeService.playCallCount, 1)
+    /// Loads one track into the SUT's playlist and returns it.
+    private func loadOneTrack() async -> Track {
+        let url = URL(fileURLWithPath: "/tmp/test-track.mp3")
+        await sut.load(urls: [url])
+        return sut.playlist.tracks[0]
     }
 
-    /// testPlay_SetsPlayingState
-    ///
-    /// Given: No error stub on FakePlaybackService
-    /// When:  `await play()` is called
-    /// Then:  `playbackState == .playing`
-    func testPlay_SetsPlayingState() async {
-        // When
-        await sut.play()
+    // MARK: - Tests
 
-        // Then
+    /// `testPlayTrack_SetsCurrentTrack`
+    ///
+    /// Given a playlist with one track,
+    /// when `play(trackID:)` is called with that track's ID,
+    /// then `currentTrack` is set to the matching track.
+    func testPlayTrack_SetsCurrentTrack() async {
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(sut.currentTrack, track)
+    }
+
+    /// `testPlayTrack_CallsLoad`
+    ///
+    /// Given a playlist with one track,
+    /// when `play(trackID:)` is called with that track's ID,
+    /// then `playbackService.load(url:)` is called exactly once.
+    func testPlayTrack_CallsLoad() async {
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(fakePlaybackService.loadCallCount, 1)
+    }
+
+    /// `testPlayTrack_LoadsCorrectURL`
+    ///
+    /// Given a playlist with one track,
+    /// when `play(trackID:)` is called with that track's ID,
+    /// then the URL passed to `playbackService.load(url:)` matches the track's URL.
+    func testPlayTrack_LoadsCorrectURL() async {
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(fakePlaybackService.loadedURLs.first, track.url)
+    }
+
+    /// `testPlayTrack_CallsPlay`
+    ///
+    /// Given a playlist with one track and no error stubs,
+    /// when `play(trackID:)` is called with that track's ID,
+    /// then `playbackService.play()` is called exactly once.
+    func testPlayTrack_CallsPlay() async {
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(fakePlaybackService.playCallCount, 1)
+    }
+
+    /// `testPlayTrack_SetsPlayingState`
+    ///
+    /// Given a playlist with one track and no error stubs,
+    /// when `play(trackID:)` is called with that track's ID,
+    /// then `playbackState` is `.playing`.
+    func testPlayTrack_SetsPlayingState() async {
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
         XCTAssertEqual(sut.playbackState, .playing)
     }
 
-    /// testPlay_OnError_SetsLastError
+    /// `testPlayTrack_UpdatesDuration`
     ///
-    /// Given: `stubbedPlayError` set on FakePlaybackService
-    /// When:  `await play()` is called
-    /// Then:  `lastError != nil`
-    func testPlay_OnError_SetsLastError() async {
-        // Given
-        fakeService.stubbedPlayError = PlaybackError.outputError
+    /// Given `stubbedDuration = 240.0`,
+    /// when `play(trackID:)` succeeds,
+    /// then `duration` is updated to `240.0`.
+    func testPlayTrack_UpdatesDuration() async {
+        fakePlaybackService.stubbedDuration = 240.0
+        let track = await loadOneTrack()
 
-        // When
-        await sut.play()
+        await sut.play(trackID: track.id)
 
-        // Then
+        XCTAssertEqual(sut.duration, 240.0)
+    }
+
+    /// `testPlayTrack_LoadError_SetsLastError`
+    ///
+    /// Given `stubbedLoadError` is set,
+    /// when `play(trackID:)` is called,
+    /// then `lastError` is non-nil.
+    func testPlayTrack_LoadError_SetsLastError() async {
+        fakePlaybackService.stubbedLoadError = PlaybackError.failedToOpenFile
+        let track = await loadOneTrack()
+
+        await sut.play(trackID: track.id)
+
         XCTAssertNotNil(sut.lastError)
     }
 
-    /// testPlay_OnError_SetsErrorState
+    /// `testPlayTrack_LoadError_SetsErrorState`
     ///
-    /// Given: `stubbedPlayError` set on FakePlaybackService
-    /// When:  `await play()` is called
-    /// Then:  `playbackState == .error(...)`
-    func testPlay_OnError_SetsErrorState() async {
-        // Given
-        fakeService.stubbedPlayError = PlaybackError.outputError
+    /// Given `stubbedLoadError` is set,
+    /// when `play(trackID:)` is called,
+    /// then `playbackState` is `.error(...)`.
+    func testPlayTrack_LoadError_SetsErrorState() async {
+        fakePlaybackService.stubbedLoadError = PlaybackError.failedToOpenFile
+        let track = await loadOneTrack()
 
-        // When
-        await sut.play()
+        await sut.play(trackID: track.id)
 
-        // Then
         if case .error = sut.playbackState {
-            // Pass
+            // expected
         } else {
-            XCTFail("Expected playbackState to be .error, got \(sut.playbackState)")
+            XCTFail("Expected playbackState == .error, got \(sut.playbackState)")
         }
     }
 
-    // MARK: - pause()
-
-    /// testPause_CallsPlaybackServicePause
+    /// `testPlayTrack_LoadError_DoesNotCallPlay`
     ///
-    /// Given: AppState with FakePlaybackService
-    /// When:  `await pause()` is called
-    /// Then:  `fakeService.pauseCallCount == 1`
-    func testPause_CallsPlaybackServicePause() async {
-        // When
-        await sut.pause()
+    /// Given `stubbedLoadError` is set,
+    /// when `play(trackID:)` is called,
+    /// then `playbackService.play()` is never called.
+    func testPlayTrack_LoadError_DoesNotCallPlay() async {
+        fakePlaybackService.stubbedLoadError = PlaybackError.failedToOpenFile
+        let track = await loadOneTrack()
 
-        // Then
-        XCTAssertEqual(fakeService.pauseCallCount, 1)
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(fakePlaybackService.playCallCount, 0)
     }
 
-    /// testPause_SetsPausedState
+    /// `testPlayTrack_InvalidID_NoServiceCalls`
     ///
-    /// Given: AppState with FakePlaybackService
-    /// When:  `await pause()` is called
-    /// Then:  `playbackState == .paused`
-    func testPause_SetsPausedState() async {
-        // When
-        await sut.pause()
+    /// Given an invalid trackID not present in the playlist,
+    /// when `play(trackID:)` is called,
+    /// then no service calls are made.
+    func testPlayTrack_InvalidID_NoServiceCalls() async {
+        _ = await loadOneTrack()
 
-        // Then
-        XCTAssertEqual(sut.playbackState, .paused)
+        await sut.play(trackID: UUID())
+
+        XCTAssertEqual(fakePlaybackService.loadCallCount, 0)
     }
 
-    // MARK: - stop()
-
-    /// testStop_CallsPlaybackServiceStop
+    /// `testPlayTrack_InvalidID_NilsCurrentTrack`
     ///
-    /// Given: AppState with FakePlaybackService
-    /// When:  `await stop()` is called
-    /// Then:  `fakeService.stopCallCount == 1`
-    func testStop_CallsPlaybackServiceStop() async {
-        // When
-        await sut.stop()
+    /// Given an invalid trackID not present in the playlist,
+    /// when `play(trackID:)` is called,
+    /// then `currentTrack` is nil.
+    func testPlayTrack_InvalidID_NilsCurrentTrack() async {
+        _ = await loadOneTrack()
 
-        // Then
-        XCTAssertEqual(fakeService.stopCallCount, 1)
-    }
+        await sut.play(trackID: UUID())
 
-    /// testStop_SetsStoppedState
-    ///
-    /// Given: AppState with FakePlaybackService
-    /// When:  `await stop()` is called
-    /// Then:  `playbackState == .stopped`
-    func testStop_SetsStoppedState() async {
-        // When
-        await sut.stop()
-
-        // Then
-        XCTAssertEqual(sut.playbackState, .stopped)
-    }
-
-    /// testStop_ResetsCurrentTimeToZero
-    ///
-    /// Given: AppState (currentTime starts at 0; will be more meaningful
-    ///        after Slice 4-D adds seek(to:) to set currentTime > 0)
-    /// When:  `await stop()` is called
-    /// Then:  `currentTime == 0`
-    func testStop_ResetsCurrentTimeToZero() async {
-        // When
-        await sut.stop()
-
-        // Then
-        XCTAssertEqual(sut.currentTime, 0)
+        XCTAssertNil(sut.currentTrack)
     }
 }

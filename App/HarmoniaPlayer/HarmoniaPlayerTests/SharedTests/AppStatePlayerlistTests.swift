@@ -95,7 +95,7 @@ final class AppStatePlaylistTests: XCTestCase {
 
     func testClearPlaylist_NilsCurrentTrack() async {
         await sut.load(urls: makeURLs(["a"]))
-        sut.play(trackID: sut.playlist.tracks[0].id)
+        await sut.play(trackID: sut.playlist.tracks[0].id)
         XCTAssertNotNil(sut.currentTrack)           // pre-condition
 
         sut.clearPlaylist()
@@ -126,7 +126,7 @@ final class AppStatePlaylistTests: XCTestCase {
     func testRemoveTrack_CurrentTrack_NilsCurrentTrack() async {
         await sut.load(urls: makeURLs(["a"]))
         let id = sut.playlist.tracks[0].id
-        sut.play(trackID: id)
+        await sut.play(trackID: id)
         XCTAssertNotNil(sut.currentTrack)           // pre-condition
 
         sut.removeTrack(id)
@@ -138,7 +138,7 @@ final class AppStatePlaylistTests: XCTestCase {
         await sut.load(urls: makeURLs(["a", "b"]))
         let trackA = sut.playlist.tracks[0]
         let trackBID = sut.playlist.tracks[1].id
-        sut.play(trackID: trackA.id)
+        await sut.play(trackID: trackA.id)
 
         sut.removeTrack(trackBID)
 
