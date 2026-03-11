@@ -26,13 +26,13 @@ full load-and-play operation and adds `play()`, `pause()`, `stop()`, and
 - Real-time `currentTime` polling / timer-based updates (future slice)
 - Album artwork loading (future)
 - Format validation / Pro gating (Slice 5)
-- UI implementation (Slice 5)
+- SwiftUI views / UI implementation
 - Repeat / shuffle modes (future)
 - Auto-advance to next track on completion (future)
 
 ### Dependencies
 - Requires: Slice 3 complete — `AppState.load(urls:)` async, enriched `Track` in playlist
-- Provides: Functional playback engine for Slice 5 (UI / Integration)
+- Provides: Full async playback control API and observable state consumed by Slice 5
 
 ---
 
@@ -492,4 +492,6 @@ Slice 4-D tests: All passing
 - **Slice 1 (Foundation)** — `PlaybackService` injected into `AppState`
 - **Slice 2 (Playlist Management)** — `play(trackID:)` stub and `currentTrack`
 - **Slice 3 (Metadata Extraction)** — Enriched `Track` instances consumed here
-- **Slice 5 (Integration)** — UI connects to `AppState` playback API; real `HarmoniaCore` adapters replace fakes
+- **Slice 5 (Integration)** — `HarmoniaPlaybackServiceAdapter` and `HarmoniaTagReaderAdapter`
+  replace fakes; format gating added to `play(trackID:)`; `AppState` published state
+  validated end-to-end with real HarmoniaCore services and real audio files

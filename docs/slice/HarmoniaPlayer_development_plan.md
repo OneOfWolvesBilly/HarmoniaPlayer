@@ -14,32 +14,36 @@
 **HarmoniaPlayer is:**
 1. **Reference Implementation** - Demonstrates how to use HarmoniaCore APIs correctly
 2. **Validation Tool** - Ensures HarmoniaCore works as specified
-3. **Real Integration** - Always uses real HarmoniaCore, not mocks
+3. **Real Integration** - Validates real HarmoniaCore behaviour in Slice 5 integration tests
 
 **Therefore:**
-- ✅ Use real HarmoniaCore-Swift in all tests
-- ✅ Use real audio files for validation
-- ✅ Test-Driven Development (TDD)
-- ❌ Do NOT mock HarmoniaCore services
-- ⚠️ Only mock external systems (IAPManager via StoreKit)
+- ✅ Test-Driven Development (TDD) with micro-slice red-green cycles
+- ✅ Slices 1–4: fake service implementations for deterministic unit tests
+- ✅ Slice 5-B: real HarmoniaCore-Swift services and real audio files
+- ✅ `MockIAPManager` used across all slices (IAPManager is not a HarmoniaCore service)
+- ❌ Do NOT call real audio I/O in unit tests (Slices 1–4)
+- ❌ Do NOT use `FakePlaybackService` or `FakeTagReaderService` in integration tests (Slice 5-B)
 
 ### 1.2 Testing Strategy
 
 **Test Pyramid for HarmoniaPlayer:**
 ```
-        /\
-       /E2E\      Manual verification
-      /------\
-     /集成測試\    Complete flows with real HarmoniaCore
-    /----------\
-   / Unit Test  \  Component tests with real HarmoniaCore
-  /--------------\
+          / \
+         /   \
+        /     \
+       / E2E   \           Manual verification
+      /---------\
+     /Integration\     Slice 5-B: real HarmoniaCore + real audio files
+    /-------------\
+   /   Unit Tests  \    Slices 1–4: FakePlaybackService + FakeTagReaderService
+  /-----------------\
 ```
 
 **Key Points:**
-- All tests use real HarmoniaCore-Swift
-- Test audio files required for validation
-- Both automated tests AND manual verification
+- Slices 1–4: all HarmoniaCore service collaborators are fakes — deterministic, no audio I/O
+- Slice 5-B: `HarmoniaCoreProvider` (real adapters) + bundle audio resources
+- `MockIAPManager` used in all slices (IAPManager is external to HarmoniaCore)
+- Both automated tests AND manual verification at each slice boundary
 
 ### 1.3 Development Workflow (TDD)
 
@@ -235,95 +239,124 @@ func testCorruptFile()
 
 **Scope:**
 - play(), pause(), stop(), seek(to:)
-- play(trackID:) - load and play specific track
+- play(trackID:) — async load-and-play for specific track
 - Playback state transitions
 - Current time / duration updates
-- Uses real PlaybackService from HarmoniaCore
+- All tests use `FakePlaybackService` for deterministic control
 
 **Deliverables:**
 1. Updated `AppState.swift` (playback methods)
-2. `PlaybackControlTests.swift`
-3. `SLICE_4_GUIDE.md`
+2. Upgraded `FakePlaybackService` with call recording and error stubs
+3. `FakePlaybackServiceTests.swift`, `AppStatePlaybackStateTests.swift`
+4. `AppStatePlaybackControlTests.swift`, `AppStatePlaybackTrackTests.swift`
 
 **Test Files Required:**
-- `test_playback.mp3` (10 seconds, valid audio)
-- `test_short.mp3` (1 second)
-- `test_unsupported.xyz` (unsupported format)
+- None — all Slice 4 tests use `FakePlaybackService` stubs
 
 **Tests to Write:**
 ```swift
-func testPlayPauseStop()
-func testPlaySpecificTrack()
-func testSeek()
-func testPlaybackStateTransitions()
-func testDurationRetrieval()
-func testCurrentTimeUpdates()
-func testPlayUnsupportedFormat()
-func testPlayMissingFile()
+// FakePlaybackServiceTests.swift
+func testFake_Load_RecordsURL()
+func testFake_Play_StubbedError_Throws()
+func testFake_Seek_RecordsSeconds()
+
+// AppStatePlaybackStateTests.swift
+func testInitialPlaybackState_IsIdle()
+func testInitialCurrentTime_IsZero()
+
+// AppStatePlaybackControlTests.swift
+func testPlay_SetsPlayingState()
+func testPlay_OnError_SetsLastError()
+func testPause_SetsPausedState()
+func testStop_SetsStoppedState()
+func testStop_ResetsCurrentTimeToZero()
+func testSeek_Success_UpdatesCurrentTime()
+func testSeek_Error_DoesNotChangePlaybackState()
+
+// AppStatePlaybackTrackTests.swift
+func testPlayTrack_SetsCurrentTrack()
+func testPlayTrack_CallsLoadThenPlay()
+func testPlayTrack_LoadError_DoesNotCallPlay()
+func testPlayTrack_UpdatesDuration()
+func testPlayTrack_InvalidID_NoServiceCalls()
 ```
 
 **Verification Criteria:**
-- ✅ All unit tests pass
-- ✅ Playback state transitions correctly
-- ✅ Can play, pause, stop, seek
-- ✅ Duration and current time accurate
-- ✅ Proper error handling
+- ✅ All unit tests pass (no real audio required)
+- ✅ Playback state transitions correctly (idle → loading → playing → paused → stopped)
+- ✅ Duration updated from service stub after load
+- ✅ Error mapping via `mapToPlaybackError` works correctly
+- ✅ `currentTime` reset by `stop()`
 
 **Manual Verification:**
-- **CRITICAL:** Actually hear audio output
-- Play/pause/stop buttons work
-- Seek bar functions correctly
-- State indicator updates
+- Confirm `playbackState` transitions in debugger using stub values
+- Confirm `lastError` populated on stubbed failure paths
 
 ---
 
-### Slice 5: 集成測試 (Integration Tests)
+### Slice 5: HarmoniaCore Integration + Integration Tests
 
 **Scope:**
-- Complete flow: load → enrich metadata → play
-- Error handling: corrupt files, unsupported formats
-- Pro feature gating: FLAC/DSD format restrictions
-- Multi-track switching
-- Edge cases and error scenarios
+- **5-A** — HarmoniaCore adapters + format gating (unit tests with `FakePlaybackService`):
+  - `HarmoniaPlaybackServiceAdapter`: bridges sync `HarmoniaCore.PlaybackService`
+    to async `HarmoniaPlayer.PlaybackService`
+  - `HarmoniaTagReaderAdapter`: bridges `TagReaderPort` (sync, `TagBundle`)
+    to async `TagReaderService` (returns `Track`)
+  - `HarmoniaCoreProvider`: replace placeholder classes with real adapter instances
+  - `AppState.play(trackID:)`: add format gating for FLAC/DSF/DFF on Free tier
+- **5-B** — Integration tests using real `HarmoniaCoreProvider` + real audio files:
+  - Complete flow: `load(urls:)` → metadata enrichment → `play(trackID:)`
+  - Error handling: corrupt files, unsupported formats
+  - Pro feature gating: FLAC rejected on Free tier
+  - Multi-track switching, stop state reset
 
 **Deliverables:**
-1. `IntegrationTests.swift`
-2. Complete test audio suite
-3. `SLICE_5_GUIDE.md`
-4. Final verification checklist
+1. `HarmoniaPlaybackServiceAdapter.swift`
+2. `HarmoniaTagReaderAdapter.swift`
+3. Updated `HarmoniaCoreProvider.swift` (real services, no placeholders)
+4. Updated `AppState.swift` (format gating in `play(trackID:)`)
+5. `AppStateFormatGatingTests.swift` (unit tests — `FakePlaybackService`)
+6. `IntegrationTests.swift` (real `HarmoniaCoreProvider`, real audio resources)
 
-**Test Files Required:**
-- `test_complete_flow.mp3` (full metadata, good audio)
-- `test_corrupt.mp3` (intentionally corrupted)
-- `test_flac.flac` (Pro format)
-- `test_track1.mp3`, `test_track2.mp3` (for switching)
+**Test Files Required (5-A):**
+- None — format gating tests use `FakePlaybackService`
+
+**Test Files Required (5-B):**
+- `test_tagged.mp3` — valid MP3, ID3 tags with title ≠ filename
+- `test_playback.mp3` — valid MP3, ≥ 3 seconds
+- `test_track2.mp3` — second valid MP3 for track-switching
+- `test_corrupt.mp3` — zero-byte or invalid header
+- `test_format.flac` — any content, `.flac` extension only
 
 **Tests to Write:**
 ```swift
-func testCompletePlaybackFlow()
-func testMetadataEnrichmentAndPlay()
-func testErrorHandlingCorruptFile()
-func testErrorHandlingUnsupportedFormat()
-func testProFormatGating()
-func testTrackSwitching()
-func testPlaylistPlaythrough()
-func testMultipleLoadCycles()
+// AppStateFormatGatingTests.swift (5-A, FakePlaybackService)
+func testFormatGating_FLAC_FreeTier_SetsUnsupportedFormat()
+func testFormatGating_FLAC_FreeTier_NoServiceCalls()
+func testFormatGating_DSF_FreeTier_SetsUnsupportedFormat()
+func testFormatGating_FLAC_ProTier_Proceeds()
+func testFormatGating_MP3_FreeTier_Proceeds()
+
+// IntegrationTests.swift (5-B, HarmoniaCoreProvider)
+func testIntegration_CompletePlaybackFlow()
+func testIntegration_MetadataEnrichment()
+func testIntegration_CorruptFile_SetsError()
+func testIntegration_UnsupportedFormat_Free()
+func testIntegration_TrackSwitching()
+func testIntegration_StopResetsState()
 ```
 
 **Verification Criteria:**
-- ✅ All integration tests pass
-- ✅ Complete user workflows function correctly
-- ✅ Error handling robust
-- ✅ Pro gating works (Free can't play FLAC)
-- ✅ No memory leaks
+- ✅ All 5-A format gating tests pass (no real audio)
+- ✅ All 5-B integration tests pass (real HarmoniaCore)
+- ✅ Pro gating works (Free tier rejects FLAC/DSF/DFF before service call)
+- ✅ Metadata enrichment reads real ID3 tags from bundle resource
 - ✅ No crashes under normal and error conditions
 
 **Manual Verification:**
-- Complete user scenario testing
-- Load multiple files
-- Play through entire playlist
-- Test all error conditions
-- Verify Pro restrictions
+- Load valid MP3 and confirm `playbackState == .playing`
+- Load tagged MP3 and confirm title comes from ID3, not filename
+- Load `.flac` on Free tier and confirm `lastError == .unsupportedFormat`
 
 ---
 
@@ -343,47 +376,34 @@ Examples:
 
 ### 3.2 Required Test Files
 
-| File | Purpose | Metadata | Duration | Format |
-|------|---------|----------|----------|--------|
-| test1.mp3 | Basic load | None | N/A | MP3 |
-| test2.mp3 | Basic load | None | N/A | MP3 |
-| test3.mp3 | Basic load | None | N/A | MP3 |
-| test_with_tags.mp3 | Metadata read | Full | 5s | MP3 |
-| test_with_tags.m4a | AAC metadata | Full | 5s | AAC |
-| test_no_tags.wav | No metadata | None | 5s | WAV |
-| test_partial_tags.mp3 | Partial metadata | Title only | 5s | MP3 |
-| test_playback.mp3 | Playback | None | 10s | MP3 |
-| test_short.mp3 | Quick test | None | 1s | MP3 |
-| test_corrupt.mp3 | Error handling | N/A | N/A | Corrupt |
-| test_flac.flac | Pro gating | None | 5s | FLAC |
-| test_track1.mp3 | Switching | None | 5s | MP3 |
-| test_track2.mp3 | Switching | None | 5s | MP3 |
-| test_complete_flow.mp3 | Integration | Full | 10s | MP3 |
+Slices 1–4 require no audio files. All unit tests use `FakePlaybackService`
+and `FakeTagReaderService`.
 
-**Metadata Template (where applicable):**
-```
-Title: Test Track [N]
-Artist: Test Artist
-Album: Test Album
-Duration: [actual duration]
-```
+Slice 5-B requires the following audio resources added to the test target bundle:
+
+| File | Slice | Purpose | Metadata | Duration |
+|------|-------|---------|----------|----------|
+| test_tagged.mp3 | 5-B | Metadata enrichment | Full (title ≠ filename) | ≥ 3s |
+| test_playback.mp3 | 5-B | Complete flow, stop test | Optional | ≥ 3s |
+| test_track2.mp3 | 5-B | Track switching | Optional | ≥ 3s |
+| test_corrupt.mp3 | 5-B | Error handling | N/A | N/A (zero-byte) |
+| test_format.flac | 5-B | Format gating verification | N/A | N/A (.flac ext) |
 
 ### 3.3 Test File Location
 
 ```
-Tests/
-├── Resources/
-│   ├── Audio/
-│   │   ├── test1.mp3
-│   │   ├── test2.mp3
-│   │   ├── test_with_tags.mp3
-│   │   └── ...
-│   └── Info.plist  (for Bundle.module access)
-└── HarmoniaPlayerTests/
-    ├── Slice1/
-    ├── Slice2/
-    └── ...
+HarmoniaPlayerTests/
+└── Resources/
+    └── Audio/                  # Slice 5-B only
+        ├── test_tagged.mp3
+        ├── test_playback.mp3
+        ├── test_track2.mp3
+        ├── test_corrupt.mp3
+        └── test_format.flac
 ```
+
+All audio resources must be added to the test target under
+Build Phases → Copy Bundle Resources.
 
 ---
 
@@ -425,28 +445,48 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayer/
 │       │   ├── Shared/
 │       │   │   ├── Models/
-│       │   │   │   ├── Track.swift
-│       │   │   │   ├── Playlist.swift
-│       │   │   │   ├── PlaybackState.swift
+│       │   │   │   ├── AppState.swift
+│       │   │   │   ├── CoreFeatureFlags.swift
 │       │   │   │   ├── PlaybackError.swift
+│       │   │   │   ├── PlaybackState.swift
+│       │   │   │   ├── Playlist.swift
+│       │   │   │   ├── Track.swift
 │       │   │   │   └── ViewPreferences.swift
-│       │   │   ├── Services/
-│       │   │   │   ├── CoreFactory.swift
-│       │   │   │   ├── IAPManager.swift
-│       │   │   │   └── MockIAPManager.swift
-│       │   │   └── AppState.swift
+│       │   │   └── Services/
+│       │   │       ├── CoreFactory.swift
+│       │   │       ├── CoreServiceProviding.swift
+│       │   │       ├── HarmoniaCoreProvider.swift
+│       │   │       ├── IAPManager.swift
+│       │   │       ├── PlaybackService.swift
+│       │   │       └── TagReaderService.swift
 │       │   └── macOS/
 │       │       └── Free/
 │       │           └── HarmoniaPlayerApp.swift
-│       └── Tests/
-│           ├── Resources/
-│           │   └── Audio/
-│           └── HarmoniaPlayerTests/
-│               ├── Slice1/
-│               ├── Slice2/
-│               ├── Slice3/
-│               ├── Slice4/
-│               └── Slice5/
+│       └── HarmoniaPlayerTests/
+│           ├── FakeInfrastructure/
+│           │   ├── FakeCoreProvider.swift
+│           │   ├── FakeTagReaderService.swift
+│           │   └── MockIAPManager.swift
+│           ├── SharedTests/
+│           │   ├── AppStateErrorHandlingTests.swift
+│           │   ├── AppStateMetadataTests.swift
+│           │   ├── AppStatePlaybackControlTests.swift
+│           │   ├── AppStatePlaybackStateTests.swift
+│           │   ├── AppStatePlaybackTrackTests.swift
+│           │   ├── AppStatePlayerlistTests.swift
+│           │   ├── AppStateTests.swift
+│           │   ├── AppStateTrackSelectionTests.swift
+│           │   ├── CoreFactoryTests.swift
+│           │   ├── CoreFeatureFlagsTests.swift
+│           │   ├── FakePlaybackServiceTests.swift
+│           │   ├── FakeTagReaderServiceTests.swift
+│           │   ├── IAPManagerTests.swift
+│           │   ├── PlaybackErrorTests.swift
+│           │   ├── PlaybackStateTests.swift
+│           │   ├── PlaylistTests.swift
+│           │   ├── TrackTests.swift
+│           │   └── ViewPreferencesTests.swift
+│           └── HarmoniaPlayerTests.swift
 └── docs/
     ├── DEVELOPMENT_PLAN.md  (this file)
     ├── SLICE_1_GUIDE.md
@@ -566,7 +606,7 @@ Follow HarmoniaPlayer style:
 
 **Example:**
 ```
-feat(slice-1): implement CoreFactory and AppState initialization
+feat(slice 1): implement CoreFactory and AppState initialization
 - Add CoreFactory with makePlaybackService and makeTagReader
 - Add AppState with basic initialization
 - Add MockIAPManager for testing
@@ -675,19 +715,17 @@ open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 ⌘Y (then ⌘R)
 ```
 
-### Test Audio Generation
+### Test Audio Generation (Slice 5-B)
 
 ```bash
 # Generate silent test file (requires ffmpeg)
-ffmpeg -f lavfi -i anullsrc=r=44100:cl=stereo -t 5 -acodec libmp3lame test_silent.mp3
+ffmpeg -f lavfi -i anullsrc=r=44100:cl=stereo -t 5 -acodec libmp3lame test_playback.mp3
 
-# Add metadata
-ffmpeg -i input.mp3 -metadata title="Test Track" -metadata artist="Test Artist" output.mp3
+# Add metadata tags
+ffmpeg -i test_playback.mp3 -metadata title="Test Track" \
+  -metadata artist="Test Artist" -metadata album="Test Album" \
+  test_tagged.mp3
+
+# Generate corrupt file
+echo -n "" > test_corrupt.mp3
 ```
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** 2026-02-11  
-**Author:** Claude (with user guidance)  
-**Status:** Active Development Plan

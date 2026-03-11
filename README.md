@@ -1,7 +1,7 @@
 # HarmoniaPlayer
 
-[![Swift](https://img.shields.io/badge/Swift-5.9+-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/Platform-macOS%2013+%20%7C%20iOS%2016+-lightgrey.svg)](https://developer.apple.com)
+[![Swift](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2015+-lightgrey.svg)](https://developer.apple.com)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
 [![Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
 
@@ -80,9 +80,9 @@ open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 ```
 
 **Requirements:**
-- macOS 13.0+
-- Xcode 15.0+
-- Swift 5.9+
+- macOS 15.0+ (Sequoia)
+- Xcode 26 beta
+- Swift 6
 
 HarmoniaCore-Swift dependency is automatically fetched via SPM.
 
@@ -125,6 +125,7 @@ HARMONIAPLAYER/
 │       │   │   ├── Models/        # Data models
 │       │   │   ├── Views/         # SwiftUI views
 │       │   │   └── Services/      # HarmoniaCore integration
+│       │   │       └── HarmoniaCoreProvider.swift
 │       │   ├── macOS/             # macOS-specific code
 │       │   │   └── Free/          # macOS Free version
 │       │   ├── iOS/               # iOS-specific code (v0.3+)
