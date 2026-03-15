@@ -234,10 +234,13 @@ bundle resources. No fake service implementations used in this file.
 | `testIntegration_UnsupportedFormat_Free` | `.flac`, Free tier | `load` → `play(trackID:)` | `lastError == .unsupportedFormat` |
 | `testIntegration_TrackSwitching` | 2 valid MP3s | `play(track1)` → `play(track2)` | `currentTrack == track2`, `.playing` |
 | `testIntegration_StopResetsState` | Playing | `stop()` | `.stopped`, `currentTime == 0` |
+| `testIntegration_PauseSetsPausedState` | Playing | `pause()` | `playbackState == .paused` |
+| `testIntegration_SeekUpdatesCurrentTime` | Playing | `seek(to: 1.0)` | `currentTime == 1.0 ± 0.5` |
 
 ### Done criteria
 - `IntegrationTests.swift` compiles using `HarmoniaCoreProvider` (no fakes)
-- All 6 integration tests pass with real audio resources in bundle
+- All 8 integration tests pass with real audio resources in bundle
+- All 7 `HarmoniaPlaybackServiceAdapter` methods exercised by integration tests
 - Audio resources added to test target under Build Phases → Copy Bundle Resources
 - All Slice 1–5-A tests still green
 
@@ -245,9 +248,10 @@ bundle resources. No fake service implementations used in this file.
 ```
 feat(slice 5-B): add integration tests with real HarmoniaCore services
 
-- Add IntegrationTests.swift: 6 cases using HarmoniaCoreProvider
+- Add IntegrationTests.swift: 8 cases using HarmoniaCoreProvider
   (complete flow, metadata enrichment, corrupt file, format gating,
-  track switching, stop reset)
+  track switching, stop reset, pause, seek)
+- Cover all 7 HarmoniaPlaybackServiceAdapter methods via integration tests
 - Add test audio resources: test_tagged.mp3, test_playback.mp3,
   test_track2.mp3, test_corrupt.mp3, test_format.flac
 - Use XCTSkip for missing bundle resources
@@ -262,7 +266,8 @@ feat(slice 5-B): add integration tests with real HarmoniaCore services
 - ✅ `HarmoniaCoreProvider` uses real adapters; no placeholder classes remain
 - ✅ `AppState.play(trackID:)` rejects FLAC/DSF/DFF on Free tier before service call
 - ✅ All 5-A format gating tests green (9 cases)
-- ✅ All 5-B integration tests green (6 cases)
+- ✅ All 5-B integration tests green (8 cases)
+- ✅ All 7 `HarmoniaPlaybackServiceAdapter` methods exercised by integration tests
 - ✅ All Slice 1–4 tests still green
 - ✅ No module boundary violations (`import HarmoniaCore` only in Integration Layer)
 - ✅ `// TODO: import HarmoniaCore` removed from `HarmoniaCoreProvider`
