@@ -1,0 +1,222 @@
+//
+//  IntegrationTests.swift
+//  HarmoniaPlayerTests / SharedTests
+//
+//  Created on 2026-03-15.
+//
+//  PURPOSE
+//  -------
+//  End-to-end integration tests using real HarmoniaCoreProvider and real
+//  audio bundle resources.
+//
+//  COVERAGE
+//  --------
+//  8 test cases:
+//  - testIntegration_CompletePlaybackFlow   : valid MP3 → .playing
+//  - testIntegration_MetadataEnrichment     : tagged MP3 → title enriched
+//  - testIntegration_CorruptFile_SetsError  : zero-byte file → lastError != nil
+//  - testIntegration_UnsupportedFormat_Free : .flac, Free → lastError == .unsupportedFormat
+//  - testIntegration_TrackSwitching         : 2 MP3s → currentTrack == track2, .playing
+//  - testIntegration_StopResetsState        : playing → stop() → .stopped, currentTime == 0
+//  - testIntegration_PauseSetsPausedState   : playing → pause() → .paused
+//  - testIntegration_SeekUpdatesCurrentTime : playing → seek(to:) → currentTime updated
+//
+//  DESIGN NOTES
+//  ------------
+//  - Uses HarmoniaCoreProvider directly — no FakeCoreProvider or FakePlaybackService.
+//  - Uses MockIAPManager for IAP state (external to HarmoniaCore).
+//  - Does NOT import HarmoniaCore (module boundary: import only in Integration Layer).
+//  - Uses XCTSkip (not XCTFail) when a bundle resource is absent so CI passes
+//    on machines that do not yet have the audio files.
+//
+//  SWIFT 6 / XCODE 26 NOTES
+//  ------------------------
+//  - @MainActor: Required because AppState is a @MainActor-isolated class.
+//    XCTest runs @MainActor test classes on the main actor automatically,
+//    so individual test methods do NOT need `await MainActor.run {}` wrappers.
+//  - nonisolated deinit {}: Workaround for Xcode 26 beta TaskLocal deallocation
+//    crash. Required on every @MainActor XCTestCase subclass in this project.
+//  - tearDown order: await sut.stop() before sut = nil to release real audio
+//    resources (AVAudioEngine) cleanly before deallocation.
+//
+
+import XCTest
+@testable import HarmoniaPlayer
+
+/// End-to-end integration tests using a real `HarmoniaCoreProvider` and real
+/// audio bundle resources.
+///
+/// Exercises the full stack: `AppState` → `HarmoniaCoreProvider` →
+/// `HarmoniaPlaybackServiceAdapter` / `HarmoniaTagReaderAdapter` →
+/// HarmoniaCore-Swift adapters (AVFoundation).
+///
+/// Missing bundle resources cause the individual test to be skipped via
+/// `XCTSkip` rather than failing, so the suite remains green before audio
+/// files are added to the bundle.
+@MainActor
+final class IntegrationTests: XCTestCase {
+
+    // MARK: - Test Fixtures
+
+    var sut: AppState!
+
+    // Workaround: Xcode 26 beta TaskLocal deallocation crash on @MainActor deinit.
+    nonisolated deinit {}
+
+    // MARK: - Setup / Teardown
+
+    override func setUp() async throws {
+        let provider = HarmoniaCoreProvider()
+        let iap = MockIAPManager()
+        sut = AppState(iapManager: iap, provider: provider)
+    }
+
+    override func tearDown() async throws {
+        await sut.stop()
+        sut = nil
+    }
+
+    // MARK: - Resource Helper
+
+    /// Returns the URL for a named resource in the test bundle.
+    ///
+    /// Throws `XCTSkip` when the resource is absent so the calling test is
+    /// marked as skipped rather than failed.
+    ///
+    /// - Parameters:
+    ///   - name: Resource file name without extension.
+    ///   - ext:  File extension (e.g. `"mp3"`, `"flac"`).
+    /// - Returns: URL to the bundle resource.
+    /// - Throws: `XCTSkip` when the resource is not found in the test bundle.
+    func bundleURL(forResource name: String, withExtension ext: String) throws -> URL {
+        guard let url = Bundle(for: type(of: self))
+            .url(forResource: name, withExtension: ext) else {
+            throw XCTSkip("Bundle resource '\(name).\(ext)' not found")
+        }
+        return url
+    }
+
+    // MARK: - Tests
+
+    /// Verifies that playing a valid real MP3 via the real HarmoniaCore stack
+    /// transitions `playbackState` to `.playing`.
+    func testIntegration_CompletePlaybackFlow() async throws {
+        let url = try bundleURL(forResource: "test_playback", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(sut.playbackState, .playing)
+    }
+
+    /// Verifies that `load(urls:)` with a tagged MP3 enriches the track's title
+    /// field so that it differs from the raw URL filename.
+    ///
+    /// `test_tagged.mp3` carries the ID3 title "Tagged Track", which is distinct
+    /// from `url.lastPathComponent` ("test_tagged.mp3").
+    func testIntegration_MetadataEnrichment() async throws {
+        let url = try bundleURL(forResource: "test_tagged", withExtension: "mp3")
+
+        await sut.load(urls: [url])
+
+        let track = sut.playlist.tracks[0]
+        XCTAssertNotEqual(track.title, url.lastPathComponent)
+    }
+
+    /// Verifies that attempting to play a zero-byte corrupt file causes
+    /// `lastError` to be set (non-nil).
+    ///
+    /// The corrupt file cannot be decoded by the real HarmoniaCore stack,
+    /// so either tag reading or playback loading raises an error that
+    /// `AppState` maps into `lastError`.
+    func testIntegration_CorruptFile_SetsError() async throws {
+        let url = try bundleURL(forResource: "test_corrupt", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertNotNil(sut.lastError)
+    }
+
+    /// Verifies that playing a `.flac` file on the Free tier is rejected by the
+    /// format gate in `AppState.play(trackID:)` and sets `lastError`
+    /// to `.unsupportedFormat`.
+    ///
+    /// This test exercises `AppState`'s format gating logic with a real provider
+    /// and a real file. The format gate fires before any HarmoniaCore call.
+    func testIntegration_UnsupportedFormat_Free() async throws {
+        let url = try bundleURL(forResource: "test_format", withExtension: "flac")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertEqual(sut.lastError, .unsupportedFormat)
+    }
+
+    /// Verifies that switching from one track to another sets `currentTrack`
+    /// to the new track and `playbackState` to `.playing`.
+    func testIntegration_TrackSwitching() async throws {
+        let url1 = try bundleURL(forResource: "test_playback", withExtension: "mp3")
+        let url2 = try bundleURL(forResource: "test_track2", withExtension: "mp3")
+        await sut.load(urls: [url1, url2])
+        let track1 = sut.playlist.tracks[0]
+        let track2 = sut.playlist.tracks[1]
+
+        await sut.play(trackID: track1.id)
+        await sut.play(trackID: track2.id)
+
+        XCTAssertEqual(sut.currentTrack, track2)
+        XCTAssertEqual(sut.playbackState, .playing)
+    }
+
+    /// Verifies that `stop()` transitions `playbackState` to `.stopped`
+    /// and resets `currentTime` to `0`.
+    func testIntegration_StopResetsState() async throws {
+        let url = try bundleURL(forResource: "test_playback", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+        await sut.play(trackID: track.id)
+
+        await sut.stop()
+
+        XCTAssertEqual(sut.playbackState, .stopped)
+        XCTAssertEqual(sut.currentTime, 0)
+    }
+
+    /// Verifies that `pause()` transitions `playbackState` to `.paused`
+    /// through the real HarmoniaPlaybackServiceAdapter → HarmoniaCore stack.
+    ///
+    /// This test confirms that our adapter wiring for `pause()` is correct —
+    /// not just that `AppState` calls the method, but that the real
+    /// HarmoniaCore service receives and handles it.
+    func testIntegration_PauseSetsPausedState() async throws {
+        let url = try bundleURL(forResource: "test_playback", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+        await sut.play(trackID: track.id)
+
+        await sut.pause()
+
+        XCTAssertEqual(sut.playbackState, .paused)
+    }
+
+    /// Verifies that `seek(to:)` updates `currentTime` through the real
+    /// HarmoniaPlaybackServiceAdapter → HarmoniaCore stack.
+    ///
+    /// This test confirms that our adapter wiring for `seek(to:)` is correct —
+    /// not just that `AppState` calls the method, but that `currentTime`
+    /// reflects the seek position after a real HarmoniaCore seek call.
+    func testIntegration_SeekUpdatesCurrentTime() async throws {
+        let url = try bundleURL(forResource: "test_playback", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+        await sut.play(trackID: track.id)
+
+        await sut.seek(to: 1.0)
+
+        XCTAssertEqual(sut.currentTime, 1.0, accuracy: 0.5)
+    }
+}
