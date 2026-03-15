@@ -1,6 +1,6 @@
 //
 //  AppState.swift
-//  HarmoniaPlayer
+//  HarmoniaPlayer / Shared / Models
 //
 //  Created on 2026-02-15.
 //
@@ -30,7 +30,8 @@ final class AppState: ObservableObject {
     /// IAP manager (determines Free/Pro)
     private let iapManager: IAPManager
 
-    /// Feature flags (derived from IAP)
+    /// Feature flags (derived from IAP).
+    /// Exposes tier-specific capabilities used by format gating and UI.
     let featureFlags: CoreFeatureFlags
 
     // MARK: - Services
@@ -74,7 +75,7 @@ final class AppState: ObservableObject {
     /// ```
     @Published var viewPreferences: ViewPreferences = .defaultPreferences
 
-    // MARK: - Playback State (Slice 4-A)
+    // MARK: - Playback State
 
     /// Current playback state.
     ///
@@ -150,8 +151,9 @@ final class AppState: ObservableObject {
         // no explicit assignment needed in init.
     }
 
-    // WORKAROUND: Xcode 26 beta - swift::TaskLocal::StopLookupScope bug
-    // Remove when Xcode 26 stable is released
+    // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
+    // Required on all @MainActor classes that are deallocated in test contexts.
+    // Remove when Xcode 26 stable is released.
     nonisolated deinit {}
 
     // MARK: - Playlist Operations
@@ -262,19 +264,37 @@ final class AppState: ObservableObject {
 
     /// Loads and plays the track matching `trackID`.
     ///
-    /// Sets `currentTrack`, calls `playbackService.load(url:)`, updates `duration`,
-    /// then calls `playbackService.play()`. Transitions `playbackState` through
-    /// `.loading` → `.playing` on success, or `.error` on failure.
-    ///
-    /// No service calls are made if `trackID` is not found in the playlist.
+    /// **Execution order:**
+    /// 1. Resolve `trackID` in the playlist. Set `currentTrack`, or set it to `nil`
+    ///    and return if not found.
+    /// 2. **Format gate:** If the track's extension is `flac`, `dsf`, or
+    ///    `dff` AND `featureFlags.supportsFLAC` is `false` (Free tier), set
+    ///    `lastError = .unsupportedFormat`, `playbackState = .error(.unsupportedFormat)`,
+    ///    and return. `playbackService.load` is never reached for gated formats.
+    /// 3. Set `playbackState = .loading`.
+    /// 4. Call `playbackService.load(url:)` and update `duration`.
+    /// 5. Call `playbackService.play()` and set `playbackState = .playing`.
+    /// 6. On any error: map to `PlaybackError`, set `lastError` and `playbackState = .error`.
     ///
     /// - Parameter trackID: The `UUID` of the track to load and play.
     func play(trackID: Track.ID) async {
+        // Step 1: Resolve track in playlist. Nil currentTrack and bail if not found.
         guard let track = playlist.tracks.first(where: { $0.id == trackID }) else {
             currentTrack = nil
             return
         }
         currentTrack = track
+
+        // Step 2: Format gate — reject Pro-only formats on the Free tier.
+        // The gate fires BEFORE playbackState is changed and BEFORE any service call.
+        let ext = track.url.pathExtension.lowercased()
+        if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
+            lastError = .unsupportedFormat
+            playbackState = .error(.unsupportedFormat)
+            return  // playbackService.load is never called for gated formats.
+        }
+
+        // Step 3–6: Standard load-and-play flow.
         playbackState = .loading
 
         do {
@@ -291,6 +311,10 @@ final class AppState: ObservableObject {
 
     // MARK: - Private Helpers
 
+    /// Maps any thrown error to a `PlaybackError` for UI consumption.
+    ///
+    /// If the error is already a `PlaybackError`, it is returned as-is.
+    /// Otherwise, the error's localized description is wrapped in `.coreError`.
     private func mapToPlaybackError(_ error: Error) -> PlaybackError {
         if let playbackError = error as? PlaybackError { return playbackError }
         return .coreError(error.localizedDescription)
