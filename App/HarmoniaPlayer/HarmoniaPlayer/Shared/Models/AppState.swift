@@ -102,6 +102,14 @@ final class AppState: ObservableObject {
     /// Views observe this to present error banners or alerts.
     @Published private(set) var lastError: PlaybackError?
 
+    // MARK: - Repeat Mode State
+
+    /// Current repeat mode.
+    ///
+    /// Defaults to `.off` on launch. Updated by `cycleRepeatMode()`.
+    /// Controls behaviour of `playNextTrack()` and `trackDidFinishPlaying()`.
+    @Published private(set) var repeatMode: RepeatMode = .off
+
     // MARK: - Initialization
 
     /// Creates AppState and wires all dependencies.
@@ -306,6 +314,102 @@ final class AppState: ObservableObject {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
             playbackState = .error(mapped)
+        }
+    }
+
+
+    // MARK: - Repeat Mode Control
+
+    /// Cycles repeat mode: off → all → one → off.
+    ///
+    /// Synchronous. Safe to call directly from SwiftUI button actions.
+    func cycleRepeatMode() {
+        switch repeatMode {
+        case .off: repeatMode = .all
+        case .all: repeatMode = .one
+        case .one: repeatMode = .off
+        }
+    }
+
+    // MARK: - Navigation
+
+    /// Plays the next track in the playlist.
+    ///
+    /// Behaviour depends on `repeatMode`:
+    /// - `.off`: Advance to next; stop if already at last track.
+    /// - `.all`: Advance to next; loop to first if at last track.
+    /// - `.one`: Replay current track.
+    ///
+    /// No-op if playlist is empty.
+    func playNextTrack() async {
+        guard !playlist.tracks.isEmpty else { return }
+
+        if repeatMode == .one, let current = currentTrack {
+            await play(trackID: current.id)
+            return
+        }
+
+        guard let current = currentTrack,
+              let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
+        else {
+            await play(trackID: playlist.tracks[0].id)
+            return
+        }
+
+        let nextIndex = currentIndex + 1
+        if nextIndex < playlist.tracks.count {
+            await play(trackID: playlist.tracks[nextIndex].id)
+        } else if repeatMode == .all {
+            await play(trackID: playlist.tracks[0].id)
+        } else {
+            await stop()
+        }
+    }
+
+    /// Plays the previous track in the playlist.
+    ///
+    /// If `currentTrack` is the first track, seeks to the beginning
+    /// and replays it instead of wrapping around.
+    ///
+    /// No-op if playlist is empty.
+    func playPreviousTrack() async {
+        guard !playlist.tracks.isEmpty else { return }
+
+        guard let current = currentTrack,
+              let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
+        else {
+            await play(trackID: playlist.tracks[0].id)
+            return
+        }
+
+        if currentIndex > 0 {
+            await play(trackID: playlist.tracks[currentIndex - 1].id)
+        } else {
+            do {
+                try await playbackService.seek(to: 0)
+                currentTime = 0
+            } catch {
+                lastError = mapToPlaybackError(error)
+            }
+            await play(trackID: current.id)
+        }
+    }
+
+    /// Called by the View layer when natural playback completion is detected.
+    ///
+    /// Dispatches based on `repeatMode`:
+    /// - `.off`: `playNextTrack()` (stop if at last).
+    /// - `.all`: `playNextTrack()` (loop if at last).
+    /// - `.one`: `play(trackID:)` for `currentTrack`.
+    ///
+    /// No-op if `currentTrack` is `nil`.
+    func trackDidFinishPlaying() async {
+        guard let current = currentTrack else { return }
+        switch repeatMode {
+        case .off, .all:
+            await playNextTrack()
+        case .one:
+            await play(trackID: current.id)
         }
     }
 
