@@ -23,7 +23,7 @@ replacing the URL-derived placeholders created in Slice 2.
 - Format validation / Pro gating (Slice 4)
 - Album artwork loading (future)
 - Tag writing / metadata editing (future)
-- UI implementation (Slice 5)
+- UI implementation (future slice)
 
 ### Dependencies
 - Requires: Slice 1 complete — `TagReaderService` already injected in `AppState`
@@ -287,4 +287,4 @@ Slice 3-C tests: All passing
 - **Slice 1 (Foundation)** — Prerequisite; `TagReaderService` injected in `AppState`
 - **Slice 2 (Playlist Management)** — Prerequisite; `load(urls:)` exists
 - **Slice 4 (Playback)** — Uses enriched `Track` instances; adds format validation and playback
-- **Slice 5 (Integration)** — Adds UI; calls `await appState.load(urls:)` in drag-and-drop handlers
+- **Slice 5 (Integration)** — Wires real HarmoniaCore-Swift adapters; `HarmoniaTagReaderAdapter` replaces `FakeTagReaderService` end-to-end

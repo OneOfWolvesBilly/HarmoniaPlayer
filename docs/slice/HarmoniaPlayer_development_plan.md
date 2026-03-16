@@ -1,6 +1,6 @@
 # HarmoniaPlayer Development Plan
 
-> **Last Updated:** 2026-02-11
+> **Last Updated:** 2026-03-16
 > 
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
@@ -28,20 +28,22 @@
 
 **Test Pyramid for HarmoniaPlayer:**
 ```
-          / \
-         /   \
-        /     \
-       / E2E   \           Manual verification
-      /---------\
-     /Integration\     Slice 5-B: real HarmoniaCore + real audio files
-    /-------------\
-   /   Unit Tests  \    Slices 1–4: FakePlaybackService + FakeTagReaderService
-  /-----------------\
+               /\
+              /  \
+             /    \
+            /      \
+           /XCUITest\     Slice 6: end-to-end UI flows (XCUITest target)
+          /----------\
+         /Integration \   Slice 5-B: real HarmoniaCore + real audio files
+        /--------------\
+       /   Unit Tests   \ Slices 1–4: FakePlaybackService + FakeTagReaderService
+      /------------------\
 ```
 
 **Key Points:**
 - Slices 1–4: all HarmoniaCore service collaborators are fakes — deterministic, no audio I/O
 - Slice 5-B: `HarmoniaCoreProvider` (real adapters) + bundle audio resources
+- Slice 6: XCUITest target — verifies UI flows via `accessibilityIdentifier`
 - `MockIAPManager` used in all slices (IAPManager is external to HarmoniaCore)
 - Both automated tests AND manual verification at each slice boundary
 
@@ -360,6 +362,78 @@ func testIntegration_StopResetsState()
 
 ---
 
+### Slice 6: UI MVP (SwiftUI Views)
+
+**Scope:**
+- Implement the minimum SwiftUI views that let a user actually play music
+- Wire `AppState` into the app entry point via `@EnvironmentObject`
+- Add `FreeTierIAPManager` (production Free-tier `IAPManager` implementation)
+- All views are thin: display state, forward events to `AppState` only
+- No `import HarmoniaCore` in any View file
+
+**Deliverables:**
+1. `Shared/Views/TrackRowView.swift` — single track row (title, duration, playing indicator)
+2. `Shared/Views/PlaylistView.swift` — track list + add-files button + delete key support
+3. `Shared/Views/PlayerView.swift` — now-playing info + progress slider + transport controls
+4. `Shared/Views/ContentView.swift` — `HSplitView` combining playlist and player panels
+5. `Shared/Services/FreeTierIAPManager.swift` — production `IAPManager` (always Free)
+6. Updated `macOS/Free/HarmoniaPlayerApp.swift` — inject `AppState`, set `ContentView` as root
+7. `HarmoniaPlayerUITests/UITests.swift` — XCUITest target (new target in project)
+
+**New Files (Shared/Views/):**
+```
+HarmoniaPlayer/Shared/Views/
+├── TrackRowView.swift
+├── PlaylistView.swift
+├── PlayerView.swift
+└── ContentView.swift
+```
+
+**Accessibility Identifiers (required for XCUITest):**
+```
+"playlist-list"
+"add-files-button"
+"play-pause-button"
+"stop-button"
+"progress-slider"
+"now-playing-title"
+"playback-status-label"
+```
+
+**Module Boundary Rules:**
+- Views import `SwiftUI` only
+- Views access state via `@EnvironmentObject var appState: AppState`
+- Views never import `HarmoniaCore`, `PlaybackService`, or any service directly
+- `Task { await appState.someMethod() }` is the only way Views trigger actions
+
+**Tests to Write (XCUITest):**
+```swift
+func testPlaylistShowsAddedTracks()
+func testTapTrackStartsPlayback()
+func testPlayPauseButton_TogglesState()
+func testStopButton_ResetsState()
+func testProgressSlider_Exists()
+func testRemoveTrack_RemovesFromList()
+```
+
+**Verification Criteria:**
+- ✅ App launches showing a real UI (not blank/Text placeholder)
+- ✅ User can open audio files via the Add button or drag-and-drop
+- ✅ User can tap a track row to start playback
+- ✅ Play/Pause/Stop buttons reflect and control `playbackState`
+- ✅ Progress slider displays `currentTime` / `duration`
+- ✅ All XCUITest cases pass
+- ✅ No `import HarmoniaCore` in any View file
+- ✅ All Slice 1–5 unit tests still green
+
+**Manual Verification:**
+- Launch app, drag an MP3 into the playlist → track row appears
+- Double-click track → playback starts, button changes to Pause
+- Click Pause → button changes to Play, state shows "Paused"
+- Click Stop → progress resets to 0:00, state shows "Stopped"
+
+---
+
 ## 3. Test Audio File Specifications
 
 ### 3.1 File Naming Convention
@@ -590,7 +664,8 @@ main
   ├── feat/slice-2-playlist
   ├── feat/slice-3-metadata
   ├── feat/slice-4-playback
-  └── feat/slice-5-integration
+  ├── feat/slice-5-integration
+  └── feat/slice-6-ui-mvp
 ```
 
 ### 7.2 Commit Message Format
@@ -633,7 +708,8 @@ Before merging each slice:
 | Slice 3 | 3-4 hours | Medium |
 | Slice 4 | 4-6 hours | High |
 | Slice 5 | 4-6 hours | High |
-| **Total** | **15-22 hours** | - |
+| Slice 6 | 3-5 hours | Medium |
+| **Total** | **18-27 hours** | - |
 
 **Note:** These are estimates for implementation only, not including:
 - Xcode project setup
@@ -673,10 +749,11 @@ Before merging each slice:
 
 **HarmoniaPlayer v0.1 is complete when:**
 
-- ✅ All 5 slices implemented and tested
+- ✅ All 6 slices implemented and tested
 - ✅ Can load audio files and display metadata
 - ✅ Can play, pause, stop, seek audio
 - ✅ Playlist management works correctly
+- ✅ SwiftUI UI is functional — user can operate the app without code
 - ✅ Error handling is robust
 - ✅ Pro feature gating works
 - ✅ No crashes or memory leaks

@@ -3,7 +3,7 @@
 ## Purpose
 
 This document defines **Slice 5: HarmoniaCore Integration + Integration Tests**
-for HarmoniaPlayer, and marks **MVP completion**.
+for HarmoniaPlayer, and marks **service-layer completion**.
 
 Slice 5 wires real HarmoniaCore-Swift services into `HarmoniaCoreProvider`,
 bridges the synchronous HarmoniaCore interface to the async protocols used by
@@ -33,7 +33,7 @@ system end-to-end through integration tests using real audio files.
 ### Dependencies
 - Requires: Slice 4 complete — `AppState` has full async playback control with
   `playbackState`, `currentTime`, `duration`, and transport methods
-- Provides: MVP complete — all layers wired end-to-end with real HarmoniaCore-Swift
+- Provides: service layer complete — all audio services wired end-to-end with real HarmoniaCore-Swift
 
 ---
 
@@ -259,7 +259,7 @@ feat(slice 5-B): add integration tests with real HarmoniaCore services
 
 ---
 
-## Slice 5 Completion Gate (= MVP Gate)
+## Slice 5 Completion Gate
 
 - ✅ `HarmoniaPlaybackServiceAdapter` bridges sync HarmoniaCore to async protocol
 - ✅ `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track` with fallbacks

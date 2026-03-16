@@ -469,4 +469,4 @@ docs(player): add Slice 2 micro-slices specification
 - **Slice 1 (Foundation)** - Required prerequisite
 - **Slice 3 (Metadata)** - Will enrich Track with actual metadata
 - **Slice 4 (Playback)** - Will connect track selection to actual playback
-- **Slice 5 (Integration)** - Will add UI and end-to-end workflows
+- **Slice 5 (Integration)** — Wires real HarmoniaCore-Swift adapters; adds format gating for Pro-only formats; validates end-to-end with integration tests
