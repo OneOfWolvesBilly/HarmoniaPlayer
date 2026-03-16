@@ -94,7 +94,8 @@ When complete:
 1. **Launch** HarmoniaPlayer
 2. **Add files** by clicking `+` or drag-and-drop
 3. **Double-click** a track to play
-4. **Use keyboard shortcuts**: `Space` to play/pause, `⌘→` for next track
+4. **Use keyboard shortcuts**: `Space` to play/pause, `⌘→` for next track, `⌘←` for previous track
+5. **Repeat modes**: cycle through Off → Repeat All → Repeat One
 
 See [User Guide](docs/user_guide.md) for planned features.
 

@@ -185,6 +185,7 @@ Your layout preference is automatically saved and restored on next launch.
 | ⏹️ Stop | Stop and reset | `⌘.` |
 | ⏮️ Previous | Go to previous track | `⌘←` |
 | ⏭️ Next | Go to next track | `⌘→` |
+| 🔁 Repeat | Cycle repeat mode (Off → All → One) | `⌘R` |
 
 ### Progress Bar
 
@@ -205,8 +206,14 @@ Your layout preference is automatically saved and restored on next launch.
 ### Playback Behavior
 
 **Auto-Advance:**
-- When a track finishes, automatically plays next track
-- If on last track, playback stops
+- When a track finishes, behavior depends on repeat mode (see below)
+
+**Repeat Modes:**
+- **Off** (default): When a track finishes, plays next track. If on last track, playback stops
+- **Repeat All** 🔁: When last track finishes, loops back to the first track
+- **Repeat One** 🔂: Current track repeats indefinitely
+
+Cycle through modes by clicking the Repeat button or pressing `⌘R`.
 
 **Resume Playback:**
 - If you pause, playback resumes from same position
@@ -226,6 +233,7 @@ Your layout preference is automatically saved and restored on next launch.
 | `⌘←` | Previous Track |
 | `→` | Seek Forward 5 seconds |
 | `←` | Seek Backward 5 seconds |
+| `⌘R` | Cycle Repeat Mode (Off → All → One) |
 | `⌘O` | Add Files to Playlist |
 
 ### Playlist Shortcuts
@@ -394,8 +402,11 @@ Your layout preference is automatically saved and restored on next launch.
 **Q: Can I see album art?**  
 **A:** Not in v0.1. Album art display is planned for v0.2.
 
+**Q: Does it support repeat / loop playback?**  
+**A:** Yes. Use the Repeat button or `⌘R` to cycle through Off, Repeat All, and Repeat One modes.
+
 **Q: Does it support gapless playback?**  
-**A:** Not yet. Gapless playback is planned for v0.4.
+**A:** Not yet. Gapless playback is planned for a future version.
 
 **Q: Can I create multiple playlists?**  
 **A:** Not in v0.1. Multiple playlists are planned for v0.3.
