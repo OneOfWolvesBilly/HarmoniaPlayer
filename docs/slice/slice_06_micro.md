@@ -2,8 +2,11 @@
 
 ## Purpose
 
-This document defines **Slice 6: Navigation Logic + SwiftUI UI MVP**
-for HarmoniaPlayer, and marks **v0.1 completion**.
+This document defines **Slice 6: Navigation Logic + SwiftUI UI**
+for HarmoniaPlayer.
+
+v0.1 is complete when Slice 6-C (keyboard shortcuts) is done —
+when all local playback features matching macOS Music.app are in place.
 
 Slice 6 adds playlist navigation (next/previous track, repeat modes,
 auto-advance) to `AppState` in sub-slice 6-A, then wires all published
@@ -16,6 +19,7 @@ After Slice 6 a user can launch the app and play music without writing code.
 
 ### Goals
 - Define `RepeatMode` enum (off / all / one) and add it to `AppState`
+- Add `isShuffled` toggle and shuffle-aware navigation to `AppState`
 - Implement `playNextTrack()`, `playPreviousTrack()`, `cycleRepeatMode()`,
   and `trackDidFinishPlaying()` in `AppState`
 - Add `FreeTierIAPManager` as the production `IAPManager` for the Free build
@@ -24,9 +28,8 @@ After Slice 6 a user can launch the app and play music without writing code.
 - Add XCUITest target covering core user flows
 
 ### Non-goals
-- Shuffle mode (future)
 - Gapless playback (future)
-- Real-time `currentTime` polling / progress timer (future)
+- Sub-100ms waveform-level audio metering (future)
 - Album artwork display (future)
 - Multiple playlists / playlist persistence (future)
 - macOS Pro IAP / StoreKit integration (future)
@@ -34,7 +37,8 @@ After Slice 6 a user can launch the app and play music without writing code.
 
 ### Dependencies
 - Requires: Slice 5 complete — all audio services wired end-to-end
-- Provides: v0.1 complete — user can launch app and play music
+- Provides: functional UI — user can launch app, play music, see progress, and auto-advance tracks
+- v0.1 complete after Slice 6-C (keyboard shortcuts)
 
 ---
 
@@ -45,13 +49,28 @@ Extend `AppState` with playlist navigation and repeat behaviour.
 No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 
 ### Scope
+
+**Part 1 — RepeatMode + Navigation + Polling (✅ committed)**
 - Add `RepeatMode` enum: `off` (default) / `all` / `one`; `Equatable`, `Sendable`
 - Add `@Published private(set) var repeatMode: RepeatMode = .off` to `AppState`
 - Add `func cycleRepeatMode()` — synchronous; cycles `off → all → one → off`
 - Add `func playNextTrack() async` — advances playlist; respects `repeatMode`
 - Add `func playPreviousTrack() async` — goes back; restarts if at first track
-- Add `func trackDidFinishPlaying() async` — called by View layer on natural
-  playback completion; dispatches based on `repeatMode`
+- Add `func trackDidFinishPlaying() async` — dispatches based on `repeatMode`
+- Add `private var pollingTask: Task<Void, Never>?` to `AppState`
+- Add `private func startPolling()` — 0.25s loop; updates `currentTime`;
+  detects natural playback completion (service `.stopped` while
+  `playbackState == .playing`); calls `trackDidFinishPlaying()`
+- Add `private func stopPolling()` — cancels polling task
+- Call `startPolling()` after `playbackState = .playing` in `play(trackID:)`
+- Call `stopPolling()` at start of `stop()`
+
+**Part 2 — ShuffleMode (❌ not yet committed)**
+- Add `ShuffleMode.swift`: `typealias ShuffleMode = Bool` with `.off` / `.on` extensions
+- Add `@Published private(set) var isShuffled: ShuffleMode = .off` to `AppState`
+- Add `func toggleShuffle()` — synchronous; toggles `isShuffled`
+- Update `playNextTrack()`: when `isShuffled == true`, pick random track
+  (excluding `currentTrack`)
 
 ### Navigation behaviour
 
@@ -65,6 +84,7 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 | at last track, `repeatMode == .off` | `stop()` |
 | at last track, `repeatMode == .all` | `play(trackID:)` first track |
 | `repeatMode == .one` | `play(trackID:)` `currentTrack` |
+| `isShuffled == true` (any repeatMode except `.one`) | `play(trackID:)` random track (not `currentTrack`) |
 
 **`playPreviousTrack()`**
 
@@ -85,10 +105,17 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 | `currentTrack` is `nil` | no-op |
 
 ### Files
+
+**Part 1 (✅ committed in `feat(slice 6-A)`):**
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/RepeatMode.swift` (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add repeatMode, navigation methods, polling timer)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/RepeatModeTests.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateNavigationTests.swift` (new)
+
+**Part 2 (❌ pending commit):**
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/ShuffleMode.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add isShuffled, toggleShuffle, shuffle-aware playNextTrack)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateShuffleTests.swift` (new)
 
 ### Public API shape — RepeatMode
 
@@ -105,9 +132,11 @@ enum RepeatMode: Equatable, Sendable {
 ```swift
 // Published state
 @Published private(set) var repeatMode: RepeatMode = .off
+@Published private(set) var isShuffled: Bool = false
 
 // New methods
 func cycleRepeatMode()
+func toggleShuffle()
 func playNextTrack() async
 func playPreviousTrack() async
 func trackDidFinishPlaying() async
@@ -137,11 +166,22 @@ func trackDidFinishPlaying() async
 | `testTrackDidFinish_RepeatOne_ReplaysCurrentTrack` | track1 playing, `.one` | `trackDidFinishPlaying()` | `currentTrack == track1`, `loadCallCount == 2` |
 | `testTrackDidFinish_NoCurrentTrack_IsNoOp` | No `currentTrack` | `trackDidFinishPlaying()` | `playCallCount == 0` |
 
+### TDD matrix — Slice 6-A (Shuffle additions)
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testIsShuffled_DefaultIsFalse` | Fresh `AppState` | read `isShuffled` | `false` |
+| `testToggleShuffle_FalseToTrue` | `isShuffled == false` | `toggleShuffle()` | `isShuffled == true` |
+| `testToggleShuffle_TrueToFalse` | `isShuffled == true` | `toggleShuffle()` | `isShuffled == false` |
+| `testPlayNext_Shuffled_PlaysRandomTrack` | 3 tracks, `isShuffled == true` | `playNextTrack()` × 10 | at least 2 different tracks played |
+| `testPlayNext_Shuffled_DoesNotRepeatCurrentTrack` | 2 tracks, playing track1, `isShuffled == true` | `playNextTrack()` | `currentTrack == track2` |
+
 ### Done criteria
 - `RepeatMode` defined; `Equatable` and `Sendable` conformances verified
 - `AppState.repeatMode` initialises to `.off`
-- All 4 navigation methods implemented and callable from `@MainActor` context
-- All 19 Slice 6-A tests green; all Slice 1–5 tests still green
+- `AppState.isShuffled` initialises to `false`
+- All navigation methods implemented and callable from `@MainActor` context
+- All 24 Slice 6-A tests green; all Slice 1–5 tests still green
 
 ### Commit message
 ```
@@ -153,13 +193,17 @@ feat(slice 6-A): add RepeatMode and playlist navigation to AppState
 - Add playNextTrack(): advances playlist; respects repeatMode
 - Add playPreviousTrack(): goes back; restarts if at first track
 - Add trackDidFinishPlaying(): dispatches by repeatMode
+- Add AppState.isShuffled published state (default: false)
+- Add toggleShuffle(): toggles isShuffled
+- Update playNextTrack(): picks random track when isShuffled == true
 - Add RepeatModeTests (4 cases)
-- Add AppStateNavigationTests (15 cases)
+- Add AppStateNavigationTests (19 cases)
+- Add AppStateShuffleTests (5 cases)
 ```
 
 ---
 
-## Slice 6-B: SwiftUI UI MVP
+## Slice 6-B: SwiftUI UI (Click & Right-click)
 
 ### Goal
 Implement the minimum SwiftUI views that let a user launch the app and play
@@ -169,14 +213,28 @@ in any View file.
 
 ### Scope
 - Add `FreeTierIAPManager`: production `IAPManager`; `isProUnlocked` always `false`
-- Add `TrackRowView`: single track row — title, duration, playing indicator
-- Add `PlaylistView`: track list + add-files button (`NSOpenPanel`) +
-  drag-and-drop + `Delete` key removal
-- Add `PlayerView`: now-playing info, progress slider (seek on release),
-  transport controls (Previous / Play-Pause / Stop / Next), Repeat button
+- Add `TrackRowView`: displays title, artist, duration, and playing indicator
+- Add `PlaylistView`:
+  - Track list showing title, artist, duration per row
+  - Single-click to select (highlight); double-click to play
+  - Right-click Context Menu: Play, Remove from Playlist
+  - Add-files button (`NSOpenPanel`) and drag-and-drop
+  - Empty state placeholder when playlist is empty
+- Add `PlayerView`:
+  - Album art (read from track metadata; grey placeholder when unavailable)
+  - Now-playing title and artist
+  - Seek slider: shows current position / total duration; drag to seek on release
+  - Transport controls: Previous / Play-Pause / Stop / Next
+  - Repeat button (cycles Off → All → One via `cycleRepeatMode()`)
+  - Shuffle button (toggles `isShuffled` via `toggleShuffle()`)
+  - Playback status label (Playing / Paused / Stopped)
 - Add `ContentView`: `HSplitView` combining `PlaylistView` and `PlayerView`
 - Update `HarmoniaPlayerApp`: create `AppState` with `FreeTierIAPManager`
   and `HarmoniaCoreProvider`; inject via `.environmentObject`
+- Add polling timer to `AppState`: `startPolling()` / `stopPolling()` —
+  0.25s loop that updates `currentTime` and detects natural playback
+  completion; calls `trackDidFinishPlaying()` when `playbackService.state`
+  transitions to `.stopped` while `playbackState == .playing`
 - Add `HarmoniaPlayerUITests` target with `XCUITest` suite
 
 ### Files
@@ -186,6 +244,7 @@ in any View file.
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlayerView.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add polling timer)
 - `App/HarmoniaPlayer/HarmoniaPlayerUITests/HarmoniaPlayerUITests.swift` (new target)
 
 ### Module boundary rules (enforced)
@@ -205,8 +264,11 @@ in any View file.
 | `"previous-button"` | Previous button in `PlayerView` |
 | `"next-button"` | Next button in `PlayerView` |
 | `"repeat-button"` | Repeat cycle button in `PlayerView` |
+| `"shuffle-button"` | Shuffle toggle in `PlayerView` |
 | `"progress-slider"` | Seek slider in `PlayerView` |
 | `"now-playing-title"` | Track title label in `PlayerView` |
+| `"now-playing-artist"` | Artist label in `PlayerView` |
+| `"album-art"` | Album art image in `PlayerView` |
 | `"playback-status-label"` | State text in `PlayerView` |
 
 ### TDD matrix — Slice 6-B (XCUITest)
@@ -218,6 +280,7 @@ in any View file.
 | `testStopButton_Exists` | App launch | view loads | `stop-button` accessible |
 | `testProgressSlider_Exists` | App launch | view loads | `progress-slider` accessible |
 | `testRepeatButton_Exists` | App launch | view loads | `repeat-button` accessible |
+| `testShuffleButton_Exists` | App launch | view loads | `shuffle-button` accessible |
 | `testAddFilesButton_Exists` | App launch | view loads | `add-files-button` accessible |
 
 ### Done criteria
@@ -229,7 +292,7 @@ in any View file.
 
 ### Commit message
 ```
-feat(slice 6-B): add SwiftUI UI MVP and wire AppState as environment object
+feat(slice 6-B): add SwiftUI UI with full click and right-click interactions
 
 - Add FreeTierIAPManager: production IAPManager, isProUnlocked always false
 - Add TrackRowView: title, duration, playing indicator
@@ -243,7 +306,67 @@ feat(slice 6-B): add SwiftUI UI MVP and wire AppState as environment object
 
 ---
 
+---
+
+## Slice 6-C: Keyboard Shortcuts (= v0.1 Gate)
+
+### Goal
+Add full keyboard shortcut support so all playback and playlist actions
+can be operated without a mouse. Completing this slice marks **v0.1**.
+
+### Scope
+- `Space` — Play / Pause
+- `⌘.` — Stop
+- `⌘→` — Next track
+- `⌘←` — Previous track
+- `→` — Seek forward 5 seconds
+- `←` — Seek backward 5 seconds
+- `⌘R` — Cycle repeat mode
+- `⌘S` — Toggle shuffle
+- `⌘O` — Open file picker (add files)
+- `F7` — Previous track (Media Key)
+- `F8` — Play / Pause (Media Key)
+- `F9` — Next track (Media Key)
+
+### Files
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift` (modify — add keyboard shortcuts)
+
+### Module boundary rules (enforced)
+- Keyboard shortcuts are bound in `ContentView` using `.keyboardShortcut()` or `onKeyPress`
+- All actions forward to `AppState` via `Task { await appState.method() }`
+- No direct service calls from View layer
+
+### Done criteria
+- All shortcuts listed above are functional
+- Media Keys (F7/F8/F9) respond correctly
+- All Slice 1–6-B tests still green
+
+### Commit message
+```
+feat(slice 6-C): add keyboard shortcuts — v0.1 complete
+
+- Space: play/pause
+- ⌘.: stop
+- ⌘→/⌘←: next/previous track
+- →/←: seek ±5 seconds
+- ⌘R: cycle repeat mode
+- ⌘S: toggle shuffle
+- ⌘O: open file picker
+- F7/F8/F9: media keys (previous/play-pause/next)
+```
+
+---
+
 ## Slice 6 Completion Gate (= v0.1 Gate)
+
+- ✅ RepeatMode defined; `off` / `all` / `one`
+- ✅ ShuffleMode defined; polling timer wired
+- ✅ All navigation methods in AppState
+- ✅ Full UI: playlist + player + album art + context menu
+- ✅ All keyboard shortcuts functional
+- ✅ Media Keys functional
+- ✅ All unit tests green
+- ✅ All XCUITest cases pass
 
 - ✅ `RepeatMode` defined; `off` / `all` / `one`
 - ✅ `AppState.repeatMode` defaults to `.off`
