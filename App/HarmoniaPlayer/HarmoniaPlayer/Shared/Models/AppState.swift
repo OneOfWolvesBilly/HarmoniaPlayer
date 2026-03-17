@@ -110,6 +110,14 @@ final class AppState: ObservableObject {
     /// Controls behaviour of `playNextTrack()` and `trackDidFinishPlaying()`.
     @Published private(set) var repeatMode: RepeatMode = .off
 
+    /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
+    @Published private(set) var isShuffled: ShuffleMode = .off
+
+    // MARK: - Polling
+
+    /// Task that polls playback state and currentTime while playing.
+    private var pollingTask: Task<Void, Never>?
+
     // MARK: - Initialization
 
     /// Creates AppState and wires all dependencies.
@@ -248,6 +256,7 @@ final class AppState: ObservableObject {
 
     /// Stop playback. Resets `currentTime` to 0.
     func stop() async {
+        stopPolling()
         await playbackService.stop()
         playbackState = .stopped
         currentTime = 0
@@ -310,6 +319,7 @@ final class AppState: ObservableObject {
             duration = await playbackService.duration()
             try await playbackService.play()
             playbackState = .playing
+            startPolling()
         } catch {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
@@ -331,6 +341,13 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Toggles shuffle mode on or off.
+    ///
+    /// Synchronous. Safe to call directly from SwiftUI button actions.
+    func toggleShuffle() {
+        isShuffled = !isShuffled
+    }
+
     // MARK: - Navigation
 
     /// Plays the next track in the playlist.
@@ -346,6 +363,16 @@ final class AppState: ObservableObject {
 
         if repeatMode == .one, let current = currentTrack {
             await play(trackID: current.id)
+            return
+        }
+
+        if isShuffled {
+            let others = playlist.tracks.filter { $0.id != currentTrack?.id }
+            if let random = others.randomElement() {
+                await play(trackID: random.id)
+            } else if let first = playlist.tracks.first {
+                await play(trackID: first.id)
+            }
             return
         }
 
@@ -414,6 +441,36 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Private Helpers
+
+    /// Starts a polling loop that updates `currentTime` and detects
+    /// natural playback completion while `playbackState == .playing`.
+    private func startPolling() {
+        stopPolling()
+        pollingTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s
+                guard !Task.isCancelled else { break }
+                let serviceState = self.playbackService.state
+                let time = await self.playbackService.currentTime()
+                await MainActor.run {
+                    self.currentTime = time
+                    // Detect natural completion: service stopped but we think we're playing
+                    if case .stopped = serviceState, self.playbackState == .playing {
+                        self.playbackState = .stopped
+                        Task { await self.trackDidFinishPlaying() }
+                    }
+                }
+                if case .stopped = serviceState { break }
+            }
+        }
+    }
+
+    /// Cancels the polling loop.
+    private func stopPolling() {
+        pollingTask?.cancel()
+        pollingTask = nil
+    }
 
     /// Maps any thrown error to a `PlaybackError` for UI consumption.
     ///
