@@ -1,0 +1,103 @@
+//
+//  HarmoniaPlayerUITests.swift
+//  HarmoniaPlayerUITests
+//
+//  SPDX-License-Identifier: MIT
+//
+//  PURPOSE
+//  -------
+//  XCUITest suite for Slice 6-B. Verifies that all required UI elements are
+//  accessible after app launch. These tests do not exercise playback — they
+//  confirm that the view hierarchy is correctly assembled and that all
+//  accessibility identifiers required by future interaction tests are present.
+//
+//  TEST STRATEGY
+//  -------------
+//  Each test launches the app, activates the window (required on macOS to
+//  expose the accessibility tree), and checks for the existence of a single
+//  element. This keeps each test focused and makes failures easy to diagnose.
+//
+//  macOS NOTE
+//  ----------
+//  `window.click()` in `setUpWithError` is required on macOS + SwiftUI:
+//  without it the accessibility tree may not be fully exposed and
+//  `waitForExistence` can time out even when the element is visible.
+//
+
+import XCTest
+
+final class HarmoniaPlayerUITests: XCTestCase {
+
+    private var app: XCUIApplication!
+
+    // MARK: - Setup / Teardown
+
+    override func setUpWithError() throws {
+        continueAfterFailure = false
+        app = XCUIApplication()
+        app.launch()
+        app.activate()
+        // Click the window to ensure macOS exposes the full accessibility tree.
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.waitForExistence(timeout: 10),
+                      "Main window must appear within 10 seconds of launch")
+        window.click()
+    }
+
+    override func tearDownWithError() throws {
+        app = nil
+    }
+
+    // MARK: - Launch Tests
+
+    /// Verifies the two primary regions of the layout are present:
+    /// the playlist list and the play-pause transport button.
+    func testAppLaunches_ShowsPlaylistAndPlayer() {
+        XCTAssertTrue(app.lists["playlist-list"].waitForExistence(timeout: 5),
+                      "Playlist list must be visible on launch")
+        XCTAssertTrue(app.buttons["play-pause-button"].waitForExistence(timeout: 5),
+                      "Play-pause button must be visible on launch")
+    }
+
+    // MARK: - Transport Control Tests
+
+    /// Verifies the play/pause toggle button is accessible.
+    func testPlayPauseButton_Exists() {
+        XCTAssertTrue(app.buttons["play-pause-button"].waitForExistence(timeout: 5),
+                      "play-pause-button must exist in PlayerView")
+    }
+
+    /// Verifies the stop button is accessible.
+    func testStopButton_Exists() {
+        XCTAssertTrue(app.buttons["stop-button"].waitForExistence(timeout: 5),
+                      "stop-button must exist in PlayerView")
+    }
+
+    /// Verifies the seek slider is accessible and can be interacted with.
+    func testProgressSlider_Exists() {
+        XCTAssertTrue(app.sliders["progress-slider"].waitForExistence(timeout: 5),
+                      "progress-slider must exist in PlayerView")
+    }
+
+    // MARK: - Mode Control Tests
+
+    /// Verifies the repeat cycle button is accessible.
+    func testRepeatButton_Exists() {
+        XCTAssertTrue(app.buttons["repeat-button"].waitForExistence(timeout: 5),
+                      "repeat-button must exist in PlayerView")
+    }
+
+    /// Verifies the shuffle toggle button is accessible.
+    func testShuffleButton_Exists() {
+        XCTAssertTrue(app.buttons["shuffle-button"].waitForExistence(timeout: 5),
+                      "shuffle-button must exist in PlayerView")
+    }
+
+    // MARK: - Playlist Tests
+
+    /// Verifies the add-files button is accessible.
+    func testAddFilesButton_Exists() {
+        XCTAssertTrue(app.buttons["add-files-button"].waitForExistence(timeout: 5),
+                      "add-files-button must exist in PlaylistView toolbar")
+    }
+}

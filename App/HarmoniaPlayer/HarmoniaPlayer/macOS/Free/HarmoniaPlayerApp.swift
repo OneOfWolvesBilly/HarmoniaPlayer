@@ -11,10 +11,17 @@ import SwiftUI
 
 @main
 struct HarmoniaPlayerApp: App {
+
+    @StateObject private var appState = AppState(
+        iapManager: FreeTierIAPManager(),
+        provider: HarmoniaCoreProvider()
+    )
+
     var body: some Scene {
         WindowGroup {
-            Text("HarmoniaPlayer")
-                .frame(minWidth: 800, minHeight: 600)
+            ContentView()
+                .environmentObject(appState)
+                .frame(minWidth: 620, minHeight: 480)
         }
     }
 }
