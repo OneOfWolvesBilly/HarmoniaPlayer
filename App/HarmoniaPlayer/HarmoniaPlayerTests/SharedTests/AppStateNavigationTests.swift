@@ -89,15 +89,18 @@ final class AppStateNavigationTests: XCTestCase {
 
     // MARK: - playNextTrack: repeatMode == .one
 
-    func testPlayNext_RepeatOne_ReplaysCurrentTrack() async {
-        let (sut, fake) = makeSUT()
+    /// Design decision: repeatMode == .one does NOT intercept manual Next button.
+    /// Next always advances the playlist regardless of repeat mode.
+    /// Only natural track completion (trackDidFinishPlaying) respects .one.
+    func testPlayNext_RepeatOne_AdvancesToNextTrack() async {
+        let (sut, _) = makeSUT()
         await loadTracks(sut, count: 2)
         await sut.play(trackID: sut.playlist.tracks[0].id)
         sut.cycleRepeatMode() // .off → .all
         sut.cycleRepeatMode() // .all → .one
         await sut.playNextTrack()
-        XCTAssertEqual(sut.currentTrack?.url, makeURL("track1"))
-        XCTAssertEqual(fake.loadCallCount, 2)
+        // Should advance to track2, not replay track1
+        XCTAssertEqual(sut.currentTrack?.url, makeURL("track2"))
     }
 
     // MARK: - playNextTrack: single track

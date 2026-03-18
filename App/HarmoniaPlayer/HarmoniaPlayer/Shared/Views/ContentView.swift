@@ -26,7 +26,12 @@ import SwiftUI
 /// Renders a horizontally split layout:
 /// - Left: `PlaylistView` (min 260pt, ideal 300pt, max 400pt)
 /// - Right: `PlayerView` (min 320pt, ideal 380pt)
+///
+/// Hosts the duplicate-URL alert at the top level so it is guaranteed
+/// to appear on macOS regardless of which subview triggered the load.
 struct ContentView: View {
+
+    @EnvironmentObject private var appState: AppState
 
     var body: some View {
         HSplitView {
@@ -37,5 +42,16 @@ struct ContentView: View {
                 .frame(minWidth: 320, idealWidth: 380)
         }
         .frame(minWidth: 620, minHeight: 480)
+        .alert("Already in Playlist", isPresented: Binding(
+            get: { !appState.skippedDuplicateURLs.isEmpty },
+            set: { if !$0 { appState.skippedDuplicateURLs = [] } }
+        )) {
+            Button("OK") { appState.skippedDuplicateURLs = [] }
+        } message: {
+            let names = appState.skippedDuplicateURLs
+                .map { $0.lastPathComponent }
+                .joined(separator: "\n")
+            Text("The following files are already in the playlist and were not added:\n\(names)")
+        }
     }
 }

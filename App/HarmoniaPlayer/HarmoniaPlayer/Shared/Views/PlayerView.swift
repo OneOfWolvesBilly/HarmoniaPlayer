@@ -67,8 +67,8 @@ struct PlayerView: View {
     /// Album art loaded from `artworkURL`, or a grey placeholder.
     private var albumArtView: some View {
         Group {
-            if let artworkURL = appState.currentTrack?.artworkURL,
-               let nsImage = NSImage(contentsOf: artworkURL) {
+            if let data = appState.currentTrack?.artworkData,
+               let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -115,23 +115,24 @@ struct PlayerView: View {
     private var seekSliderView: some View {
         VStack(spacing: 4) {
             Slider(
-                value: isSeeking ? $seekValue : .init(
-                    get: { appState.currentTime },
-                    set: { _ in }
+                value: Binding(
+                    get: { isSeeking ? seekValue : appState.currentTime },
+                    set: { newValue in seekValue = newValue }
                 ),
                 in: 0...max(appState.duration, 1)
             ) { editing in
                 if editing {
-                    // Capture current position when drag begins
+                    // Drag started — freeze display at current position
                     isSeeking = true
                     seekValue = appState.currentTime
                 } else {
-                    // Seek to final drag position when released
+                    // Drag ended — send final position to AppState
                     isSeeking = false
                     Task { try? await appState.seek(to: seekValue) }
                 }
             }
             .accessibilityIdentifier("progress-slider")
+            .disabled(appState.duration <= 0)
 
             HStack {
                 Text(formatTime(appState.currentTime))
@@ -162,7 +163,13 @@ struct PlayerView: View {
             .help("Previous track")
 
             Button {
-                Task { await appState.play() }
+                Task {
+                    if appState.playbackState == .playing {
+                        await appState.pause()
+                    } else {
+                        await appState.play()
+                    }
+                }
             } label: {
                 Image(systemName: appState.playbackState == .playing ? "pause.fill" : "play.fill")
                     .font(.title)
@@ -189,6 +196,7 @@ struct PlayerView: View {
             .help("Next track")
         }
         .buttonStyle(.plain)
+        .disabled(appState.playlist.tracks.isEmpty)
     }
 
     // MARK: - Mode Controls
@@ -221,6 +229,7 @@ struct PlayerView: View {
             .help(appState.isShuffled ? "Shuffle: On" : "Shuffle: Off")
         }
         .buttonStyle(.plain)
+        .disabled(appState.playlist.tracks.isEmpty)
     }
 
     // MARK: - Status Label

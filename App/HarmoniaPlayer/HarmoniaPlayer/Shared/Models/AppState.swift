@@ -8,6 +8,13 @@
 import Foundation
 import Combine
 
+private extension Array {
+    /// Returns the element at `index` if it is within bounds, otherwise `nil`.
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
+    }
+}
+
 /// Central application state container.
 ///
 /// Wires all dependencies (IAP → FeatureFlags → CoreFactory → Services)
@@ -89,6 +96,10 @@ final class AppState: ObservableObject {
     /// reset to `0` by `stop()`.
     @Published private(set) var currentTime: TimeInterval = 0
 
+    /// Position the user has seeked to while stopped or paused.
+    /// Used by play() to resume from the correct position.
+    private var pendingSeekTime: TimeInterval = 0
+
     /// Duration of the currently loaded track in seconds.
     ///
     /// Initialised to `0`. Updated after a successful `load` in `play(trackID:)`.
@@ -102,6 +113,10 @@ final class AppState: ObservableObject {
     /// Views observe this to present error banners or alerts.
     @Published private(set) var lastError: PlaybackError?
 
+    /// URLs that were skipped during the last load() call because they
+    /// already exist in the playlist. Non-empty triggers a duplicate alert.
+    @Published var skippedDuplicateURLs: [URL] = []
+
     // MARK: - Repeat Mode State
 
     /// Current repeat mode.
@@ -112,6 +127,14 @@ final class AppState: ObservableObject {
 
     /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
     @Published private(set) var isShuffled: ShuffleMode = .off
+
+    /// Pre-shuffled track ID order used when shuffle is enabled.
+    ///
+    /// Contains a permutation of all track IDs in `playlist.tracks`.
+    /// Rebuilt whenever shuffle is toggled on or the playlist changes.
+    /// `shuffleQueueIndex` points to the current position in this queue.
+    private var shuffleQueue: [Track.ID] = []
+    private var shuffleQueueIndex: Int = 0
 
     // MARK: - Polling
 
@@ -183,13 +206,45 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter urls: Audio file URLs to add.
     func load(urls: [URL]) async {
+        // Reset skipped list before each load so the alert re-triggers
+        // even if the same files are dropped again.
+        skippedDuplicateURLs = []
+        // Collect existing URLs to prevent duplicates within the same playlist.
+        let existingURLs = Set(playlist.tracks.map { $0.url })
+        var skipped: [URL] = []
         for url in urls {
+            if existingURLs.contains(url) {
+                skipped.append(url)
+                continue
+            }
             do {
                 let track = try await tagReaderService.readMetadata(for: url)
                 playlist.tracks.append(track)
             } catch {
                 playlist.tracks.append(Track(url: url))
                 lastError = .failedToOpenFile
+            }
+        }
+        if !skipped.isEmpty {
+            skippedDuplicateURLs = skipped
+        }
+
+        // If shuffle is active, insert newly added tracks at random positions
+        // in the remaining (unplayed) portion of the shuffleQueue.
+        if isShuffled {
+            let newIDs = playlist.tracks
+                .filter { track in !existingURLs.contains(track.url) }
+                .map { $0.id }
+            for id in newIDs {
+                // Insert at a random position strictly after the current playing track
+                // (shuffleQueueIndex + 1) so the new track can be played in the
+                // current round. If we're at the last track, append at the end.
+                let afterCurrent = shuffleQueueIndex + 1
+                let end = shuffleQueue.count
+                let insertIndex = afterCurrent <= end
+                    ? Int.random(in: afterCurrent...end)
+                    : end
+                shuffleQueue.insert(id, at: insertIndex)
             }
         }
     }
@@ -211,6 +266,18 @@ final class AppState: ObservableObject {
             currentTrack = nil
         }
         playlist.tracks.removeAll { $0.id == trackID }
+
+        // Remove from shuffleQueue and adjust index if needed.
+        if isShuffled, let removedIdx = shuffleQueue.firstIndex(of: trackID) {
+            shuffleQueue.remove(at: removedIdx)
+            // If removed track was before current position, shift index back
+            // so shuffleQueueIndex still points to the same track.
+            if removedIdx < shuffleQueueIndex {
+                shuffleQueueIndex = max(0, shuffleQueueIndex - 1)
+            }
+            // If removed track was the current position, index stays the same
+            // (now pointing to the next track in queue).
+        }
     }
 
     /// Reorders tracks in the playlist.
@@ -236,11 +303,37 @@ final class AppState: ObservableObject {
     /// Start playback of the currently loaded track.
     ///
     /// No-op if no track has been loaded via `play(trackID:)`.
+    /// Resumes playback of the current track, or plays the first track if
+    /// nothing is loaded yet.
+    ///
     /// On error: sets `lastError` and `playbackState = .error(mapped)`.
     func play() async {
+        // If no track is loaded, play the first track in the playlist.
+        if currentTrack == nil {
+            if let first = playlist.tracks.first {
+                await play(trackID: first.id)
+            }
+            return
+        }
+
+        // If playbackService is stopped (e.g. after stop() was called),
+        // reload the current track before resuming. Seek to pendingSeekTime
+        // so the user's dragged position is respected.
+        if case .stopped = playbackService.state {
+            if let track = currentTrack {
+                let targetTime = pendingSeekTime
+                await play(trackID: track.id)
+                if targetTime > 0.1 {
+                    await seek(to: targetTime)
+                }
+            }
+            return
+        }
+
         do {
             try await playbackService.play()
             playbackState = .playing
+            startPolling()
         } catch {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
@@ -260,6 +353,7 @@ final class AppState: ObservableObject {
         await playbackService.stop()
         playbackState = .stopped
         currentTime = 0
+        pendingSeekTime = 0
     }
 
     /// Seek to an absolute position in the current track.
@@ -302,6 +396,17 @@ final class AppState: ObservableObject {
         }
         currentTrack = track
 
+        // If shuffle is active, sync shuffleQueueIndex to the manually selected track
+        // so Next/Previous continue from the correct position in the queue.
+        if isShuffled {
+            if let idx = shuffleQueue.firstIndex(of: trackID) {
+                shuffleQueueIndex = idx
+            } else {
+                // Track not in queue (e.g. added after shuffle) — rebuild queue
+                buildShuffleQueue(startingWith: trackID)
+            }
+        }
+
         // Step 2: Format gate — reject Pro-only formats on the Free tier.
         // The gate fires BEFORE playbackState is changed and BEFORE any service call.
         let ext = track.url.pathExtension.lowercased()
@@ -312,6 +417,11 @@ final class AppState: ObservableObject {
         }
 
         // Step 3–6: Standard load-and-play flow.
+        // Stop any current playback before loading a new track.
+        // This ensures AVAudioEngine and decoder are in a clean state,
+        // including when replaying the same track.
+        stopPolling()
+        await playbackService.stop()
         playbackState = .loading
 
         do {
@@ -346,6 +456,27 @@ final class AppState: ObservableObject {
     /// Synchronous. Safe to call directly from SwiftUI button actions.
     func toggleShuffle() {
         isShuffled = !isShuffled
+        if isShuffled {
+            buildShuffleQueue(startingWith: currentTrack?.id)
+        } else {
+            shuffleQueue = []
+            shuffleQueueIndex = 0
+        }
+    }
+
+    /// Builds a shuffled queue of all track IDs.
+    ///
+    /// If `startID` is provided, places it first so the currently playing
+    /// track stays at the head of the new queue.
+    private func buildShuffleQueue(startingWith startID: Track.ID? = nil) {
+        var ids = playlist.tracks.map { $0.id }
+        ids.shuffle()
+        if let startID, let idx = ids.firstIndex(of: startID) {
+            ids.remove(at: idx)
+            ids.insert(startID, at: 0)
+        }
+        shuffleQueue = ids
+        shuffleQueueIndex = 0
     }
 
     // MARK: - Navigation
@@ -361,17 +492,25 @@ final class AppState: ObservableObject {
     func playNextTrack() async {
         guard !playlist.tracks.isEmpty else { return }
 
-        if repeatMode == .one, let current = currentTrack {
-            await play(trackID: current.id)
-            return
-        }
+        // repeatMode == .one does NOT intercept Next/Previous button presses.
+        // The button should navigate the playlist; repeat-one only applies to
+        // natural track completion (trackDidFinishPlaying).
 
         if isShuffled {
-            let others = playlist.tracks.filter { $0.id != currentTrack?.id }
-            if let random = others.randomElement() {
-                await play(trackID: random.id)
-            } else if let first = playlist.tracks.first {
-                await play(trackID: first.id)
+            // Rebuild queue if it's empty or stale
+            if shuffleQueue.isEmpty {
+                buildShuffleQueue(startingWith: currentTrack?.id)
+            }
+            let nextIndex = shuffleQueueIndex + 1
+            if nextIndex < shuffleQueue.count {
+                shuffleQueueIndex = nextIndex
+            } else {
+                // Queue exhausted — rebuild and start from beginning
+                buildShuffleQueue()
+                shuffleQueueIndex = 0
+            }
+            if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
+                await play(trackID: trackID)
             }
             return
         }
@@ -401,6 +540,23 @@ final class AppState: ObservableObject {
     /// No-op if playlist is empty.
     func playPreviousTrack() async {
         guard !playlist.tracks.isEmpty else { return }
+
+        if isShuffled {
+            if shuffleQueue.isEmpty { buildShuffleQueue(startingWith: currentTrack?.id) }
+            let prevIndex = shuffleQueueIndex - 1
+            if prevIndex >= 0 {
+                shuffleQueueIndex = prevIndex
+                if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
+                    await play(trackID: trackID)
+                }
+            } else {
+                // At beginning of shuffle queue — restart current track
+                if let current = currentTrack {
+                    await play(trackID: current.id)
+                }
+            }
+            return
+        }
 
         guard let current = currentTrack,
               let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
@@ -455,12 +611,15 @@ final class AppState: ObservableObject {
                 let time = await self.playbackService.currentTime()
                 await MainActor.run {
                     self.currentTime = time
-                    // Detect natural completion: service stopped but we think we're playing
+                    // Detect natural completion: service stopped but we think we're playing.
+                    // Ignore .buffering — that is the drain state used by DefaultPlaybackService
+                    // during EOF drain; we must not trigger completion until .stopped.
                     if case .stopped = serviceState, self.playbackState == .playing {
                         self.playbackState = .stopped
                         Task { await self.trackDidFinishPlaying() }
                     }
                 }
+                // Only break out of polling when truly stopped (not buffering/draining).
                 if case .stopped = serviceState { break }
             }
         }

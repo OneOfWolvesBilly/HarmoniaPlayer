@@ -130,6 +130,18 @@ final class FakePlaybackService: PlaybackService {
     /// Number of times `load(url:)` was called.
     private(set) var loadCallCount = 0
 
+    /// Resets all call counters. Use in tests to get a clean baseline
+    /// after setup (e.g. after loadTrackIntoSUT()).
+    func resetCounts() {
+        loadCallCount = 0
+        playCallCount = 0
+        pauseCallCount = 0
+        stopCallCount = 0
+        seekCallCount = 0
+        seekedToSeconds = []
+        loadedURLs = []
+    }
+
     /// Ordered list of URLs passed to `load(url:)`.
     private(set) var loadedURLs: [URL] = []
 

@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AppKit
 
 /// Audio track model
 ///
@@ -33,8 +34,8 @@ struct Track: Identifiable, Equatable, Sendable {
     /// Track duration in seconds (optional)
     var duration: TimeInterval?
 
-    /// URL to album artwork (optional, future use)
-    var artworkURL: URL?
+    /// Raw artwork image data read from file metadata (optional).
+    var artworkData: Data?
     
     /// Initialize with all fields
     ///
@@ -53,7 +54,7 @@ struct Track: Identifiable, Equatable, Sendable {
         artist: String = "",
         album: String = "",
         duration: TimeInterval? = nil,
-        artworkURL: URL? = nil
+        artworkData: Data? = nil
     ) {
         self.id = id
         self.url = url
@@ -61,7 +62,7 @@ struct Track: Identifiable, Equatable, Sendable {
         self.artist = artist
         self.album = album
         self.duration = duration
-        self.artworkURL = artworkURL
+        self.artworkData = artworkData
     }
 
     /// Convenience initializer that derives title from URL filename
@@ -81,7 +82,7 @@ struct Track: Identifiable, Equatable, Sendable {
         lhs.artist == rhs.artist &&
         lhs.album == rhs.album &&
         lhs.duration == rhs.duration &&
-        lhs.artworkURL == rhs.artworkURL
+        lhs.artworkData == rhs.artworkData
     }
 
 }

@@ -51,10 +51,10 @@ final class HarmoniaPlayerUITests: XCTestCase {
     // MARK: - Launch Tests
 
     /// Verifies the two primary regions of the layout are present:
-    /// the playlist list and the play-pause transport button.
+    /// the add-files button (always visible) and the play-pause transport button.
     func testAppLaunches_ShowsPlaylistAndPlayer() {
-        XCTAssertTrue(app.lists["playlist-list"].waitForExistence(timeout: 5),
-                      "Playlist list must be visible on launch")
+        XCTAssertTrue(app.buttons["add-files-button"].waitForExistence(timeout: 5),
+                      "Add-files button must be visible on launch")
         XCTAssertTrue(app.buttons["play-pause-button"].waitForExistence(timeout: 5),
                       "Play-pause button must be visible on launch")
     }

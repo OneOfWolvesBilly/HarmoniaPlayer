@@ -39,14 +39,32 @@ final class AppStatePlaybackControlTests: XCTestCase {
         super.tearDown()
     }
 
+    // MARK: - Helpers
+
+    /// Loads a track into AppState so play() can proceed past the
+    /// "no currentTrack" and "stopped state" guards added in Slice 6-B.
+    private func loadTrackIntoSUT() async {
+        let url = URL(fileURLWithPath: "/tmp/test.mp3")
+        await sut.load(urls: [url])
+        // play(trackID:) sets currentTrack and transitions state to .paused
+        // via the fake service; subsequent play() calls work correctly.
+        if let first = sut.playlist.tracks.first {
+            await sut.play(trackID: first.id)
+            // Reset call counts so individual tests start clean.
+            fakePlaybackService.resetCounts()
+        }
+    }
+
     // MARK: - play()
 
     /// `testPlay_CallsPlaybackServicePlay`
     ///
-    /// Given a fresh AppState,
+    /// Given a track is loaded and paused,
     /// when `play()` is called,
     /// then `playbackService.play()` is called exactly once.
     func testPlay_CallsPlaybackServicePlay() async {
+        await loadTrackIntoSUT()
+
         await sut.play()
 
         XCTAssertEqual(fakePlaybackService.playCallCount, 1)
@@ -54,10 +72,12 @@ final class AppStatePlaybackControlTests: XCTestCase {
 
     /// `testPlay_SetsPlayingState`
     ///
-    /// Given no error stub is set,
+    /// Given a track is loaded and paused,
     /// when `play()` is called,
     /// then `playbackState` is `.playing`.
     func testPlay_SetsPlayingState() async {
+        await loadTrackIntoSUT()
+
         await sut.play()
 
         XCTAssertEqual(sut.playbackState, .playing)
@@ -69,6 +89,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
     /// when `play()` is called,
     /// then `lastError` is non-nil.
     func testPlay_OnError_SetsLastError() async {
+        await loadTrackIntoSUT()
         fakePlaybackService.stubbedPlayError = PlaybackError.outputError
 
         await sut.play()
@@ -82,6 +103,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
     /// when `play()` is called,
     /// then `playbackState` is `.error(...)`.
     func testPlay_OnError_SetsErrorState() async {
+        await loadTrackIntoSUT()
         fakePlaybackService.stubbedPlayError = PlaybackError.outputError
 
         await sut.play()
@@ -208,6 +230,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
     /// when `seek(to:)` is called,
     /// then `playbackState` remains `.playing`.
     func testSeek_Error_DoesNotChangePlaybackState() async {
+        await loadTrackIntoSUT()
         await sut.play()
         XCTAssertEqual(sut.playbackState, .playing)
 

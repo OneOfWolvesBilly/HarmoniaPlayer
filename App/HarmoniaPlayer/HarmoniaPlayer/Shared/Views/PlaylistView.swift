@@ -75,6 +75,7 @@ struct PlaylistView: View {
         .onDrop(of: [UTType.audio, UTType.fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
         }
+
     }
 
     // MARK: - Subviews

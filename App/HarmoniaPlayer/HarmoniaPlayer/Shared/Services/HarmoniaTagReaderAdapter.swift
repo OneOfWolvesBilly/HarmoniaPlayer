@@ -66,12 +66,14 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
         let bundle = try port.read(url: url)
 
         return Track(
-            url:    url,
+            url:         url,
             // title: use TagBundle value if present; fall back to the filename without extension.
-            title:  bundle.title  ?? url.deletingPathExtension().lastPathComponent,
+            title:       bundle.title  ?? url.deletingPathExtension().lastPathComponent,
             // artist / album: use TagBundle value if present; fall back to empty string.
-            artist: bundle.artist ?? "",
-            album:  bundle.album  ?? ""
+            artist:      bundle.artist ?? "",
+            album:       bundle.album  ?? "",
+            // artworkData: pass raw image data from TagBundle if available.
+            artworkData: bundle.artworkData
             // duration: intentionally omitted (nil) — TagBundle has no duration field.
         )
     }
