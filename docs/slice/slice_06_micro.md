@@ -84,6 +84,10 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 | at last track, `repeatMode == .off` | `stop()` |
 | at last track, `repeatMode == .all` | `play(trackID:)` first track |
 | `repeatMode == .one` | `play(trackID:)` `currentTrack` |
+
+> **Design note:** `repeatMode == .one` only applies to natural track completion
+> (`trackDidFinishPlaying`). Manual Next/Previous button presses always navigate
+> the playlist regardless of repeat mode. This is designed for better user intuitiveness.
 | `isShuffled == true` (any repeatMode except `.one`) | `play(trackID:)` random track (not `currentTrack`) |
 
 **`playPreviousTrack()`**
@@ -215,9 +219,11 @@ in any View file.
 - Add `FreeTierIAPManager`: production `IAPManager`; `isProUnlocked` always `false`
 - Add `TrackRowView`: displays title, artist, duration, and playing indicator
 - Add `PlaylistView`:
+  - Column headers: Title, Artist, Duration (click to sort ascending/descending)
   - Track list showing title, artist, duration per row
+  - Footer showing total track count and total duration
   - Single-click to select (highlight); double-click to play
-  - Right-click Context Menu: Play, Remove from Playlist
+  - Right-click Context Menu: Play, Play Next, Remove from Playlist
   - Add-files button (`NSOpenPanel`) and drag-and-drop
   - Empty state placeholder when playlist is empty
 - Add `PlayerView`:
@@ -228,6 +234,7 @@ in any View file.
   - Repeat button (cycles Off → All → One via `cycleRepeatMode()`)
   - Shuffle button (toggles `isShuffled` via `toggleShuffle()`)
   - Playback status label (Playing / Paused / Stopped)
+  - After last track ends (repeatMode == .off), pressing Play starts from first track
 - Add `ContentView`: `HSplitView` combining `PlaylistView` and `PlayerView`
 - Update `HarmoniaPlayerApp`: create `AppState` with `FreeTierIAPManager`
   and `HarmoniaCoreProvider`; inject via `.environmentObject`
@@ -275,7 +282,7 @@ in any View file.
 
 | Test | Given | When | Then |
 |------|-------|------|------|
-| `testAppLaunches_ShowsPlaylistAndPlayer` | App launch | view loads | `playlist-list` and `play-pause-button` exist |
+| `testAppLaunches_ShowsPlaylistAndPlayer` | App launch | view loads | `add-files-button` and `play-pause-button` exist |
 | `testPlayPauseButton_Exists` | App launch | view loads | `play-pause-button` accessible |
 | `testStopButton_Exists` | App launch | view loads | `stop-button` accessible |
 | `testProgressSlider_Exists` | App launch | view loads | `progress-slider` accessible |
@@ -394,3 +401,21 @@ feat(slice 6-C): add keyboard shortcuts — v0.1 complete
 - **Slice 2 (Playlist Management)** — `playlist.tracks` order used by navigation
 - **Slice 4 (Playback Control)** — `play(trackID:)`, `stop()`, `seek(to:)` called by navigation methods
 - **Slice 5 (Integration)** — `HarmoniaCoreProvider` used in `HarmoniaPlayerApp` production wiring
+---
+
+## Known Issues
+
+### Seek Audio Glitch
+- **Symptom:** Audible cut + restart sound when seeking (dragging progress bar).
+- **Root cause:** `flush()` calls `playerNode.stop()` then `playerNode.play()`,
+  which creates a brief gap. Apple Music uses a gapless seek mechanism that
+  pre-schedules the next buffer before the current one finishes.
+- **Fix:** Requires redesigning HarmoniaCore render loop to support gapless seek.
+  Out of scope for Slice 6.
+### Allow Duplicate Tracks Setting
+- **Description:** Allow the same URL to appear multiple times in one playlist
+  (e.g. A → B → A).
+- **Current behaviour:** Duplicates are silently skipped; alert shown to user.
+- **Future:** Add a Settings toggle `Allow duplicate tracks in playlist`.
+  When enabled, `load()` skips the duplicate-URL check.
+- **Scope:** Out of scope for Slice 6. Requires Settings UI (future slice).
