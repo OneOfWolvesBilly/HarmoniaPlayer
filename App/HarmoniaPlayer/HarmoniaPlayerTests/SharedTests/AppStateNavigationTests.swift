@@ -59,21 +59,14 @@ final class AppStateNavigationTests: XCTestCase {
 
     // MARK: - playNextTrack: last track, repeatMode == .off
 
-    func testPlayNext_LastTrack_RepeatOff_Stops() async {
+    /// Design decision: manual Next button always wraps to first track at end of playlist.
+    /// Only natural completion (trackDidFinishPlaying) stops when repeatMode == .off.
+    func testPlayNext_LastTrack_RepeatOff_WrapsToFirst() async {
         let (sut, _) = makeSUT()
         await loadTracks(sut, count: 2)
         await sut.play(trackID: sut.playlist.tracks[1].id)
         await sut.playNextTrack()
-        XCTAssertEqual(sut.playbackState, .stopped)
-    }
-
-    func testPlayNext_LastTrack_RepeatOff_NoNewLoad() async {
-        let (sut, fake) = makeSUT()
-        await loadTracks(sut, count: 2)
-        await sut.play(trackID: sut.playlist.tracks[1].id)
-        let loadCountAfterInitialPlay = fake.loadCallCount
-        await sut.playNextTrack()
-        XCTAssertEqual(fake.loadCallCount, loadCountAfterInitialPlay)
+        XCTAssertEqual(sut.currentTrack?.url, makeURL("track1"))
     }
 
     // MARK: - playNextTrack: last track, repeatMode == .all
@@ -105,12 +98,13 @@ final class AppStateNavigationTests: XCTestCase {
 
     // MARK: - playNextTrack: single track
 
-    func testPlayNext_SingleTrack_RepeatOff_Stops() async {
+    /// Single track: Next wraps to first (same track) and replays it.
+    func testPlayNext_SingleTrack_RepeatOff_ReplaysTrack() async {
         let (sut, _) = makeSUT()
         await loadTracks(sut, count: 1)
         await sut.play(trackID: sut.playlist.tracks[0].id)
         await sut.playNextTrack()
-        XCTAssertEqual(sut.playbackState, .stopped)
+        XCTAssertEqual(sut.currentTrack?.url, makeURL("track1"))
     }
 
     func testPlayNext_SingleTrack_RepeatAll_ReplaysTrack() async {

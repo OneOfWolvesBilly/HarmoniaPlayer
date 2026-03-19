@@ -36,12 +36,15 @@ struct ContentView: View {
     var body: some View {
         HSplitView {
             PlaylistView()
-                .frame(minWidth: 260, idealWidth: 300, maxWidth: 400)
+                .frame(minWidth: 260, idealWidth: 300)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             PlayerView()
                 .frame(minWidth: 320, idealWidth: 380)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 620, minHeight: 480)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .alert("Already in Playlist", isPresented: Binding(
             get: { !appState.skippedDuplicateURLs.isEmpty },
             set: { if !$0 { appState.skippedDuplicateURLs = [] } }

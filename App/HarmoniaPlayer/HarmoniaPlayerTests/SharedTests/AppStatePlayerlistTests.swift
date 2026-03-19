@@ -123,7 +123,9 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertEqual(sut.playlist.count, 3)
     }
 
-    func testRemoveTrack_CurrentTrack_NilsCurrentTrack() async {
+    /// Design: removing the only playing track stops playback.
+    /// currentTrack is cleared asynchronously via Task inside removeTrack.
+    func testRemoveTrack_CurrentTrack_StopsPlayback() async {
         await sut.load(urls: makeURLs(["a"]))
         let id = sut.playlist.tracks[0].id
         await sut.play(trackID: id)
@@ -131,7 +133,11 @@ final class AppStatePlaylistTests: XCTestCase {
 
         sut.removeTrack(id)
 
-        XCTAssertNil(sut.currentTrack)
+        // Allow async Task inside removeTrack to complete
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(sut.playlist.tracks.isEmpty)
+        XCTAssertEqual(sut.playbackState, .stopped)
     }
 
     func testRemoveTrack_OtherTrack_KeepsCurrentTrack() async {

@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import AppKit
 
 /// Audio track model
 ///
@@ -31,11 +30,12 @@ struct Track: Identifiable, Equatable, Sendable {
     /// Album name (optional)
     var album: String
     
-    /// Track duration in seconds (optional)
-    var duration: TimeInterval?
+    /// Track duration in seconds. Defaults to 0 if metadata is unavailable.
+    var duration: TimeInterval
 
     /// Raw artwork image data read from file metadata (optional).
     var artworkData: Data?
+
     
     /// Initialize with all fields
     ///
@@ -46,14 +46,14 @@ struct Track: Identifiable, Equatable, Sendable {
     ///   - artist: Artist name (defaults to empty)
     ///   - album: Album name (defaults to empty)
     ///   - duration: Track duration
-    ///   - artworkURL: Artwork URL (defaults to nil)
+    ///   - artworkData: Raw artwork image data (defaults to nil)
     init(
         id: UUID = UUID(),
         url: URL,
         title: String,
         artist: String = "",
         album: String = "",
-        duration: TimeInterval? = nil,
+        duration: TimeInterval = 0,
         artworkData: Data? = nil
     ) {
         self.id = id

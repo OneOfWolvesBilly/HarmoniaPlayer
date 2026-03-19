@@ -229,6 +229,12 @@ final class AppState: ObservableObject {
             skippedDuplicateURLs = skipped
         }
 
+        // Update insertionOrder with newly added track IDs
+        let newIDs = playlist.tracks
+            .filter { track in !existingURLs.contains(track.url) }
+            .map { $0.id }
+        playlist.insertionOrder.append(contentsOf: newIDs)
+
         // If shuffle is active, insert newly added tracks at random positions
         // in the remaining (unplayed) portion of the shuffleQueue.
         if isShuffled {
@@ -262,10 +268,55 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter trackID: The `UUID` of the track to remove.
     func removeTrack(_ trackID: Track.ID) {
-        if currentTrack?.id == trackID {
-            currentTrack = nil
-        }
+        let wasPlaying = currentTrack?.id == trackID && playbackState == .playing
+        let wasCurrentTrack = currentTrack?.id == trackID
+
         playlist.tracks.removeAll { $0.id == trackID }
+        playlist.insertionOrder.removeAll { $0 == trackID }
+
+        if wasCurrentTrack {
+            if wasPlaying {
+                // Find the next track to play before clearing currentTrack.
+                // After removal, the track that was at the next index is now
+                // at the same index (or we wrap to first if it was the last).
+                let nextTrackID: Track.ID? = {
+                    guard !playlist.tracks.isEmpty else { return nil }
+                    if isShuffled, let nextIdx = shuffleQueue[safe: shuffleQueueIndex] {
+                        return nextIdx
+                    }
+                    // In normal mode, find the original index of removed track.
+                    // After removal, that index now points to the next track.
+                    // If removed track was the last one, there is no next track
+                    // (unless repeatMode == .all wraps to first).
+                    guard let removedIndex = playlist.insertionOrder.firstIndex(of: trackID)
+                    else { return playlist.tracks.first?.id }
+
+                    if removedIndex < playlist.tracks.count {
+                        // There is a track at this index (the one that shifted up)
+                        return playlist.tracks[removedIndex].id
+                    } else if repeatMode == .all {
+                        // Removed track was last — wrap to first if repeat all
+                        return playlist.tracks.first?.id
+                    } else {
+                        // Removed track was last — stop
+                        return nil
+                    }
+                }()
+
+                Task {
+                    await playbackService.stop()
+                    currentTrack = nil
+                    if playlist.tracks.isEmpty || nextTrackID == nil {
+                        playbackState = .stopped
+                        currentTime = 0
+                    } else if let nextID = nextTrackID {
+                        await play(trackID: nextID)
+                    }
+                }
+            } else {
+                currentTrack = nil
+            }
+        }
 
         // Remove from shuffleQueue and adjust index if needed.
         if isShuffled, let removedIdx = shuffleQueue.firstIndex(of: trackID) {
@@ -277,6 +328,65 @@ final class AppState: ObservableObject {
             }
             // If removed track was the current position, index stays the same
             // (now pointing to the next track in queue).
+        }
+    }
+
+    /// Inserts a track immediately after the currently playing track.
+    ///
+    /// Allows the user to queue a specific track to play next without
+    /// interrupting current playback. If shuffle is active, also inserts
+    /// the track at the next position in the shuffle queue.
+    ///
+    /// - Parameter trackID: The `UUID` of the track to play next.
+    func playNext(_ trackID: Track.ID) {
+        guard let track = playlist.tracks.first(where: { $0.id == trackID }) else { return }
+
+        // Find current playing position in playlist
+        let currentIndex = currentTrack.flatMap { ct in
+            playlist.tracks.firstIndex(where: { $0.id == ct.id })
+        } ?? -1
+
+        let insertIndex = currentIndex + 1
+
+        // Remove from current position if already in playlist
+        playlist.tracks.removeAll { $0.id == trackID }
+
+        // Re-insert after current track
+        let clampedIndex = min(insertIndex, playlist.tracks.count)
+        playlist.tracks.insert(track, at: clampedIndex)
+
+        // If shuffle is active, also insert at next position in queue
+        if isShuffled {
+            shuffleQueue.removeAll { $0 == trackID }
+            let nextQueueIndex = min(shuffleQueueIndex + 1, shuffleQueue.count)
+            shuffleQueue.insert(trackID, at: nextQueueIndex)
+        }
+    }
+
+    /// Applies a sorted track order to the playlist.
+    ///
+    /// Called by PlaylistView when the user clicks a column header.
+    /// Reorders `playlist.tracks` so playback follows the sorted order.
+    /// Applies a sorted track order and records the sort state in the playlist.
+    func applySort(_ sorted: [Track], key: PlaylistSortKey, ascending: Bool) {
+        playlist.tracks = sorted
+        playlist.sortKey = key
+        playlist.sortAscending = ascending
+        if isShuffled {
+            buildShuffleQueue(startingWith: currentTrack?.id)
+        }
+    }
+
+    /// Restores insertion order and clears sort state.
+    func restoreInsertionOrder() {
+        let ordered = playlist.insertionOrder.compactMap { id in
+            playlist.tracks.first { $0.id == id }
+        }
+        playlist.tracks = ordered
+        playlist.sortKey = .none
+        playlist.sortAscending = true
+        if isShuffled {
+            buildShuffleQueue(startingWith: currentTrack?.id)
         }
     }
 
@@ -316,10 +426,25 @@ final class AppState: ObservableObject {
             return
         }
 
-        // If playbackService is stopped (e.g. after stop() was called),
-        // reload the current track before resuming. Seek to pendingSeekTime
-        // so the user's dragged position is respected.
+        // If playbackService is stopped (e.g. after stop() was called, or after
+        // the last track finished naturally), reload and resume.
         if case .stopped = playbackService.state {
+            // After natural completion of the last track with repeatMode == .off,
+            // pressing Play restarts from the first track in the playlist.
+            let isLastTrack: Bool = {
+                guard let current = currentTrack,
+                      let idx = playlist.tracks.firstIndex(where: { $0.id == current.id })
+                else { return false }
+                return idx == playlist.tracks.count - 1
+            }()
+
+            if isLastTrack && repeatMode == .off && pendingSeekTime <= 0.1 {
+                if let first = playlist.tracks.first {
+                    await play(trackID: first.id)
+                }
+                return
+            }
+
             if let track = currentTrack {
                 let targetTime = pendingSeekTime
                 await play(trackID: track.id)
@@ -525,10 +650,11 @@ final class AppState: ObservableObject {
         let nextIndex = currentIndex + 1
         if nextIndex < playlist.tracks.count {
             await play(trackID: playlist.tracks[nextIndex].id)
-        } else if repeatMode == .all {
-            await play(trackID: playlist.tracks[0].id)
         } else {
-            await stop()
+            // At last track — always wrap to first regardless of repeatMode.
+            // Natural completion (trackDidFinishPlaying) respects repeatMode;
+            // manual Next button always wraps for better user experience.
+            await play(trackID: playlist.tracks[0].id)
         }
     }
 
@@ -589,7 +715,20 @@ final class AppState: ObservableObject {
     func trackDidFinishPlaying() async {
         guard let current = currentTrack else { return }
         switch repeatMode {
-        case .off, .all:
+        case .off:
+            // Natural completion: stop at end of playlist; do not wrap.
+            guard let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
+            else { return }
+            let nextIndex = currentIndex + 1
+            if nextIndex < playlist.tracks.count {
+                await play(trackID: playlist.tracks[nextIndex].id)
+            } else {
+                // Last track finished — stop and clear currentTrack so
+                // PlayerView resets to "No Track Loaded" state.
+                await stop()
+                currentTrack = nil
+            }
+        case .all:
             await playNextTrack()
         case .one:
             await play(trackID: current.id)

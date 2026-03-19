@@ -11,7 +11,7 @@
 //
 //  DESIGN NOTES
 //  ------------
-//  - Album art is loaded from `currentTrack.artworkURL` if available;
+//  - Album art is loaded from `currentTrack.artworkData` if available;
 //    otherwise a grey rounded-rectangle placeholder with a music note icon
 //    is shown.
 //  - The seek slider uses a local `isSeeking` flag to freeze the displayed
@@ -64,26 +64,31 @@ struct PlayerView: View {
 
     // MARK: - Album Art
 
-    /// Album art loaded from `artworkURL`, or a grey placeholder.
+    /// Album art loaded from `artworkData`, or a grey placeholder.
     private var albumArtView: some View {
-        Group {
-            if let data = appState.currentTrack?.artworkData,
-               let nsImage = NSImage(data: data) {
-                Image(nsImage: nsImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.secondary.opacity(0.2))
-                    Image(systemName: "music.note")
-                        .font(.largeTitle)
-                        .foregroundStyle(Color.secondary)
+        GeometryReader { geo in
+            let size = min(geo.size.width, geo.size.height)
+            Group {
+                if let data = appState.currentTrack?.artworkData,
+                   let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } else {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.secondary.opacity(0.2))
+                        Image(systemName: "music.note")
+                            .font(.system(size: size * 0.25))
+                            .foregroundStyle(Color.secondary)
+                    }
                 }
             }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: max(8, size * 0.05)))
+            .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
-        .frame(width: 160, height: 160)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .aspectRatio(1, contentMode: .fit)
         .accessibilityIdentifier("album-art")
     }
 
@@ -128,7 +133,7 @@ struct PlayerView: View {
                 } else {
                     // Drag ended — send final position to AppState
                     isSeeking = false
-                    Task { try? await appState.seek(to: seekValue) }
+                    Task { await appState.seek(to: seekValue) }
                 }
             }
             .accessibilityIdentifier("progress-slider")
@@ -264,12 +269,14 @@ struct PlayerView: View {
 
     /// Human-readable description of `appState.playbackState`.
     private var statusText: String {
+        // No text when playlist is empty
+        guard !appState.playlist.tracks.isEmpty else { return "" }
         switch appState.playbackState {
-        case .playing:      return "Playing"
-        case .paused:       return "Paused"
+        case .idle:         return "Stopped"
         case .stopped:      return "Stopped"
         case .loading:      return "Loading"
-        case .idle:         return "Idle"
+        case .playing:      return "Playing"
+        case .paused:       return "Paused"
         case .error(let e): return "Error: \(e)"
         }
     }

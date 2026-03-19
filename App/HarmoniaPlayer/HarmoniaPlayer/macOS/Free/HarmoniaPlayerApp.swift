@@ -22,6 +22,7 @@ struct HarmoniaPlayerApp: App {
             ContentView()
                 .environmentObject(appState)
                 .frame(minWidth: 620, minHeight: 480)
+                .ignoresSafeArea()
         }
     }
 }

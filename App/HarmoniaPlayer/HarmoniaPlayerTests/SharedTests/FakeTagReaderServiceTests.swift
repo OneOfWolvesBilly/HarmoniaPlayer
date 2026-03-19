@@ -50,8 +50,8 @@ final class FakeTagReaderServiceTests: XCTestCase {
                        "Default behaviour should leave artist empty")
         XCTAssertEqual(track.album, "",
                        "Default behaviour should leave album empty")
-        XCTAssertNil(track.duration,
-                     "Default behaviour should leave duration nil")
+        XCTAssertEqual(track.duration, 0,
+                     "Default behaviour should default duration to 0")
     }
 
     // MARK: - Slice 3-A: Stubbed Metadata

@@ -13,9 +13,8 @@
 //  ------------
 //  - Like HarmoniaPlaybackServiceAdapter, this is one of only three production
 //    files in HarmoniaPlayer allowed to import HarmoniaCore.
-//  - TagBundle does NOT carry a duration field. Duration is available through
-//    StreamInfo (a separate decode pass), which is out of scope for this adapter.
-//    Track.duration is therefore left as nil.
+//  - TagBundle does NOT carry a duration field. Duration is read via
+//    AVURLAsset.load(.duration). Defaults to 0 if unavailable.
 //
 //  FIELD FALLBACK STRATEGY
 //  -----------------------
@@ -24,10 +23,12 @@
 //  | title           | title       | URL stem (deletingPathExtension last)  |
 //  | artist          | artist      | "" (empty string)                     |
 //  | album           | album       | "" (empty string)                     |
-//  | (none)          | duration    | nil (no duration in TagBundle)        |
+//  | (none)          | duration    | AVURLAsset.load(.duration)            |
+//  | (none)          | artworkData | TagBundle.artworkData                 |
 //
 
 import Foundation
+import AVFoundation
 import HarmoniaCore
 
 /// Bridges the synchronous `TagReaderPort` to the async `TagReaderService` protocol.
@@ -65,16 +66,18 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
         // Call synchronous port from async context — allowed by Swift structured concurrency.
         let bundle = try port.read(url: url)
 
+        // Read duration via AVURLAsset — TagBundle has no duration field.
+        let asset = AVURLAsset(url: url)
+        let cmDuration = try? await asset.load(.duration)
+        let duration: TimeInterval = cmDuration.map { $0.seconds > 0 ? $0.seconds : 0 } ?? 0
+
         return Track(
             url:         url,
-            // title: use TagBundle value if present; fall back to the filename without extension.
             title:       bundle.title  ?? url.deletingPathExtension().lastPathComponent,
-            // artist / album: use TagBundle value if present; fall back to empty string.
             artist:      bundle.artist ?? "",
             album:       bundle.album  ?? "",
-            // artworkData: pass raw image data from TagBundle if available.
+            duration:    duration,
             artworkData: bundle.artworkData
-            // duration: intentionally omitted (nil) — TagBundle has no duration field.
         )
     }
 }

@@ -6,34 +6,12 @@
 //
 //  PURPOSE
 //  -------
-//  Single row in the playlist `List`. Displays track metadata and playback
-//  state indicators so the user can identify tracks at a glance.
-//
-//  DESIGN NOTES
-//  ------------
-//  - This view is purely presentational; it receives all data via parameters
-//    and emits no actions directly — tap handling is done by the parent
-//    `PlaylistView` using `onTapGesture`.
-//  - `isPlaying` controls the speaker icon; `isSelected` controls text colour
-//    to ensure legibility against the system selection highlight.
-//  - Duration is formatted as `m:ss` (e.g. `3:45`) using integer arithmetic
-//    to avoid floating-point rounding artefacts in display.
-//  - The `accessibilityIdentifier` uses the track UUID so XCUITest can target
-//    a specific row without depending on displayed text.
+//  Single row in the playlist List. Columns align with PlaylistView headers:
+//  [icon 24pt] [Title flex] [Artist flex] [Duration 64pt]
 //
 
 import SwiftUI
 
-/// A single row in the playlist `List`.
-///
-/// Displays the track's playing indicator, title, artist, and duration.
-/// Selection highlight colour is adjusted so text remains legible when the
-/// row is selected (white on accent background).
-///
-/// - Parameters:
-///   - track: The `Track` whose metadata is displayed.
-///   - isPlaying: When `true`, shows a speaker icon instead of a music note.
-///   - isSelected: When `true`, renders text in white for contrast.
 struct TrackRowView: View {
 
     let track: Track
@@ -41,43 +19,39 @@ struct TrackRowView: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Playing indicator
+        HStack(spacing: 0) {
+            // Playing indicator icon
             Image(systemName: isPlaying ? "speaker.wave.2.fill" : "music.note")
                 .foregroundStyle(isPlaying ? Color.accentColor : Color.secondary)
-                .frame(width: 16)
+                .frame(width: 24, alignment: .center)
 
-            // Title + Artist
-            VStack(alignment: .leading, spacing: 2) {
-                Text(track.title)
-                    .font(.body)
-                    .foregroundStyle(isSelected ? Color.white : Color.primary)
-                    .lineLimit(1)
+            // Title column
+            Text(track.title)
+                .font(.body)
+                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 8)
 
-                if !track.artist.isEmpty {
-                    Text(track.artist)
-                        .font(.caption)
-                        .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
-                        .lineLimit(1)
-                }
-            }
+            // Artist column
+            Text(track.artist.isEmpty ? "—" : track.artist)
+                .font(.body)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.trailing, 8)
 
-            Spacer()
-
-            // Duration
-            if let duration = track.duration {
-                Text(formatDuration(duration))
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
-                    .monospacedDigit()
-            }
+            // Duration column
+            Text(formatDuration(track.duration))
+                .font(.body)
+                .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+                .monospacedDigit()
+                .frame(width: 64, alignment: .trailing)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .accessibilityIdentifier("track-row-\(track.id)")
     }
-
-    // MARK: - Helpers
 
     private func formatDuration(_ seconds: TimeInterval) -> String {
         let m = Int(seconds) / 60

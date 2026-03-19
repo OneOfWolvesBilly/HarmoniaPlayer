@@ -145,8 +145,8 @@ final class TrackTests: XCTestCase {
         let track = Track(url: sampleURL)
 
         // Then
-        XCTAssertNil(track.duration,
-                     "Convenience init should default duration to nil (unknown until Slice 3)")
+        XCTAssertEqual(track.duration, 0,
+                     "Convenience init should default duration to 0")
     }
 
     func testTrack_InitWithURL_DefaultsArtworkToNil() {
@@ -154,8 +154,8 @@ final class TrackTests: XCTestCase {
         let track = Track(url: sampleURL)
 
         // Then
-        XCTAssertNil(track.artworkURL,
-                     "Convenience init should default artworkURL to nil")
+        XCTAssertNil(track.artworkData,
+                     "Convenience init should default artworkData to nil")
     }
 
     // MARK: - Tests: Primary initializer (all fields)
@@ -164,7 +164,7 @@ final class TrackTests: XCTestCase {
         // Given
         let id       = UUID()
         let duration = TimeInterval(213.5)
-        let artwork  = URL(fileURLWithPath: "/Music/cover.jpg")
+        let artwork  = Data([0xFF, 0xD8, 0xFF]) // minimal JPEG header bytes
 
         // When
         let track = Track(id: id,
@@ -173,7 +173,7 @@ final class TrackTests: XCTestCase {
                           artist: "Full Artist",
                           album: "Full Album",
                           duration: duration,
-                          artworkURL: artwork)
+                          artworkData: artwork)
 
         // Then: Every field matches
         XCTAssertEqual(track.id,         id)
@@ -182,7 +182,7 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(track.artist,     "Full Artist")
         XCTAssertEqual(track.album,      "Full Album")
         XCTAssertEqual(track.duration,   duration)
-        XCTAssertEqual(track.artworkURL, artwork)
+        XCTAssertEqual(track.artworkData, artwork)
     }
 
     func testTrack_InitWithAllFields_DefaultParameters() {
@@ -194,10 +194,10 @@ final class TrackTests: XCTestCase {
                        "artist should default to empty string")
         XCTAssertEqual(track.album,   "",
                        "album should default to empty string")
-        XCTAssertNil(track.duration,
-                     "duration should default to nil")
-        XCTAssertNil(track.artworkURL,
-                     "artworkURL should default to nil")
+        XCTAssertEqual(track.duration, 0,
+                     "duration should default to 0")
+        XCTAssertNil(track.artworkData,
+                     "artworkData should default to nil")
     }
 
     // MARK: - Tests: Mutability
