@@ -50,7 +50,6 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 
 ### Scope
 
-**Part 1 — RepeatMode + Navigation + Polling (✅ committed)**
 - Add `RepeatMode` enum: `off` (default) / `all` / `one`; `Equatable`, `Sendable`
 - Add `@Published private(set) var repeatMode: RepeatMode = .off` to `AppState`
 - Add `func cycleRepeatMode()` — synchronous; cycles `off → all → one → off`
@@ -65,7 +64,6 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 - Call `startPolling()` after `playbackState = .playing` in `play(trackID:)`
 - Call `stopPolling()` at start of `stop()`
 
-**Part 2 — ShuffleMode (❌ not yet committed)**
 - Add `ShuffleMode.swift`: `typealias ShuffleMode = Bool` with `.off` / `.on` extensions
 - Add `@Published private(set) var isShuffled: ShuffleMode = .off` to `AppState`
 - Add `func toggleShuffle()` — synchronous; toggles `isShuffled`
@@ -110,13 +108,11 @@ No SwiftUI code in this sub-slice. All tests use `FakePlaybackService`.
 
 ### Files
 
-**Part 1 (✅ committed in `feat(slice 6-A)`):**
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/RepeatMode.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add repeatMode, navigation methods, polling timer)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/RepeatModeTests.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateNavigationTests.swift` (new)
 
-**Part 2 (❌ pending commit):**
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/ShuffleMode.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add isShuffled, toggleShuffle, shuffle-aware playNextTrack)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateShuffleTests.swift` (new)
@@ -315,13 +311,28 @@ feat(slice 6-B): add SwiftUI UI with full click and right-click interactions
 
 ---
 
-## Slice 6-C: Keyboard Shortcuts (= v0.1 Gate)
+## Slice 6-C: Menu Bar, Settings, and Keyboard Shortcuts (= v0.1 Gate)
 
 ### Goal
-Add full keyboard shortcut support so all playback and playlist actions
-can be operated without a mouse. Completing this slice marks **v0.1**.
+Add macOS menu bar commands, a Settings window, and keyboard shortcuts so all
+playback and playlist actions can be operated without a mouse.
+Completing this slice marks **v0.1**.
 
 ### Scope
+
+#### Menu Bar
+- **File** menu: Add Files (⌘O)
+- **Playback** menu: Play/Pause (Space), Stop (⌘.), Next (⌘→), Previous (⌘←),
+  Seek Forward 5s (→), Seek Backward 5s (←), Repeat Mode (⌘R), Shuffle (⌘S)
+
+#### Settings (⌘,)
+- **Allow duplicate tracks**: toggle to allow/disallow the same URL appearing
+  multiple times in one playlist. Default: off.
+- Stored as `@Published var allowDuplicateTracks: Bool = false` directly in
+  `AppState`. No separate `AppSettings` class. `AppState.init` signature
+  unchanged. Zero test file modifications required.
+
+#### Keyboard Shortcuts
 - `Space` — Play / Pause
 - `⌘.` — Stop
 - `⌘→` — Next track
@@ -331,70 +342,115 @@ can be operated without a mouse. Completing this slice marks **v0.1**.
 - `⌘R` — Cycle repeat mode
 - `⌘S` — Toggle shuffle
 - `⌘O` — Open file picker (add files)
-- `F7` — Previous track (Media Key)
-- `F8` — Play / Pause (Media Key)
-- `F9` — Next track (Media Key)
+
+> **Media Keys (F7/F8/F9) deferred.** Requires system-level `NSEvent`
+> monitoring; out of scope for v0.1.
+
+### Architecture notes
+- `HarmoniaPlayerCommands` uses `@FocusedObject private var appState: AppState?`.
+  `HarmoniaPlayerApp` exposes it via `.focusedSceneObject(appState)` on the
+  View inside `WindowGroup`.
+- "Add Files…" posts `Notification.Name.openFilePicker`. `PlaylistView` listens
+  with `.onReceive` and calls its existing `openFilePicker()` method.
+- `SettingsView` uses `@EnvironmentObject var appState: AppState` and binds
+  directly to `$appState.allowDuplicateTracks`. No `import HarmoniaCore`.
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift` (modify — add keyboard shortcuts)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/HarmoniaPlayerCommands.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/SettingsView.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify —
+  add `@Published var allowDuplicateTracks: Bool = false`;
+  update `load()` guard to `!allowDuplicateTracks && existingURLs.contains(url)`;
+  fix `insertionOrder` / `shuffleQueue` update to collect added IDs during the loop,
+  not filter by `existingURLs` after)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` (modify —
+  add `.commands { HarmoniaPlayerCommands() }`, `Settings` scene,
+  `.focusedSceneObject(appState)`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` (modify —
+  add `.onReceive(NotificationCenter.default.publisher(for: .openFilePicker))`)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppSettingsTests.swift` (new — 3 unit tests)
+- `App/HarmoniaPlayer/HarmoniaPlayerUITests/HarmoniaPlayerUITests.swift` (modify — add 2 XCUITest cases)
 
 ### Module boundary rules (enforced)
-- Keyboard shortcuts are bound in `ContentView` using `.keyboardShortcut()` or `onKeyPress`
-- All actions forward to `AppState` via `Task { await appState.method() }`
-- No direct service calls from View layer
+- Menu bar and keyboard shortcuts use `.commands` in `HarmoniaPlayerApp`
+- All actions forward to `AppState` via `Task { await appState?.method() }`
+- No direct service calls from View or Commands layer
+- `SettingsView` uses `AppState` only; no `import HarmoniaCore`
+
+### TDD matrix — Slice 6-C
+
+#### Unit tests (AppSettingsTests)
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testAllowDuplicateTracks_DefaultIsFalse` | Fresh `AppState` | read `allowDuplicateTracks` | `false` |
+| `testLoad_DuplicateURL_DefaultBehaviour_IsSkipped` | 1 track loaded, `allowDuplicateTracks == false` | `load(urls:)` same URL | `tracks.count == 1`, `skippedDuplicateURLs.count == 1` |
+| `testLoad_DuplicateURL_WhenAllowed_IsAdded` | 1 track loaded, `allowDuplicateTracks == true` | `load(urls:)` same URL | `tracks.count == 2`, `skippedDuplicateURLs.isEmpty` |
+
+#### XCUITest additions (HarmoniaPlayerUITests)
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testSettingsWindow_OpensWithKeyboardShortcut` | App running | `⌘,` pressed | Settings window appears |
+| `testAllowDuplicateTracksToggle_ExistsInSettings` | Settings window open | view loads | `allow-duplicates-toggle` exists |
 
 ### Done criteria
-- All shortcuts listed above are functional
-- Media Keys (F7/F8/F9) respond correctly
-- All Slice 1–6-B tests still green
+- `allowDuplicateTracks` defaults to `false` in `AppState`
+- `AppState.load()` respects `allowDuplicateTracks`
+- `AppState.init` signature unchanged; zero test file modifications
+- "Add Files…" menu item (⌘O) fires `NSOpenPanel` via notification
+- Playback menu present with all items and correct shortcuts
+- Settings window opens with ⌘,
+- "Allow duplicate tracks" toggle works and affects `load()` behaviour
+- `.focusedSceneObject(appState)` wired in `HarmoniaPlayerApp`
+- No `import HarmoniaCore` in any View, Command, or Settings file
+- All 3 AppSettingsTests green
+- All 2 new XCUITest cases pass
+- **All Slice 1–6-B tests still green**
 
 ### Commit message
 ```
-feat(slice 6-C): add keyboard shortcuts — v0.1 complete
+feat(slice 6-C): add menu bar, settings, and keyboard shortcuts — v0.1 complete
 
-- Space: play/pause
-- ⌘.: stop
-- ⌘→/⌘←: next/previous track
-- →/←: seek ±5 seconds
-- ⌘R: cycle repeat mode
-- ⌘S: toggle shuffle
-- ⌘O: open file picker
-- F7/F8/F9: media keys (previous/play-pause/next)
+- Add HarmoniaPlayerCommands: File menu (Add Files ⌘O), Playback menu
+  (Play/Pause Space, Stop ⌘., Next ⌘→, Previous ⌘←,
+   Seek ±5s →/←, Repeat ⌘R, Shuffle ⌘S)
+- Add SettingsView: allow duplicate tracks toggle
+- Add AppState.allowDuplicateTracks: default false; load() respects it
+- Wire HarmoniaPlayerApp: .commands, Settings scene, .focusedSceneObject
+- Wire PlaylistView: .onReceive(openFilePicker) notification
+- Add AppSettingsTests: 3 unit test cases
+- Add HarmoniaPlayerUITests: 2 XCUITest cases
 ```
 
 ---
 
 ## Slice 6 Completion Gate (= v0.1 Gate)
 
-- ✅ RepeatMode defined; `off` / `all` / `one`
-- ✅ ShuffleMode defined; polling timer wired
-- ✅ All navigation methods in AppState
-- ✅ Full UI: playlist + player + album art + context menu
-- ✅ All keyboard shortcuts functional
-- ✅ Media Keys functional
-- ✅ All unit tests green
-- ✅ All XCUITest cases pass
-
 - ✅ `RepeatMode` defined; `off` / `all` / `one`
-- ✅ `AppState.repeatMode` defaults to `.off`
-- ✅ `playNextTrack()` respects `repeatMode` for all cases
-- ✅ `playPreviousTrack()` restarts track when at first position
-- ✅ `trackDidFinishPlaying()` dispatches correctly by `repeatMode`
-- ✅ All 19 Slice 6-A unit tests green
+- ✅ `ShuffleMode` defined; polling timer wired
+- ✅ All navigation methods in `AppState`
+- ✅ Full UI: playlist + player + album art + context menu
+- ✅ All 28 Slice 6-A unit tests green
 - ✅ App launches showing functional UI (not blank screen)
 - ✅ No `import HarmoniaCore` in any View file
 - ✅ `FreeTierIAPManager` in main target
-- ✅ All 6 XCUITest cases pass
+- ✅ All 7 Slice 6-B XCUITest cases pass
 - ✅ All Slice 1–5 tests still green
+- ✅ Playback menu with shortcuts present and functional
+- ✅ "Add Files…" menu item (⌘O) functional
+- ✅ Settings window opens with ⌘,
+- ✅ `allowDuplicateTracks` in `AppState`; `load()` respects it
+- ✅ All 3 AppSettingsTests green
+- ✅ All 2 new XCUITest cases pass
 
 ### Verification
 
 ```bash
 ⌘U in Xcode        # unit tests + XCUITest
-⌘R in Xcode        # manual: launch app, drag MP3, double-click to play
+⌘R in Xcode        # manual verification
 ```
 
----
 
 ## Related Slices
 
@@ -402,20 +458,3 @@ feat(slice 6-C): add keyboard shortcuts — v0.1 complete
 - **Slice 4 (Playback Control)** — `play(trackID:)`, `stop()`, `seek(to:)` called by navigation methods
 - **Slice 5 (Integration)** — `HarmoniaCoreProvider` used in `HarmoniaPlayerApp` production wiring
 ---
-
-## Known Issues
-
-### Seek Audio Glitch
-- **Symptom:** Audible cut + restart sound when seeking (dragging progress bar).
-- **Root cause:** `flush()` calls `playerNode.stop()` then `playerNode.play()`,
-  which creates a brief gap. Apple Music uses a gapless seek mechanism that
-  pre-schedules the next buffer before the current one finishes.
-- **Fix:** Requires redesigning HarmoniaCore render loop to support gapless seek.
-  Out of scope for Slice 6.
-### Allow Duplicate Tracks Setting
-- **Description:** Allow the same URL to appear multiple times in one playlist
-  (e.g. A → B → A).
-- **Current behaviour:** Duplicates are silently skipped; alert shown to user.
-- **Future:** Add a Settings toggle `Allow duplicate tracks in playlist`.
-  When enabled, `load()` skips the duplicate-URL check.
-- **Scope:** Out of scope for Slice 6. Requires Settings UI (future slice).
