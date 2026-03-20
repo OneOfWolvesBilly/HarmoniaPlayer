@@ -343,6 +343,13 @@ Completing this slice marks **v0.1**.
 - `⌘S` — Toggle shuffle
 - `⌘O` — Open file picker (add files)
 
+#### Shuffle Queue Popover
+- Visible only when `isShuffled == true`
+- Button in `PlaylistView` toolbar (right side, next to `+`)
+- Shows a popover listing all tracks in `shuffleQueue` order
+- Highlights the current track (`shuffleQueueIndex`)
+- Read-only — no interaction required
+
 > **Media Keys (F7/F8/F9) deferred.** Requires system-level `NSEvent`
 > monitoring; out of scope for v0.1.
 
@@ -367,7 +374,8 @@ Completing this slice marks **v0.1**.
   add `.commands { HarmoniaPlayerCommands() }`, `Settings` scene,
   `.focusedSceneObject(appState)`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` (modify —
-  add `.onReceive(NotificationCenter.default.publisher(for: .openFilePicker))`)
+  add `.onReceive(NotificationCenter.default.publisher(for: .openFilePicker))`;
+  add shuffle queue button + popover in toolbar)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppSettingsTests.swift` (new — 3 unit tests)
 - `App/HarmoniaPlayer/HarmoniaPlayerUITests/HarmoniaPlayerUITests.swift` (modify — add 2 XCUITest cases)
 
@@ -406,6 +414,9 @@ Completing this slice marks **v0.1**.
 - No `import HarmoniaCore` in any View, Command, or Settings file
 - All 3 AppSettingsTests green
 - All 2 new XCUITest cases pass
+- Shuffle queue button visible in `PlaylistView` toolbar when `isShuffled == true`
+- Shuffle queue popover shows tracks in `shuffleQueue` order with current track highlighted
+- `trackDidFinishPlaying()` respects `shuffleQueue` in `.off` mode
 - **All Slice 1–6-B tests still green**
 
 ### Commit message
@@ -421,6 +432,8 @@ feat(slice 6-C): add menu bar, settings, and keyboard shortcuts — v0.1 complet
 - Wire PlaylistView: .onReceive(openFilePicker) notification
 - Add AppSettingsTests: 3 unit test cases
 - Add HarmoniaPlayerUITests: 2 XCUITest cases
+- Fix AppState.trackDidFinishPlaying(): respect shuffleQueue in .off mode
+- Add PlaylistView shuffle queue button + popover (read-only, shows current position)
 ```
 
 ---
@@ -443,6 +456,8 @@ feat(slice 6-C): add menu bar, settings, and keyboard shortcuts — v0.1 complet
 - ✅ `allowDuplicateTracks` in `AppState`; `load()` respects it
 - ✅ All 3 AppSettingsTests green
 - ✅ All 2 new XCUITest cases pass
+- ✅ Shuffle queue popover visible and correct when `isShuffled == true`
+- ✅ `trackDidFinishPlaying()` respects `shuffleQueue` in `.off` mode
 
 ### Verification
 
