@@ -27,6 +27,7 @@ struct PlaylistView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selectedTrackIDs = Set<Track.ID>()
     @State private var sortOrder: [KeyPathComparator<Track>] = []
+    @State private var showShuffleQueue = false
 
     // MARK: - Computed
 
@@ -66,6 +67,19 @@ struct PlaylistView: View {
                     }
                     .help("Restore added order")
                 }
+                if appState.isShuffled {
+                    Button {
+                        showShuffleQueue.toggle()
+                    } label: {
+                        Image(systemName: "list.number")
+                    }
+                    .accessibilityIdentifier("shuffle-queue-button")
+                    .help("Show shuffle queue")
+                    .popover(isPresented: $showShuffleQueue, arrowEdge: .bottom) {
+                        shuffleQueuePopover
+                    }
+                }
+
                 Button {
                     openFilePicker()
                 } label: {
@@ -89,6 +103,9 @@ struct PlaylistView: View {
         }
         .onDrop(of: [UTType.audio, UTType.fileURL], isTargeted: nil) { providers in
             handleDrop(providers)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
+            openFilePicker()
         }
         .alert("Already in Playlist", isPresented: Binding(
             get: { !appState.skippedDuplicateURLs.isEmpty },
@@ -214,6 +231,64 @@ struct PlaylistView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
+    }
+
+    // MARK: - Shuffle Queue Popover
+
+    private var shuffleQueuePopover: some View {
+        let queue = appState.shuffleQueue
+        let currentIndex = appState.shuffleQueueIndex
+        let tracks = queue.compactMap { id in
+            appState.playlist.tracks.first { $0.id == id }
+        }
+
+        return VStack(alignment: .leading, spacing: 0) {
+            Text("Shuffle Queue")
+                .font(.headline)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(tracks.enumerated()), id: \.offset) { index, track in
+                        HStack(spacing: 8) {
+                            if index == currentIndex {
+                                Image(systemName: "speaker.wave.2.fill")
+                                    .foregroundStyle(Color.accentColor)
+                                    .frame(width: 16)
+                            } else {
+                                Text("\(index + 1)")
+                                    .font(.caption)
+                                    .foregroundStyle(Color.secondary)
+                                    .frame(width: 16)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(track.title)
+                                    .font(.body)
+                                    .fontWeight(index == currentIndex ? .semibold : .regular)
+                                    .lineLimit(1)
+                                if !track.artist.isEmpty {
+                                    Text(track.artist)
+                                        .font(.caption)
+                                        .foregroundStyle(Color.secondary)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(index == currentIndex
+                            ? Color.accentColor.opacity(0.1)
+                            : Color.clear)
+                    }
+                }
+            }
+            .frame(width: 280, height: min(CGFloat(tracks.count) * 44 + 16, 320))
+        }
     }
 
     // MARK: - File Picker

@@ -7,6 +7,7 @@
 //  Application entry point for macOS Free version.
 //
 
+
 import SwiftUI
 
 @main
@@ -22,7 +23,16 @@ struct HarmoniaPlayerApp: App {
             ContentView()
                 .environmentObject(appState)
                 .frame(minWidth: 620, minHeight: 480)
+                .focusedSceneObject(appState)
                 .ignoresSafeArea()
+        }
+        .commands {
+            HarmoniaPlayerCommands()
+        }
+
+        Settings {
+            SettingsView()
+                .environmentObject(appState)
         }
     }
 }

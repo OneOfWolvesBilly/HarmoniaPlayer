@@ -100,4 +100,30 @@ final class HarmoniaPlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["add-files-button"].waitForExistence(timeout: 5),
                       "add-files-button must exist in PlaylistView toolbar")
     }
+    // MARK: - Slice 6-C: Settings
+
+    /// Opens Settings via the app menu (more reliable than keyboard shortcut in XCUITest).
+    private func openSettingsWindow() {
+        app.menuBarItems["HarmoniaPlayer"].click()
+        app.menuBarItems["HarmoniaPlayer"].menus.menuItems["Settings…"].click()
+    }
+
+    func testSettingsWindow_OpensViaMenu() {
+        openSettingsWindow()
+        let settingsWindow = app.windows["Settings"]
+        XCTAssertTrue(settingsWindow.waitForExistence(timeout: 5),
+                      "Settings window must open via HarmoniaPlayer menu")
+    }
+
+    func testAllowDuplicateTracksToggle_ExistsInSettings() {
+        openSettingsWindow()
+        let settingsWindow = app.windows["Settings"]
+        XCTAssertTrue(settingsWindow.waitForExistence(timeout: 5),
+                      "Precondition: Settings window must open")
+        XCTAssertTrue(
+            settingsWindow.checkBoxes["allow-duplicates-toggle"].waitForExistence(timeout: 5),
+            "allow-duplicates-toggle must exist in Settings"
+        )
+    }
+
 }

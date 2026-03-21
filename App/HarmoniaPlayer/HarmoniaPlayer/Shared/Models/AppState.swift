@@ -117,6 +117,16 @@ final class AppState: ObservableObject {
     /// already exist in the playlist. Non-empty triggers a duplicate alert.
     @Published var skippedDuplicateURLs: [URL] = []
 
+    // MARK: - Settings
+
+    /// Whether duplicate URLs are allowed in the playlist.
+    ///
+    /// Default: `false` — duplicates are skipped and reported via `skippedDuplicateURLs`.
+    /// When `true`, the duplicate-URL check in `load(urls:)` is bypassed.
+    ///
+    /// Not `private(set)`: `SettingsView` binds directly via `$appState.allowDuplicateTracks`.
+    @Published var allowDuplicateTracks: Bool = false
+
     // MARK: - Repeat Mode State
 
     /// Current repeat mode.
@@ -133,8 +143,8 @@ final class AppState: ObservableObject {
     /// Contains a permutation of all track IDs in `playlist.tracks`.
     /// Rebuilt whenever shuffle is toggled on or the playlist changes.
     /// `shuffleQueueIndex` points to the current position in this queue.
-    private var shuffleQueue: [Track.ID] = []
-    private var shuffleQueueIndex: Int = 0
+    private(set) var shuffleQueue: [Track.ID] = []
+    private(set) var shuffleQueueIndex: Int = 0
 
     // MARK: - Polling
 
@@ -212,16 +222,20 @@ final class AppState: ObservableObject {
         // Collect existing URLs to prevent duplicates within the same playlist.
         let existingURLs = Set(playlist.tracks.map { $0.url })
         var skipped: [URL] = []
+        var addedIDs: [Track.ID] = []
         for url in urls {
-            if existingURLs.contains(url) {
+            if !allowDuplicateTracks && existingURLs.contains(url) {
                 skipped.append(url)
                 continue
             }
             do {
                 let track = try await tagReaderService.readMetadata(for: url)
                 playlist.tracks.append(track)
+                addedIDs.append(track.id)
             } catch {
-                playlist.tracks.append(Track(url: url))
+                let track = Track(url: url)
+                playlist.tracks.append(track)
+                addedIDs.append(track.id)
                 lastError = .failedToOpenFile
             }
         }
@@ -229,19 +243,15 @@ final class AppState: ObservableObject {
             skippedDuplicateURLs = skipped
         }
 
-        // Update insertionOrder with newly added track IDs
-        let newIDs = playlist.tracks
-            .filter { track in !existingURLs.contains(track.url) }
-            .map { $0.id }
-        playlist.insertionOrder.append(contentsOf: newIDs)
+        // Update insertionOrder with newly added track IDs.
+        // Uses addedIDs collected during the loop so duplicate-allowed tracks
+        // are included correctly.
+        playlist.insertionOrder.append(contentsOf: addedIDs)
 
         // If shuffle is active, insert newly added tracks at random positions
         // in the remaining (unplayed) portion of the shuffleQueue.
         if isShuffled {
-            let newIDs = playlist.tracks
-                .filter { track in !existingURLs.contains(track.url) }
-                .map { $0.id }
-            for id in newIDs {
+            for id in addedIDs {
                 // Insert at a random position strictly after the current playing track
                 // (shuffleQueueIndex + 1) so the new track can be played in the
                 // current round. If we're at the last track, append at the end.
@@ -372,9 +382,9 @@ final class AppState: ObservableObject {
         playlist.tracks = sorted
         playlist.sortKey = key
         playlist.sortAscending = ascending
-        if isShuffled {
-            buildShuffleQueue(startingWith: currentTrack?.id)
-        }
+        // Do NOT rebuild shuffleQueue here — sort only changes the visual display
+        // order in PlaylistView. shuffleQueue is an independent playback order
+        // and must not be affected by column sorting.
     }
 
     /// Restores insertion order and clears sort state.
@@ -385,9 +395,7 @@ final class AppState: ObservableObject {
         playlist.tracks = ordered
         playlist.sortKey = .none
         playlist.sortAscending = true
-        if isShuffled {
-            buildShuffleQueue(startingWith: currentTrack?.id)
-        }
+        // Do NOT rebuild shuffleQueue here — same reason as applySort().
     }
 
     /// Reorders tracks in the playlist.
@@ -716,17 +724,36 @@ final class AppState: ObservableObject {
         guard let current = currentTrack else { return }
         switch repeatMode {
         case .off:
-            // Natural completion: stop at end of playlist; do not wrap.
-            guard let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
-            else { return }
-            let nextIndex = currentIndex + 1
-            if nextIndex < playlist.tracks.count {
-                await play(trackID: playlist.tracks[nextIndex].id)
+            if isShuffled {
+                // Shuffle mode: advance shuffleQueueIndex directly.
+                // Do NOT call playNextTrack() — that is for manual button presses
+                // and always wraps when the queue is exhausted.
+                let nextIndex = shuffleQueueIndex + 1
+                if nextIndex < shuffleQueue.count {
+                    shuffleQueueIndex = nextIndex
+                    if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
+                        await play(trackID: trackID)
+                    }
+                } else {
+                    // Shuffle queue exhausted — stop and reset queue.
+                    await stop()
+                    currentTrack = nil
+                    shuffleQueue = []
+                    shuffleQueueIndex = 0
+                }
             } else {
-                // Last track finished — stop and clear currentTrack so
-                // PlayerView resets to "No Track Loaded" state.
-                await stop()
-                currentTrack = nil
+                // Normal mode: use playlist order.
+                guard let currentIndex = playlist.tracks.firstIndex(where: { $0.id == current.id })
+                else { return }
+                let nextIndex = currentIndex + 1
+                if nextIndex < playlist.tracks.count {
+                    await play(trackID: playlist.tracks[nextIndex].id)
+                } else {
+                    // Last track finished — stop and clear currentTrack so
+                    // PlayerView resets to "No Track Loaded" state.
+                    await stop()
+                    currentTrack = nil
+                }
             }
         case .all:
             await playNextTrack()
