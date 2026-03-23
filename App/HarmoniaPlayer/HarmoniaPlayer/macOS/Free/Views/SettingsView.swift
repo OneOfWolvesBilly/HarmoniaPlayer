@@ -27,11 +27,13 @@ struct SettingsView: View {
                     }
                 }
                 .accessibilityIdentifier("allow-duplicates-toggle")
+                .accessibilityElement(children: .contain)
             } header: {
                 Text("Playlist")
             }
         }
         .formStyle(.grouped)
         .frame(width: 380, height: 140)
+        .navigationTitle("Settings")
     }
 }

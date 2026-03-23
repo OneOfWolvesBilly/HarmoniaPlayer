@@ -57,6 +57,7 @@ struct PlayerView: View {
             seekSliderView
             transportControlsView
             modeControlsView
+            volumeSliderView
             statusLabelView
         }
         .padding(20)
@@ -235,6 +236,33 @@ struct PlayerView: View {
         }
         .buttonStyle(.plain)
         .disabled(appState.playlist.tracks.isEmpty)
+    }
+
+    // MARK: - Volume Slider
+
+    /// Volume control slider (0.0 – 1.0).
+    ///
+    /// Binds to `appState.volume`. On change, calls `appState.setVolume()`
+    /// to propagate the new value through the full stack.
+    private var volumeSliderView: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "speaker.fill")
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+            Slider(
+                value: Binding(
+                    get: { appState.volume },
+                    set: { newValue in
+                        Task { await appState.setVolume(newValue) }
+                    }
+                ),
+                in: 0.0...1.0
+            )
+            .accessibilityIdentifier("volume-slider")
+            Image(systemName: "speaker.wave.3.fill")
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+        }
     }
 
     // MARK: - Status Label
