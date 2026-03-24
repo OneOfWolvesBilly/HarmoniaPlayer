@@ -184,53 +184,114 @@ feat(slice 7-B): add multiple playlist tabs with create/rename/delete
 
 ### Goal
 Allow users to export playlists as M3U8 files and import M3U8 files from
-other apps (VLC, foobar2000, Apple Music). Uses absolute paths throughout.
+other apps (VLC, foobar2000, Apple Music).
+
+Export supports both absolute paths (for local use) and relative paths
+(relative to the saved `.m3u8` file, for portable use on USB drives or
+sharing with others).
 
 ### Scope
-- **Export**: `File → Export Playlist…` saves current playlist as `.m3u8`
-  with absolute paths and `#EXTINF` metadata
-- **Import**: `File → Import Playlist…` reads `.m3u8`, resolves absolute paths,
-  re-reads metadata via `TagReaderService` (ignores `#EXTINF` display text)
-- `#EXTINF` on export: `<duration_seconds>,<artist> - <title>`
-- Files not found on import: skipped with a warning alert listing missing paths
+
+#### Export
+- `File → Export Playlist…` opens `NSSavePanel` (macOS layer)
+- `NSSavePanel` offers a path-style picker: **Absolute** or **Relative**
+- Writes current active playlist as `.m3u8` with `#EXTINF` metadata
+
+#### Import
+- `File → Import Playlist…` opens `NSOpenPanel` (macOS layer), limited to `.m3u8`
+- Reads the file, resolves all paths to absolute URLs
+  (relative paths are resolved relative to the `.m3u8` file's directory)
+- Ignores `#EXTINF` lines — re-reads metadata via `TagReaderService`
+- Creates a **new playlist tab** named after the `.m3u8` filename (without extension)
+- Files not found on disk: skipped; a warning alert lists all missing paths
+
+#### `#EXTINF` format on export
+- `#EXTINF:<duration_seconds>,<artist> - <title>` when artist is non-empty
+- `#EXTINF:<duration_seconds>,<title>` when artist is empty
+- `duration == 0` → use `-1` (M3U8 standard for unknown duration)
+
+### Architecture decisions
+- `M3U8Service` is a pure value type — no I/O, no platform APIs
+- `NSSavePanel` and `NSOpenPanel` live in `HarmoniaPlayerCommands` (macOS layer);
+  `AppState` receives only plain `URL` values and never touches platform UI
+- Path-style selection UI is owned by `HarmoniaPlayerCommands`
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/M3U8Service.swift` (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/HarmoniaPlayerCommands.swift` (modify — add Export/Import to File menu)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add `exportPlaylist()`, `importPlaylist(from:)`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
+  (modify — add Export/Import to File menu, own NSSavePanel/NSOpenPanel)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
+  (modify — add `writeExport(to:pathStyle:)`, `importPlaylist(from:)`,
+  `skippedImportURLs`)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/M3U8ServiceTests.swift` (new)
 
 ### Public API shape
 
 ```swift
 // M3U8Service
+enum M3U8PathStyle {
+    case absolute
+    case relative(to: URL)  // URL of the .m3u8 file being written
+}
+
 struct M3U8Service {
-    func export(playlist: Playlist) -> String   // returns M3U8 string
-    func parse(m3u8: String) -> [URL]           // returns absolute URLs
+    /// Generates M3U8 string from playlist.
+    /// Paths are written as absolute or relative depending on pathStyle.
+    func export(playlist: Playlist, pathStyle: M3U8PathStyle) -> String
+
+    /// Parses M3U8 string and returns absolute URLs.
+    /// Relative paths are resolved against baseURL (directory of the .m3u8 file).
+    func parse(m3u8: String, baseURL: URL?) -> [URL]
 }
 
 // AppState additions
-func exportPlaylist() async         // opens NSSavePanel, writes .m3u8
-func importPlaylist(from url: URL) async   // reads .m3u8, loads tracks
+@Published var skippedImportURLs: [URL] = []
+
+/// Writes M3U8 string to the given URL.
+/// Called by HarmoniaPlayerCommands after NSSavePanel resolves the destination.
+func writeExport(to url: URL, pathStyle: M3U8PathStyle) throws
+
+/// Reads .m3u8 at url, creates a new playlist tab named after the filename,
+/// re-reads metadata via TagReaderService, populates skippedImportURLs for
+/// any files not found on disk.
+func importPlaylist(from url: URL) async
 ```
 
 ### Done criteria
-- Export produces valid M3U8 with absolute paths readable by VLC / foobar2000
-- Import reads M3U8, re-reads metadata via `TagReaderService`
-- Missing files on import show warning alert with list of skipped paths
+- Export produces valid M3U8 readable by VLC / foobar2000
+- Absolute path export: paths are fully qualified `file://` or POSIX paths
+- Relative path export: paths are relative to the `.m3u8` file location
+- Import reads M3U8, creates a new playlist tab named after the filename
+- Import re-reads metadata via `TagReaderService` (ignores `#EXTINF` text)
+- Missing files on import: skipped, warning alert lists all missing paths
 - All M3U8ServiceTests green
 
 ### Suggested commit message
 ```
 feat(slice 7-C): add M3U8 playlist import/export
 
-- Add M3U8Service: export playlist to .m3u8 (absolute paths)
-- Add M3U8Service: parse .m3u8, return absolute URLs
-- Add AppState.exportPlaylist(): NSSavePanel → write .m3u8
-- Add AppState.importPlaylist(): read .m3u8 → TagReaderService
+- Add M3U8Service: export(playlist:pathStyle:) → M3U8 string
+- Add M3U8Service: parse(m3u8:baseURL:) → absolute URLs
+- Add AppState.writeExport(to:pathStyle:): write .m3u8 file
+- Add AppState.importPlaylist(from:): new tab + TagReaderService
 - Add File menu: Export Playlist…, Import Playlist…
 - Add M3U8ServiceTests
 ```
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testExport_ProducesValidM3U8` | Playlist with 2 tracks | `export(playlist:pathStyle:.absolute)` | starts with `#EXTM3U`, contains absolute paths |
+| `testExport_EXTINF_WithArtist` | title="Creep", artist="Radiohead", duration=237 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:237,Radiohead - Creep` |
+| `testExport_EXTINF_EmptyArtist` | title="Untitled", artist="", duration=180 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:180,Untitled` |
+| `testExport_EXTINF_UnknownDuration` | duration=0 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:-1,` |
+| `testExport_RelativePaths` | track at `/music/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `a.mp3` |
+| `testExport_RelativePaths_SubDirectory` | track at `/music/rock/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `rock/a.mp3` |
+| `testParse_AbsolutePaths_ReturnsURLs` | M3U8 with 2 absolute paths | `parse(m3u8:baseURL:nil)` | returns 2 `file://` URLs |
+| `testParse_RelativePaths_ResolvesAgainstBase` | M3U8 with `a.mp3`, baseURL=`/music/` | `parse(m3u8:baseURL:)` | returns `file:///music/a.mp3` |
+| `testParse_IgnoresCommentLines` | M3U8 with `#EXTM3U` and `#EXTINF` lines | `parse(m3u8:baseURL:nil)` | only returns path lines |
+| `testParse_EmptyString` | `""` | `parse(m3u8:baseURL:nil)` | returns `[]` |
 
 
 ## Slice 7-D: Drag-to-Reorder
@@ -368,10 +429,16 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 | Test | Given | When | Then |
 |------|-------|------|------|
-| `testExport_ProducesValidM3U8` | Playlist with 2 tracks | `export(playlist:)` | output starts with `#EXTM3U`, contains absolute paths |
-| `testExport_EXTINF_Format` | Track with title/artist/duration | `export(playlist:)` | `#EXTINF:237,Artist - Title` |
-| `testParse_ReturnsAbsoluteURLs` | Valid M3U8 string | `parse(m3u8:)` | returns 2 `file://` URLs |
-| `testParse_IgnoresCommentLines` | M3U8 with `#EXTM3U` and `#EXTINF` | `parse(m3u8:)` | only returns file path lines |
+| `testExport_ProducesValidM3U8` | Playlist with 2 tracks | `export(playlist:pathStyle:.absolute)` | starts with `#EXTM3U`, contains absolute paths |
+| `testExport_EXTINF_WithArtist` | title="Creep", artist="Radiohead", duration=237 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:237,Radiohead - Creep` |
+| `testExport_EXTINF_EmptyArtist` | title="Untitled", artist="", duration=180 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:180,Untitled` |
+| `testExport_EXTINF_UnknownDuration` | duration=0 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:-1,` |
+| `testExport_RelativePaths` | track at `/music/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `a.mp3` |
+| `testExport_RelativePaths_SubDirectory` | track at `/music/rock/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `rock/a.mp3` |
+| `testParse_AbsolutePaths_ReturnsURLs` | M3U8 with 2 absolute paths | `parse(m3u8:baseURL:nil)` | returns 2 `file://` URLs |
+| `testParse_RelativePaths_ResolvesAgainstBase` | M3U8 with `a.mp3`, baseURL=`/music/` | `parse(m3u8:baseURL:)` | returns `file:///music/a.mp3` |
+| `testParse_IgnoresCommentLines` | M3U8 with `#EXTM3U` and `#EXTINF` lines | `parse(m3u8:baseURL:nil)` | only returns path lines |
+| `testParse_EmptyString` | `""` | `parse(m3u8:baseURL:nil)` | returns `[]` |
 
 ---
 
@@ -381,8 +448,9 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 - ✅ Volume slider visible and functional in PlayerView
 - ✅ Multiple playlists supported with tabs
-- ✅ Playlist export as M3U8 with absolute paths
-- ✅ Playlist import from M3U8, metadata re-read via TagReaderService
+- ✅ Playlist export as M3U8 with absolute or relative paths (user choice)
+- ✅ Playlist import from M3U8, creates new playlist tab named after filename
+- ✅ Playlist import re-reads metadata via TagReaderService
 - ✅ Drag-to-reorder functional within a playlist
 - ✅ Playlist survives app quit and relaunch
 - ✅ Sort state survives app quit and relaunch
