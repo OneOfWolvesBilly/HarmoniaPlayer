@@ -292,6 +292,54 @@ final class AppState: ObservableObject {
         currentTrack = nil
     }
 
+    // MARK: - Playlist Management
+
+    /// Appends a new empty playlist and switches to it.
+    ///
+    /// If `name` is empty, uses `"Playlist"` as the default name.
+    ///
+    /// - Parameter name: Display name for the new playlist.
+    func newPlaylist(name: String) {
+        let resolvedName = name.isEmpty ? "Playlist" : name
+        playlists.append(Playlist(name: resolvedName))
+        activePlaylistIndex = playlists.count - 1
+    }
+
+    /// Renames the playlist at the given index.
+    ///
+    /// No-op if `index` is out of range.
+    ///
+    /// - Parameters:
+    ///   - index: Index of the playlist to rename.
+    ///   - name: New display name.
+    func renamePlaylist(at index: Int, name: String) {
+        guard playlists.indices.contains(index) else { return }
+        playlists[index].name = name
+    }
+
+    /// Deletes the playlist at the given index.
+    ///
+    /// No-op if `index` is out of range.
+    /// If deleting the last playlist, inserts an empty `"Session"` playlist
+    /// before removing so `playlists` is never empty.
+    /// Adjusts `activePlaylistIndex` to remain valid after deletion:
+    /// - deleted index < activePlaylistIndex → decrement by 1
+    /// - deleted index >= activePlaylistIndex → clamp to new last index
+    ///
+    /// - Parameter index: Index of the playlist to delete.
+    func deletePlaylist(at index: Int) {
+        guard playlists.indices.contains(index) else { return }
+        if playlists.count == 1 {
+            playlists.append(Playlist(name: "Session"))
+        }
+        playlists.remove(at: index)
+        if index < activePlaylistIndex {
+            activePlaylistIndex -= 1
+        } else {
+            activePlaylistIndex = min(activePlaylistIndex, playlists.count - 1)
+        }
+    }
+
     /// Removes the track with the given ID from the playlist.
     ///
     /// No-op if `trackID` is not found. Sets `currentTrack` to `nil`
