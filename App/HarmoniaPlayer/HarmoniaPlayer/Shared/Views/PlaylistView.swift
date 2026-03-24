@@ -6,9 +6,9 @@
 //
 //  PURPOSE
 //  -------
-//  Left panel of the main window. Shows the current session playlist and
-//  provides all track management interactions available via click and
-//  right-click.
+//  Left panel of the main window. Shows a tab bar for all playlists,
+//  the current playlist tracks, and all track management interactions
+//  available via click and right-click.
 //
 //  DESIGN NOTES
 //  ------------
@@ -17,6 +17,9 @@
 //  - Sort state is stored in Playlist (Model layer), not in this View.
 //    This allows each playlist to have independent sort state.
 //  - No import HarmoniaCore — all state access goes through AppState.
+//  - Playlist tabs bind directly to appState.activePlaylistIndex.
+//  - Inline rename triggered by Notification.Name.renameActivePlaylist
+//    (defined in HarmoniaPlayerCommands.swift).
 //
 
 import SwiftUI
@@ -28,6 +31,13 @@ struct PlaylistView: View {
     @State private var selectedTrackIDs = Set<Track.ID>()
     @State private var sortOrder: [KeyPathComparator<Track>] = []
     @State private var showShuffleQueue = false
+
+    /// Index of the tab currently being renamed. `nil` = not renaming.
+    @State private var renamingIndex: Int? = nil
+    /// Temporary buffer while the user types a new name.
+    @State private var renameText: String = ""
+    /// Focus state for the rename TextField.
+    @FocusState private var isRenameFieldFocused: Bool
 
     // MARK: - Computed
 
@@ -55,42 +65,9 @@ struct PlaylistView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Playlist")
-                    .font(.headline)
-                Spacer()
-                if !sortOrder.isEmpty {
-                    Button {
-                        sortOrder = []
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down.circle")
-                    }
-                    .help("Restore added order")
-                }
-                if appState.isShuffled {
-                    Button {
-                        showShuffleQueue.toggle()
-                    } label: {
-                        Image(systemName: "list.number")
-                    }
-                    .accessibilityIdentifier("shuffle-queue-button")
-                    .help("Show shuffle queue")
-                    .popover(isPresented: $showShuffleQueue, arrowEdge: .bottom) {
-                        shuffleQueuePopover
-                    }
-                }
-
-                Button {
-                    openFilePicker()
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .accessibilityIdentifier("add-files-button")
-                .help("Add files to playlist")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-
+            playlistTabBar
+            Divider()
+            toolbarRow
             Divider()
 
             if appState.playlist.tracks.isEmpty {
@@ -107,6 +84,9 @@ struct PlaylistView: View {
         .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
             openFilePicker()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .renameActivePlaylist)) { _ in
+            beginRename(at: appState.activePlaylistIndex)
+        }
         .alert("Already in Playlist", isPresented: Binding(
             get: { !appState.skippedDuplicateURLs.isEmpty },
             set: { if !$0 { appState.skippedDuplicateURLs = [] } }
@@ -118,6 +98,113 @@ struct PlaylistView: View {
                 .joined(separator: "\n")
             Text("The following files are already in the playlist and were not added:\n\(names)")
         }
+    }
+
+    // MARK: - Playlist Tab Bar
+
+    private var playlistTabBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 0) {
+                ForEach(Array(appState.playlists.enumerated()), id: \.element.id) { index, pl in
+                    playlistTab(index: index, playlist: pl)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .frame(height: 36)
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+
+    @ViewBuilder
+    private func playlistTab(index: Int, playlist: Playlist) -> some View {
+        let isActive = index == appState.activePlaylistIndex
+        let isRenaming = renamingIndex == index
+        let isPlaying = playlist.id == appState.playingPlaylistID
+
+        Button {
+            if renamingIndex != nil {
+                commitRename()
+            }
+            appState.activePlaylistIndex = index
+        } label: {
+            HStack(spacing: 4) {
+                if isPlaying {
+                    Image(systemName: "speaker.wave.2.fill")
+                        .font(.caption2)
+                        .foregroundStyle(Color.accentColor)
+                }
+                if isRenaming {
+                    TextField("", text: $renameText)
+                        .textFieldStyle(.plain)
+                        .font(.callout)
+                        .frame(minWidth: 60, maxWidth: 160)
+                        .focused($isRenameFieldFocused)
+                        .onSubmit { commitRename() }
+                        .onExitCommand { cancelRename() }
+                } else {
+                    Text(playlist.name)
+                        .font(.callout)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isActive ? Color.accentColor.opacity(0.15) : Color.clear)
+            .overlay(
+                Rectangle()
+                    .frame(height: 2)
+                    .foregroundStyle(isActive ? Color.accentColor : Color.clear),
+                alignment: .bottom
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("playlist-tab-\(index)")
+        .contextMenu {
+            Button("Rename") {
+                beginRename(at: index)
+            }
+            Divider()
+            Button("Delete", role: .destructive) {
+                appState.deletePlaylist(at: index)
+            }
+        }
+    }
+
+    // MARK: - Toolbar Row
+
+    private var toolbarRow: some View {
+        HStack {
+            Spacer()
+            if !sortOrder.isEmpty {
+                Button {
+                    sortOrder = []
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down.circle")
+                }
+                .help("Restore added order")
+            }
+            if appState.isShuffled {
+                Button {
+                    showShuffleQueue.toggle()
+                } label: {
+                    Image(systemName: "list.number")
+                }
+                .accessibilityIdentifier("shuffle-queue-button")
+                .help("Show shuffle queue")
+                .popover(isPresented: $showShuffleQueue, arrowEdge: .bottom) {
+                    shuffleQueuePopover
+                }
+            }
+            Button {
+                openFilePicker()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .accessibilityIdentifier("add-files-button")
+            .help("Add files to playlist")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
     }
 
     // MARK: - Table
@@ -158,11 +245,9 @@ struct PlaylistView: View {
         .frame(maxHeight: .infinity)
         .onChange(of: sortOrder) {
             guard let first = sortOrder.first else {
-                // User cleared sort — restore insertion order
                 appState.restoreInsertionOrder()
                 return
             }
-            // Map KeyPathComparator back to PlaylistSortKey
             let key: PlaylistSortKey
             switch first.keyPath {
             case \Track.title:    key = .title
@@ -289,6 +374,32 @@ struct PlaylistView: View {
             }
             .frame(width: 280, height: min(CGFloat(tracks.count) * 44 + 16, 320))
         }
+    }
+
+    // MARK: - Inline Rename
+
+    private func beginRename(at index: Int) {
+        guard appState.playlists.indices.contains(index) else { return }
+        renameText = appState.playlists[index].name
+        renamingIndex = index
+        // Delay one run loop so the TextField has time to appear before focusing
+        DispatchQueue.main.async {
+            isRenameFieldFocused = true
+        }
+    }
+
+    private func commitRename() {
+        guard let index = renamingIndex else { return }
+        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+        let finalName = trimmed.isEmpty ? appState.playlists[index].name : trimmed
+        appState.renamePlaylist(at: index, name: finalName)
+        isRenameFieldFocused = false
+        renamingIndex = nil
+    }
+
+    private func cancelRename() {
+        isRenameFieldFocused = false
+        renamingIndex = nil
     }
 
     // MARK: - File Picker

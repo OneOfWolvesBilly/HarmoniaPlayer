@@ -63,7 +63,7 @@ final class AppStateMultiPlaylistTests: XCTestCase {
 
     func testNewPlaylist_EmptyName_UsesDefault() {
         sut.newPlaylist(name: "")
-        XCTAssertEqual(sut.playlists[1].name, "Playlist")
+        XCTAssertEqual(sut.playlists[1].name, "Playlist 2")
     }
 
     // MARK: - renamePlaylist
@@ -90,7 +90,7 @@ final class AppStateMultiPlaylistTests: XCTestCase {
     func testDeletePlaylist_LastOne_AutoInsertsSession() {
         sut.deletePlaylist(at: 0)
         XCTAssertEqual(sut.playlists.count, 1)
-        XCTAssertEqual(sut.playlists[0].name, "Session")
+        XCTAssertEqual(sut.playlists[0].name, "Playlist 1")
     }
 
     func testDeletePlaylist_LastOne_ActiveIndexStaysZero() {

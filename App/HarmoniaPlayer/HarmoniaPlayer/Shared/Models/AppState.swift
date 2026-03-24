@@ -103,6 +103,13 @@ final class AppState: ObservableObject {
     /// (`play()`, `pause()`, `stop()`, `play(trackID:)`).
     @Published private(set) var playbackState: PlaybackState = .idle
 
+    /// ID of the playlist that contains the currently playing track.
+    ///
+    /// Set to `playlists[activePlaylistIndex].id` when `play(trackID:)` succeeds.
+    /// Cleared to `nil` by `stop()` and when the last track finishes naturally.
+    /// Uses `Playlist.ID` (UUID) so it remains valid after tab reordering.
+    @Published private(set) var playingPlaylistID: Playlist.ID?
+
     /// Current playback position in seconds.
     ///
     /// Initialised to `0`. Updated on successful `seek(to:)` and
@@ -214,7 +221,7 @@ final class AppState: ObservableObject {
         self.isProUnlocked = iapManager.isProUnlocked
 
         // Step 6: Initialise playlist state
-        self.playlists = [Playlist(name: "Session")]
+        self.playlists = [Playlist(name: "Playlist 1")]
         self.currentTrack = nil
 
         // Note: viewPreferences and lastError use property-level defaults;
@@ -296,13 +303,25 @@ final class AppState: ObservableObject {
 
     /// Appends a new empty playlist and switches to it.
     ///
-    /// If `name` is empty, uses `"Playlist"` as the default name.
+    /// If `name` is empty, generates the next available "Playlist N" name
+    /// by finding the lowest unused number across all existing playlists.
     ///
     /// - Parameter name: Display name for the new playlist.
     func newPlaylist(name: String) {
-        let resolvedName = name.isEmpty ? "Playlist" : name
+        let resolvedName = name.isEmpty ? nextAvailablePlaylistName() : name
         playlists.append(Playlist(name: resolvedName))
         activePlaylistIndex = playlists.count - 1
+    }
+
+    /// Returns the next available "Playlist N" name by finding the lowest
+    /// unused number across all existing playlists.
+    private func nextAvailablePlaylistName() -> String {
+        let usedNumbers = Set(playlists.compactMap { pl -> Int? in
+            guard pl.name.hasPrefix("Playlist ") else { return nil }
+            return Int(pl.name.dropFirst("Playlist ".count))
+        })
+        let next = (1...).first { !usedNumbers.contains($0) } ?? (playlists.count + 1)
+        return "Playlist \(next)"
     }
 
     /// Renames the playlist at the given index.
@@ -330,7 +349,7 @@ final class AppState: ObservableObject {
     func deletePlaylist(at index: Int) {
         guard playlists.indices.contains(index) else { return }
         if playlists.count == 1 {
-            playlists.append(Playlist(name: "Session"))
+            playlists.append(Playlist(name: "Playlist 1"))
         }
         playlists.remove(at: index)
         if index < activePlaylistIndex {
@@ -556,6 +575,7 @@ final class AppState: ObservableObject {
         playbackState = .stopped
         currentTime = 0
         pendingSeekTime = 0
+        playingPlaylistID = nil
     }
 
     /// Seek to an absolute position in the current track.
@@ -643,6 +663,7 @@ final class AppState: ObservableObject {
             duration = await playbackService.duration()
             try await playbackService.play()
             playbackState = .playing
+            playingPlaylistID = playlists[activePlaylistIndex].id
             startPolling()
         } catch {
             let mapped = mapToPlaybackError(error)

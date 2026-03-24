@@ -13,6 +13,10 @@ extension Notification.Name {
     /// Posted when the user selects "Add Files…" from the menu bar.
     /// `PlaylistView` listens and calls `openFilePicker()`.
     static let openFilePicker = Notification.Name("harmoniaPlayer.openFilePicker")
+
+    /// Posted when the user selects "Rename Playlist" from the menu bar.
+    /// `PlaylistView` listens and activates inline tab rename.
+    static let renameActivePlaylist = Notification.Name("harmoniaPlayer.renameActivePlaylist")
 }
 
 // MARK: - Commands
@@ -29,12 +33,28 @@ struct HarmoniaPlayerCommands: Commands {
         // Remove default "New" item — not applicable for a music player.
         CommandGroup(replacing: .newItem) {}
 
-        // Add "Add Files…" to the File menu.
+        // Add "Add Files…" and playlist management to the File menu.
         CommandGroup(after: .newItem) {
             Button("Add Files…") {
                 NotificationCenter.default.post(name: .openFilePicker, object: nil)
             }
             .keyboardShortcut("o", modifiers: .command)
+
+            Divider()
+
+            Button("New Playlist") {
+                appState?.newPlaylist(name: "")
+                NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
+            }
+
+            Button("Rename Playlist") {
+                NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
+            }
+
+            Button("Delete Playlist") {
+                guard let state = appState else { return }
+                state.deletePlaylist(at: state.activePlaylistIndex)
+            }
         }
 
         // Playback menu
