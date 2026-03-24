@@ -127,6 +127,14 @@ final class AppState: ObservableObject {
     /// Not `private(set)`: `SettingsView` binds directly via `$appState.allowDuplicateTracks`.
     @Published var allowDuplicateTracks: Bool = false
 
+    // MARK: - Volume State
+
+    /// Current output volume in the range 0.0 (silent) to 1.0 (full).
+    ///
+    /// Default: `1.0`. Updated by `setVolume(_:)`.
+    /// Persisted across launches by Slice 7-E (persistence).
+    @Published var volume: Float = 1.0
+
     // MARK: - Repeat Mode State
 
     /// Current repeat mode.
@@ -502,6 +510,18 @@ final class AppState: ObservableObject {
         } catch {
             lastError = mapToPlaybackError(error)
         }
+    }
+
+    /// Sets the output volume.
+    ///
+    /// Clamps `volume` to 0.0–1.0 before updating the published property
+    /// and forwarding to `PlaybackService`.
+    ///
+    /// - Parameter volume: Desired volume. Out-of-range values are silently clamped.
+    func setVolume(_ volume: Float) async {
+        let clamped = max(0.0, min(1.0, volume))
+        self.volume = clamped
+        await playbackService.setVolume(clamped)
     }
 
     // MARK: - Track Selection

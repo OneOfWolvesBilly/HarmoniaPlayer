@@ -65,4 +65,10 @@ protocol PlaybackService: AnyObject {
     ///
     /// For debugging and UI synchronization.
     var state: PlaybackState { get }
+
+    /// Sets the playback volume.
+    ///
+    /// - Parameter volume: Target volume in the range 0.0 (silent) to 1.0 (full).
+    ///   Values outside this range are clamped by implementations.
+    func setVolume(_ volume: Float) async
 }

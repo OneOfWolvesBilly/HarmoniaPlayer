@@ -88,4 +88,7 @@ final class HarmoniaPlaybackServiceAdapter: PlaybackService {
 
     /// Returns the duration of the loaded track. Delegates to the synchronous core method.
     func duration() async -> TimeInterval         { core.duration() }
+
+    /// Sets the playback volume. Delegates to the synchronous core method.
+    func setVolume(_ volume: Float) async         { core.setVolume(volume) }
 }

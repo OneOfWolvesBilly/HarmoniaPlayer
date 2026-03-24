@@ -50,6 +50,12 @@ struct PlayerView: View {
     /// The slider value captured at drag-start; updated as the user scrubs.
     @State private var seekValue: Double = 0
 
+    /// Opacity of the volume label bubble. 1.0 while dragging, fades to 0 after release.
+    @State private var volumeLabelOpacity: Double = 0
+
+    /// Task that delays hiding the volume label after drag ends.
+    @State private var volumeLabelHideTask: Task<Void, Never>? = nil
+
     var body: some View {
         VStack(spacing: 16) {
             albumArtView
@@ -240,29 +246,84 @@ struct PlayerView: View {
 
     // MARK: - Volume Slider
 
-    /// Volume control slider (0.0 – 1.0).
+    /// Volume control slider (0.0 – 1.0) with a floating percentage label
+    /// that appears above the thumb while dragging and fades out after release.
     ///
-    /// Binds to `appState.volume`. On change, calls `appState.setVolume()`
-    /// to propagate the new value through the full stack.
+    /// Label position tracks the thumb: centered on `volume × usable slider width`.
+    /// Value is snapped to 1 decimal place (e.g. 0.732 → 0.730 = "73.0%").
     private var volumeSliderView: some View {
         HStack(spacing: 8) {
             Image(systemName: "speaker.fill")
                 .font(.caption)
                 .foregroundStyle(Color.secondary)
-            Slider(
-                value: Binding(
-                    get: { appState.volume },
-                    set: { newValue in
-                        Task { await appState.setVolume(newValue) }
+
+            // GeometryReader measures the slider's available width so the
+            // label can be positioned directly above the current thumb position.
+            GeometryReader { geo in
+                let thumbEdge: CGFloat = 11   // macOS slider thumb edge inset (~half thumb width)
+                let usable = geo.size.width - thumbEdge * 2
+                let thumbX = thumbEdge + CGFloat(appState.volume) * usable
+
+                ZStack(alignment: .top) {
+                    // Volume label bubble — floats above thumb, center-aligned to thumb x
+                    Text(volumePercentLabel)
+                        .font(.caption2)
+                        .monospacedDigit()
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(.regularMaterial,
+                                    in: RoundedRectangle(cornerRadius: 5))
+                        .frame(minHeight: 22)
+                        .opacity(volumeLabelOpacity)
+                        .position(x: thumbX, y: 0)
+                        .animation(.easeOut(duration: 0.15), value: appState.volume)
+
+                    // Slider sits below the label
+                    Slider(
+                        value: Binding(
+                            get: { Double(appState.volume) },
+                            set: { newValue in
+                                // Snap to 0.1% steps (0.001 in 0.0–1.0 range)
+                                let snapped = Float((newValue * 1000).rounded() / 1000)
+                                Task { await appState.setVolume(snapped) }
+                            }
+                        ),
+                        in: 0.0...1.0
+                    ) { editing in
+                        if editing {
+                            // Cancel any pending hide and show immediately
+                            volumeLabelHideTask?.cancel()
+                            withAnimation(.easeIn(duration: 0.1)) {
+                                volumeLabelOpacity = 1
+                            }
+                        } else {
+                            // Delay fade-out by 1.5 s after drag ends
+                            volumeLabelHideTask = Task {
+                                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                                guard !Task.isCancelled else { return }
+                                await MainActor.run {
+                                    withAnimation(.easeOut(duration: 0.4)) {
+                                        volumeLabelOpacity = 0
+                                    }
+                                }
+                            }
+                        }
                     }
-                ),
-                in: 0.0...1.0
-            )
-            .accessibilityIdentifier("volume-slider")
+                    .accessibilityIdentifier("volume-slider")
+                    .padding(.top, 20) // make room for the label above
+                }
+            }
+            .frame(height: 44) // label height (22) + slider height (~22)
+
             Image(systemName: "speaker.wave.3.fill")
                 .font(.caption)
                 .foregroundStyle(Color.secondary)
         }
+    }
+
+    /// Volume as a 1-decimal-place percentage string (e.g. "73.0%").
+    private var volumePercentLabel: String {
+        String(format: "%.1f%%", appState.volume * 100)
     }
 
     // MARK: - Status Label

@@ -140,6 +140,8 @@ final class FakePlaybackService: PlaybackService {
         seekCallCount = 0
         seekedToSeconds = []
         loadedURLs = []
+        setVolumeCallCount = 0
+        lastSetVolume = nil
     }
 
     /// Ordered list of URLs passed to `load(url:)`.
@@ -159,6 +161,12 @@ final class FakePlaybackService: PlaybackService {
 
     /// Ordered list of `seconds` values passed to `seek(to:)`.
     private(set) var seekedToSeconds: [TimeInterval] = []
+
+    /// Number of times `setVolume(_:)` was called.
+    private(set) var setVolumeCallCount = 0
+
+    /// Last volume value passed to `setVolume(_:)`.
+    private(set) var lastSetVolume: Float?
 
     // MARK: - Stub Configuration
 
@@ -212,4 +220,9 @@ final class FakePlaybackService: PlaybackService {
 
     func currentTime() async -> TimeInterval { stubbedCurrentTime }
     func duration() async -> TimeInterval { stubbedDuration }
+
+    func setVolume(_ volume: Float) async {
+        setVolumeCallCount += 1
+        lastSetVolume = volume
+    }
 }

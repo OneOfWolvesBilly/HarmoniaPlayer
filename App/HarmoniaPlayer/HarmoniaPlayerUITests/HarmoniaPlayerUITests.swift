@@ -102,10 +102,19 @@ final class HarmoniaPlayerUITests: XCTestCase {
     }
     // MARK: - Slice 6-C: Settings
 
-    /// Opens Settings via the app menu (more reliable than keyboard shortcut in XCUITest).
+    /// Opens Settings via the app menu bar.
+    ///
+    /// Waits for the menu item to exist before clicking to avoid
+    /// timing failures caused by menu-open delays.
     private func openSettingsWindow() {
-        app.menuBarItems["HarmoniaPlayer"].click()
-        app.menuBarItems["HarmoniaPlayer"].menus.menuItems["Settings…"].click()
+        let harmoniaMenu = app.menuBarItems["HarmoniaPlayer"]
+        XCTAssertTrue(harmoniaMenu.waitForExistence(timeout: 5),
+                      "HarmoniaPlayer menu bar item must exist")
+        harmoniaMenu.click()
+        let settingsItem = harmoniaMenu.menus.menuItems["Settings…"]
+        XCTAssertTrue(settingsItem.waitForExistence(timeout: 3),
+                      "Settings… menu item must appear after clicking menu")
+        settingsItem.click()
     }
 
     func testSettingsWindow_OpensViaMenu() {
@@ -120,8 +129,10 @@ final class HarmoniaPlayerUITests: XCTestCase {
         let settingsWindow = app.windows["Settings"]
         XCTAssertTrue(settingsWindow.waitForExistence(timeout: 5),
                       "Precondition: Settings window must open")
+        // Use descendants to find the toggle regardless of how macOS renders it
+        let toggle = settingsWindow.descendants(matching: .any)["allow-duplicates-toggle"]
         XCTAssertTrue(
-            settingsWindow.checkBoxes["allow-duplicates-toggle"].waitForExistence(timeout: 5),
+            toggle.waitForExistence(timeout: 5),
             "allow-duplicates-toggle must exist in Settings"
         )
     }
