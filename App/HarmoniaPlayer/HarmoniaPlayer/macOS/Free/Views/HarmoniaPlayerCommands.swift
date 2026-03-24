@@ -5,7 +5,9 @@
 //  SPDX-License-Identifier: MIT
 //
 
+import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Notification Name
 
@@ -54,6 +56,18 @@ struct HarmoniaPlayerCommands: Commands {
             Button("Delete Playlist") {
                 guard let state = appState else { return }
                 state.deletePlaylist(at: state.activePlaylistIndex)
+            }
+
+            Divider()
+
+            Button("Export Playlist…") {
+                guard let state = appState else { return }
+                exportPlaylist(appState: state)
+            }
+
+            Button("Import Playlist…") {
+                guard let state = appState else { return }
+                importPlaylist(appState: state)
             }
         }
 
@@ -137,5 +151,64 @@ struct HarmoniaPlayerCommands: Commands {
 
     private var shuffleLabel: String {
         appState?.isShuffled == true ? "Shuffle: On" : "Shuffle: Off"
+    }
+
+    // MARK: - Export / Import Helpers
+
+    private func exportPlaylist(appState: AppState) {
+        let panel = NSSavePanel()
+        panel.title = "Export Playlist"
+        panel.allowedContentTypes = [.init(filenameExtension: "m3u8")!]
+        panel.nameFieldStringValue = "\(appState.playlist.name).m3u8"
+        panel.canCreateDirectories = true
+
+        // Path style picker as accessory view
+        let useRelative = NSButton(checkboxWithTitle: "Use relative paths (for USB drives / sharing)", target: nil, action: nil)
+        useRelative.state = .off
+        panel.accessoryView = useRelative
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let pathStyle: M3U8PathStyle = useRelative.state == .on
+            ? .relative(to: url)
+            : .absolute
+
+        Task {
+            do {
+                try appState.writeExport(to: url, pathStyle: pathStyle)
+            } catch {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Export Failed"
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    private func importPlaylist(appState: AppState) {
+        let panel = NSOpenPanel()
+        panel.title = "Import Playlist"
+        panel.allowedContentTypes = [.init(filenameExtension: "m3u8")!]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            await appState.importPlaylist(from: url)
+            // Show warning alert if any files were missing
+            let skipped = appState.skippedImportURLs
+            if !skipped.isEmpty {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = "Some Files Were Not Found"
+                    alert.informativeText = "The following files were skipped:\n\n"
+                        + skipped.map { $0.path }.joined(separator: "\n")
+                    alert.alertStyle = .warning
+                    alert.runModal()
+                }
+            }
+        }
     }
 }
