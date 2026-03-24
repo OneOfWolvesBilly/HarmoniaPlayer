@@ -87,7 +87,7 @@ final class AppStateMultiPlaylistTests: XCTestCase {
         XCTAssertEqual(sut.playlists.count, 1)
     }
 
-    func testDeletePlaylist_LastOne_AutoInsertsSession() {
+    func testDeletePlaylist_LastOne_AutoInsertsPlaylist1() {
         sut.deletePlaylist(at: 0)
         XCTAssertEqual(sut.playlists.count, 1)
         XCTAssertEqual(sut.playlists[0].name, "Playlist 1")
