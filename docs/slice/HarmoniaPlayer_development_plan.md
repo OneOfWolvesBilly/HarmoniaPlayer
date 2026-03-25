@@ -1,9 +1,13 @@
 # HarmoniaPlayer Development Plan
 
-> **Last Updated:** 2026-03-16
-> 
+> **Last Updated:** 2026-03-25
+>
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
+>
+> **Scope note:** Sections 2–10 cover Slices 1–6 (v0.1 foundation, now complete).
+> Slices 7–9 are defined in their respective spec files and summarised in
+> Section 11 of this document.
 
 ---
 
@@ -745,9 +749,9 @@ Before merging each slice:
 
 ---
 
-## 10. Success Criteria
+## 10. Success Criteria (Slices 1–6)
 
-**HarmoniaPlayer v0.1 is complete when:**
+**Slices 1–6 are complete. All criteria below have been met:**
 
 - ✅ All 6 slices implemented and tested
 - ✅ Can load audio files and display metadata
@@ -755,7 +759,7 @@ Before merging each slice:
 - ✅ Playlist management works correctly
 - ✅ SwiftUI UI is functional — user can operate the app without code
 - ✅ Error handling is robust
-- ✅ Pro feature gating works
+- ✅ Pro feature gating works (format gating for FLAC/DSD)
 - ✅ No crashes or memory leaks
 - ✅ Documentation complete
 - ✅ Code reviewed and approved
@@ -806,3 +810,81 @@ ffmpeg -i test_playback.mp3 -metadata title="Test Track" \
 # Generate corrupt file
 echo -n "" > test_corrupt.mp3
 ```
+---
+
+## 11. Slices 7–9 Overview
+
+Slices 7–9 were scoped after Slice 6 completion. Each slice has its own
+spec file; this section provides a summary for orientation.
+
+### 11.1 Scope Evolution
+
+The original plan targeted Slice 6 as the v0.1 gate. After completing
+Slice 6, the scope was extended:
+
+- **Slices 7–8** — additional Free tier features required for a releasable v0.1
+- **Slice 9** — Pro tier gated behind StoreKit 2 IAP (v0.2)
+
+### 11.2 Slice 7: UX and Data Layer (Free)
+
+**Spec:** `docs/slice/slice_07_micro.md`
+**Developer spec:** `docs/slice/HarmoniaPlayer_slice_micro/HarmoniaPlayer_slice_7_micro.md`
+
+| Sub-slice | Content | Status |
+|---|---|---|
+| 7-A | Volume control end-to-end (AudioOutputPort → PlayerView) | ✅ Complete |
+| 7-B | Multiple playlist tabs (create, rename, delete) | ✅ Complete |
+| 7-C | M3U8 playlist import / export (absolute + relative paths) | ✅ Complete |
+| 7-D | Drag-to-reorder tracks in PlaylistView | Pending |
+| 7-E | Persistence via UserDefaults (playlists, settings, volume) | Pending |
+| 7-F | UI localisation — 24 languages including Arabic RTL | Pending |
+| 7-G | Column customization + sort; Track model expansion (Groups A–E) | Pending |
+| 7-H | File Info Panel (read-only tech info + editable source URL) | Pending |
+
+**Testing approach:** Unit tests (FakePlaybackService) for all AppState behaviour.
+Column customization persisted via `@AppStorage` in View layer (not AppState).
+
+### 11.3 Slice 8: UX Polish and Advanced Playback (Free)
+
+**Spec:** `docs/slice/slice_08_micro_draft.md`
+**Status:** Draft — review before implementation begins
+
+| Sub-slice | Content |
+|---|---|
+| 8-A | Menu bar disabled states + Play/Pause label fix + UndoManager (⌘Z / ⌘Y) |
+| 8-C | Mini Player floating window (⌘M, always on top) |
+| 8-D | ReplayGain volume normalisation (off / track / album mode) |
+
+> 8-B (Music Library / folder scanning) — removed; conflicts with foobar2000
+> design philosophy (no library management).
+>
+> 8-E (Play statistics + track rating) — deferred to backlog; fields already
+> defined in Track model Group E (Slice 7-G).
+
+**v0.1 gate:** Slice 8 complete.
+
+### 11.4 Slice 9: Pro Tier — IAP and Tag Editor
+
+**Spec:** `docs/slice/slice_09_micro_draft.md`
+**Status:** Draft — review before implementation begins
+
+| Sub-slice | Content |
+|---|---|
+| 9-A | StoreKit 2 IAP + Paywall UI |
+| 9-B | Tag Editor — basic fields (Groups A+B + bpm + comment) |
+| 9-C | Tag Editor — sort fields (sortTitle, sortArtist, etc.) |
+| 9-D | Tag Editor — artwork (embedded album art) |
+| 9-E | Tag Editor — lyrics (USLT embedded lyrics) |
+
+**Pro feature gating** for FLAC/DSD is already implemented in
+`AppState.play(trackID:)` (Slice 5-A). Slice 9-A only needs to provide a
+real `isProUser == true` after purchase.
+
+**v0.2 gate:** Slice 9 complete.
+
+### 11.5 Version Targets
+
+| Version | Gate | Description |
+|---|---|---|
+| v0.1 | Slice 8 complete | Free tier feature complete; first public release |
+| v0.2 | Slice 9 complete | Pro tier; Tag Editor + FLAC/DSD via App Store IAP |

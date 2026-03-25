@@ -44,20 +44,22 @@ It serves as:
 
 ## Features
 
-### Current Development Status (2026-01-07)
+### Current Development Status (2026-03-25)
+
+**✅ Completed:**
+- Slices 1–6: core architecture, audio playback, SwiftUI UI, menu bar, keyboard shortcuts
 
 **🚧 In Active Development:**
-- macOS Free version (v0.1) - Foundation in progress
-- iOS Free - Planned after macOS completion
-- Target formats: MP3, AAC, ALAC, WAV, AIFF
+- Slice 7: persistence, multiple playlists, M3U8 import/export, volume control,
+  column customization, File Info Panel, UI localisation (24 languages)
 
-**Development Timeline:**
-- **This Week (Jan 7-10):** Complete macOS Free v0.1
-- **Q1 2026 (Planned):** macOS Pro with FLAC/DSD support
-- **Q2 2026:** iOS Free version
-- **Q2-Q4 2026:** Linux HarmoniaCore (C++20) implementation
+**Planned:**
+- Slice 8 (v0.1): UndoManager, Mini Player, ReplayGain
+- Slice 9 (v0.2 Pro): StoreKit 2 IAP, Tag Editor, FLAC/DSD unlock
 
-> **Note:** This is a reference implementation. Features marked as "planned" are non-binding targets for validation purposes.
+**Supported formats:**
+- Free: MP3, AAC, ALAC, WAV, AIFF
+- Pro (v0.2): all Free formats + FLAC, DSD
 
 ## Installation
 
@@ -88,16 +90,13 @@ HarmoniaCore-Swift dependency is automatically fetched via SPM.
 
 ## Quick Start
 
-*(App is not yet functional - in development)*
-
-When complete:
 1. **Launch** HarmoniaPlayer
 2. **Add files** by clicking `+` or drag-and-drop
 3. **Double-click** a track to play
 4. **Use keyboard shortcuts**: `Space` to play/pause, `⌘→` for next track, `⌘←` for previous track
 5. **Repeat modes**: cycle through Off → Repeat All → Repeat One
 
-See [User Guide](docs/user_guide.md) for planned features.
+See [User Guide](docs/user_guide.md) for full feature documentation.
 
 ## Documentation
 
@@ -129,7 +128,7 @@ HARMONIAPLAYER/
 │       │   │       └── HarmoniaCoreProvider.swift
 │       │   ├── macOS/             # macOS-specific code
 │       │   │   └── Free/          # macOS Free version
-│       │   ├── iOS/               # iOS-specific code (v0.3+)
+│       │   ├── iOS/               # iOS-specific code (future)
 │       │   ├── Assets.xcassets
 │       │   ├── ContentView.swift
 │       │   └── HarmoniaPlayerApp.swift
@@ -149,24 +148,13 @@ See [Development Guide](docs/development_guide.md) for:
 - Testing procedures
 - Pull request process
 
-### Milestones (Non-binding)
+### Milestones
 
-HarmoniaPlayer is developed as a **reference and validation application**
-for exercising HarmoniaCore APIs in real-world scenarios.
+- **v0.1** — Free tier feature complete (Slices 1–8)
+- **v0.2** — Pro tier: Tag Editor + FLAC/DSD via App Store IAP (Slice 9)
 
-The following milestones are **non-binding targets**, evaluated based on
-validation readiness rather than delivery guarantees:
-
-- **Q1 2026 (Target)**  
-  Apple platform reference application for HarmoniaCore validation  
-  (used internally for architecture and behavior review)
-
-- **Future**  
-  Additional platform validation targets may be explored after
-  core behavior contracts stabilize.
-
-Note: HarmoniaPlayer is **not** a deliverable commitment of the NLnet Core grant.
-Its role is to support validation and integration of HarmoniaCore.
+For the full slice breakdown and scope evolution, see
+[Development Plan](docs/slice/HarmoniaPlayer_development_plan.md).
 
 ## Related Projects
 
