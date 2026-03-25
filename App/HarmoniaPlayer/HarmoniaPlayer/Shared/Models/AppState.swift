@@ -506,6 +506,9 @@ final class AppState: ObservableObject {
         let adjustedOffset = toOffset - fromOffsets.filter { $0 < toOffset }.count
         result.insert(contentsOf: itemsToMove, at: min(adjustedOffset, result.count))
         playlists[activePlaylistIndex].tracks = result
+        // Keep insertionOrder in sync with the new track order so that
+        // restoreInsertionOrder() reflects the user's manual reorder.
+        playlists[activePlaylistIndex].insertionOrder = result.map { $0.id }
     }
 
     // MARK: - Transport Controls
