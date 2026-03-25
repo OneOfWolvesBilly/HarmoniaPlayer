@@ -3,7 +3,8 @@
 ## Purpose
 
 This document defines **Slice 7: Persistence, Volume, Multiple Playlists,
-Drag-to-Reorder, and UI Localisation** for HarmoniaPlayer.
+Drag-to-Reorder, Column Customization, File Info Panel, and UI Localisation**
+for HarmoniaPlayer.
 
 Slice 7 is the first post-v0.1 slice. It adds data persistence so the app
 remembers the user's playlist and settings across launches, plus several UI
@@ -20,22 +21,27 @@ improvements that bring HarmoniaPlayer closer to a production music player.
 - Allow drag-to-reorder tracks within a playlist
 - Persist playlist, sort state, and settings across app launches
 - Localise all UI text into 24 languages
+- Expand `Track` model with full tag field set
+- Allow users to show/hide and reorder metadata columns in PlaylistView
+- Show file technical info in a File Info Panel (source URL editable)
 
 ### Non-goals
 - iCloud sync (future)
-- Playlist export/import (future)
 - Gapless playback (future)
-- macOS Pro IAP / StoreKit integration (future)
+- Tag editing / writing (Pro feature — Slice 9)
+- macOS Pro IAP / StoreKit integration (Slice 9)
 
 ### Constraints
 - All persistence uses `UserDefaults`; no external files in this slice
 - `import HarmoniaCore` restricted to Integration Layer files only
-- HarmoniaCore changes in 7-B must not break existing HarmoniaCore tests
+- HarmoniaCore changes in 7-A must not break existing HarmoniaCore tests
+- Tag Editor is a Pro feature and must NOT appear in Slice 7
 
 ### Dependencies
 - Requires: Slice 6 complete — app launches, plays music, menu bar and
   keyboard shortcuts functional
-- Provides: Full persistence, volume control, multi-playlist, localisation
+- Provides: Full persistence, volume control, multi-playlist, localisation,
+  column customization, expanded Track model, File Info Panel
 
 ---
 
@@ -394,6 +400,139 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 ---
 
+## Slice 7-G: Column Customization
+
+### Goal
+Allow users to show/hide optional metadata columns in `PlaylistView`, drag
+columns left/right to reorder, and sort by clicking any column header.
+Three columns (title, artist, duration) are always visible.
+This slice also expands `Track` with the full tag field set required by
+later slices (ReplayGain in 8-D, Tag Editor in Slice 9).
+
+### Scope
+- Expand `Track`: add Groups A–D (tag fields + file technical info) and
+  Group E (reserved: playCount, lastPlayedAt, rating, artworkData — always
+  nil/default in Slice 7, no UI exposed)
+- Map Groups A–D in `HarmoniaTagReaderAdapter`
+- Migrate `PlaylistView` to SwiftUI `Table` with `TableColumnCustomization`
+- Fixed columns (cannot be hidden): title, artist, duration
+- Optional columns (hidden by default except album): album, albumArtist, year,
+  trackNumber, discNumber, genre, composer, bpm, bitrate, sampleRate,
+  channels, fileSize, fileFormat, comment
+- All columns sortable by clicking header
+- Column visibility and order persisted via `@AppStorage`
+
+> Full field list and TagReaderAdapter mapping table: see
+> `HarmoniaPlayer_slice_7_micro.md` § Slice 7-G.
+
+### Files
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Track.swift`
+  (modify — add Groups A–E)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagReaderAdapter.swift`
+  (modify — map Groups A–D)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
+  (modify — migrate to Table + TableColumnCustomization)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/TrackTests.swift`
+  (modify — add tests for new fields)
+
+### Public API shape
+
+```swift
+// PlaylistView (View-local, not AppState)
+@AppStorage("playlistColumnCustomization")
+private var columnCustomization: TableColumnCustomization<Track>
+
+@State private var sortOrder: [KeyPathComparator<Track>] = [
+    .init(\.title, order: .forward)
+]
+```
+
+### Done criteria
+- Fixed columns (title, artist, duration) always visible, cannot be hidden
+- Optional columns toggleable via right-click on column header
+- All columns draggable left/right to reorder
+- Clicking any column header sorts ascending; clicking again sorts descending
+- Column state survives app relaunch
+- Group E fields in model but no UI in Slice 7
+- All TrackTests green; all Slice 1–6 tests still green
+
+### Suggested commit message
+```
+feat(slice 7-G): expand Track model and add column customization to PlaylistView
+
+- Add Groups A–E fields to Track (albumArtist, composer, genre, year,
+  trackNumber, trackTotal, discNumber, discTotal, bpm, replayGainTrack,
+  replayGainAlbum, comment, bitrate, sampleRate, channels, fileSize,
+  fileFormat, playCount, lastPlayedAt, rating, artworkData)
+- Map Groups A–D in HarmoniaTagReaderAdapter
+- Migrate PlaylistView to Table with TableColumnCustomization
+- Fixed: title, artist, duration; optional: album + 13 columns
+- All columns sortable; column state persisted via AppStorage
+```
+
+---
+
+## Slice 7-H: File Info Panel
+
+### Goal
+Show technical file information for the selected track via right-click →
+"Get Info" or ⌘I. The source URL field (`kMDItemWhereFroms`) is editable —
+user can clear or modify the value.
+
+### Scope
+- New `ExtendedAttributeService`: reads / writes `kMDItemWhereFroms` via
+  Darwin `getxattr` / `setxattr` / `removexattr`
+- New `FileInfoView` sheet with three sections:
+  - **Location** (read-only): file name, folder, path, size, dates
+  - **General** (read-only): format, duration, bit rate, sample rate,
+    channels, tag type
+  - **Source** (editable): `kMDItemWhereFroms`; Edit / Clear buttons
+- Playback Statistics section (Played / First played / Last played / Added)
+  reserved for Slice 8-E — not implemented here
+
+> Display spec tables for all three sections: see
+> `HarmoniaPlayer_slice_7_micro.md` § Slice 7-H.
+
+### Files
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/FileInfoView.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/ExtendedAttributeService.swift` (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
+  (modify — add right-click "Get Info" context menu item)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
+  (modify — add ⌘I shortcut)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/ExtendedAttributeServiceTests.swift` (new)
+
+### Public API shape
+
+```swift
+struct ExtendedAttributeService {
+    func readWhereFroms(url: URL) -> [String]
+    func writeWhereFroms(_ sources: [String], url: URL) throws
+    func clearWhereFroms(url: URL) throws
+}
+```
+
+### Done criteria
+- File Info panel opens on right-click → "Get Info" or ⌘I
+- Location and General sections display correct values (read-only)
+- Source field shows `kMDItemWhereFroms` when present; `(none)` when absent
+- Clear removes attribute; Edit + save updates attribute
+- No crash when attribute is absent
+- ExtendedAttributeServiceTests green; all Slice 1–6 tests still green
+
+### Suggested commit message
+```
+feat(slice 7-H): add File Info Panel with editable source URL
+
+- Add ExtendedAttributeService: read/write/clear kMDItemWhereFroms
+- Add FileInfoView: Location + General (read-only), Source (editable)
+- Add right-click "Get Info" in PlaylistView
+- Add ⌘I shortcut in HarmoniaPlayerCommands
+- Add ExtendedAttributeServiceTests
+```
+
+---
+
 ## Slice 7 TDD Matrix
 
 > Detailed test cases to be defined per sub-slice during implementation.
@@ -425,7 +564,28 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 ---
 
-### Slice 7-C — Playlist Import/Export (unit tests)
+### Slice 7-G — Column Customization (unit tests)
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testTrack_DefaultGenre_IsEmpty` | `Track(url:)` | read `genre` | `""` |
+| `testTrack_DefaultYear_IsNil` | `Track(url:)` | read `year` | `nil` |
+| `testTrack_DefaultBitrate_IsNil` | `Track(url:)` | read `bitrate` | `nil` |
+| `testTrack_DefaultPlayCount_IsZero` | `Track(url:)` | read `playCount` | `0` |
+| `testTrack_DefaultRating_IsNil` | `Track(url:)` | read `rating` | `nil` |
+| `testTrack_AllNewFields_RoundTrip` | Track with all fields set | encode → decode | all fields match |
+
+### Slice 7-H — File Info Panel (unit tests)
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testReadWhereFroms_WhenPresent_ReturnsURLs` | File with source attribute | `readWhereFroms(url:)` | returns non-empty array |
+| `testReadWhereFroms_WhenAbsent_ReturnsEmpty` | Fresh temp file | `readWhereFroms(url:)` | returns `[]` |
+| `testWriteWhereFroms_PersistsValue` | Fresh temp file | `writeWhereFroms(["https://x.com"], url:)` then read | `["https://x.com"]` |
+| `testClearWhereFroms_RemovesAttribute` | File with source attribute | `clearWhereFroms(url:)` then read | `[]` |
+| `testClearWhereFroms_WhenAbsent_DoesNotThrow` | Fresh temp file | `clearWhereFroms(url:)` | no throw |
+
+### Slice 7-C — M3U8 Import/Export (unit tests)
 
 | Test | Given | When | Then |
 |------|-------|------|------|
@@ -458,6 +618,15 @@ feat(slice 7-F): add UI localisation for 24 languages
 - ✅ All UI text localised in 24 languages
 - ✅ Language change in Settings takes effect immediately
 - ✅ Arabic RTL layout verified
+- ✅ `Track` model expanded with Groups A–E; all new fields `Codable`
+- ✅ Group E fields defined but no UI exposed in Slice 7
+- ✅ Fixed columns (title, artist, duration) always visible, cannot be hidden
+- ✅ Optional columns toggleable and reorderable via column header
+- ✅ All columns sortable by clicking header
+- ✅ Column state survives app relaunch
+- ✅ File Info Panel opens on right-click or ⌘I
+- ✅ Location and General sections show correct values (read-only)
+- ✅ Source field editable (Edit / Clear)
 - ✅ All Slice 7 unit tests green
 - ✅ All Slice 1–6 tests still green
 
@@ -465,5 +634,8 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 ## Related Slices
 
-- **Slice 6 (UI + Menu Bar)** — provides `AppState`, `PlayerView`, `PlaylistView`,
-  `HarmoniaPlayerCommands`, and `SettingsView` that Slice 7 extends
+- **Slice 2 (Playlist Management)** — `playlist.tracks` data structure extended by 7-B to `[Playlist]`
+- **Slice 3 (Metadata Reading)** — `TagReaderService` extended by 7-G to read Groups A–D fields
+- **Slice 5 (Integration)** — `HarmoniaTagReaderAdapter` extended by 7-G with full tag mapping
+- **Slice 6 (UI + Menu Bar)** — `AppState`, `PlayerView`, `PlaylistView`, `HarmoniaPlayerCommands`,
+  and `SettingsView` all extended by Slice 7 sub-slices
