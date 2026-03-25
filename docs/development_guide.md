@@ -15,7 +15,6 @@ HarmoniaPlayer is part of the **HarmoniaSuite** ecosystem:
 1. **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** (Main Specification)
    - Contains Swift and C++20 implementations
    - Platform-agnostic specifications
-   - Used for NLnet grant review
    - Structure:
      - `apple-swift/` - Swift implementation
      - `linux-cpp/` - C++20 implementation (planned)
@@ -117,7 +116,7 @@ HARMONIAPLAYER/                   # Repository root
 │       │   │   └── Free/         # macOS Free app
 │       │   │       ├── HarmoniaPlayerApp.swift
 │       │   │       └── ContentView.swift
-│       │   ├── iOS/              # iOS apps (v0.3+)
+│       │   ├── iOS/              # iOS apps (future)
 │       │   └── Assets.xcassets
 │       ├── HarmoniaPlayerTests/  # Test target (Xcode default location)
 │       │   └── SharedTests/      # Shared test code

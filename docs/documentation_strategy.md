@@ -267,7 +267,7 @@ Last updated: 2026-01-15
 | **Document modification time** | Git commit timestamp |
 | **Feature release time** | `CHANGELOG.md` |
 | **Version correspondence** | Document header (optional) |
-| **Roadmap timeline** | `README.md` Roadmap section |
+| **Roadmap timeline** | `docs/slice/HarmoniaPlayer_development_plan.md` |
 
 ### Optional: Version Tagging
 
