@@ -308,20 +308,25 @@ feat(slice 7-C): add M3U8 playlist import/export
 - Reorder updates `playlist.tracks` and `playlist.insertionOrder`
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` (modify)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify if needed)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — fix `moveTrack` to sync `insertionOrder`)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateDragReorderTests.swift` (new)
 
 ### Public API shape
 No new public API. Uses existing `moveTrack(fromOffsets:toOffset:)` in `AppState`.
 
 ### Done criteria
-- Tracks can be dragged to a new position within the playlist
-- Track order is updated after drag
-- Reordered order persists via Slice 7-A
+- `AppState.moveTrack` syncs `insertionOrder` with `tracks` after every reorder
+- `AppStateDragReorderTests` green
+- All Slice 1–7-C tests still green
+- Drag UI implemented in Slice 7-G (SwiftUI Table row-selection gesture intercepts drag)
 
 ### Suggested commit message
 ```
-feat(slice 7-D): add drag-to-reorder tracks in PlaylistView
+fix(slice 7-d): sync insertionOrder in moveTrack
+
+- moveTrack was updating tracks but not insertionOrder
+- add AppStateDragReorderTests
+- drag UI deferred to slice 7-G (SwiftUI Table blocks drag gestures)
 ```
 
 ---
@@ -585,8 +590,6 @@ feat(slice 7-H): add File Info Panel with editable source URL
 | `testClearWhereFroms_RemovesAttribute` | File with source attribute | `clearWhereFroms(url:)` then read | `[]` |
 | `testClearWhereFroms_WhenAbsent_DoesNotThrow` | Fresh temp file | `clearWhereFroms(url:)` | no throw |
 
-### Slice 7-C — M3U8 Import/Export (unit tests)
-
 | Test | Given | When | Then |
 |------|-------|------|------|
 | `testExport_ProducesValidM3U8` | Playlist with 2 tracks | `export(playlist:pathStyle:.absolute)` | starts with `#EXTM3U`, contains absolute paths |
@@ -611,7 +614,7 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - ✅ Playlist export as M3U8 with absolute or relative paths (user choice)
 - ✅ Playlist import from M3U8, creates new playlist tab named after filename
 - ✅ Playlist import re-reads metadata via TagReaderService
-- ✅ Drag-to-reorder functional within a playlist
+- ✅ Drag-to-reorder functional within a playlist (UI implemented in 7-G)
 - ✅ Playlist survives app quit and relaunch
 - ✅ Sort state survives app quit and relaunch
 - ✅ `allowDuplicateTracks` survives app quit and relaunch
@@ -637,5 +640,5 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - **Slice 2 (Playlist Management)** — `playlist.tracks` data structure extended by 7-B to `[Playlist]`
 - **Slice 3 (Metadata Reading)** — `TagReaderService` extended by 7-G to read Groups A–D fields
 - **Slice 5 (Integration)** — `HarmoniaTagReaderAdapter` extended by 7-G with full tag mapping
-- **Slice 6 (UI + Menu Bar)** — `AppState`, `PlayerView`, `PlaylistView`, `HarmoniaPlayerCommands`,
-  and `SettingsView` all extended by Slice 7 sub-slices
+- **Slice 6 (UI + Menu Bar)** — `AppState`, `PlayerView`, `PlaylistView`,
+  `HarmoniaPlayerCommands`, `SettingsView` all extended by Slice 7 sub-slices
