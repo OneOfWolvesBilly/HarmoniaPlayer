@@ -196,6 +196,26 @@ final class AppState: ObservableObject {
     /// Persisted across launches by Slice 7-E (persistence).
     @Published var volume: Float = 1.0
 
+    // MARK: - Language State
+
+    /// BCP-47 language tag for UI language override, or `"system"` to follow system locale.
+    ///
+    /// Default: `"system"`. Updated by `SettingsView` language picker.
+    /// Persisted across launches via `UserDefaults`.
+    @Published var selectedLanguage: String = "system"
+
+    /// Returns the `Bundle` that should be used for all `String(localized:bundle:)` calls.
+    ///
+    /// When `selectedLanguage == "system"`, returns `Bundle.main` so the OS locale applies.
+    /// Otherwise loads the matching `.lproj` sub-bundle; falls back to `Bundle.main`
+    /// if the bundle cannot be found (e.g. language pack not yet included).
+    var languageBundle: Bundle {
+        guard selectedLanguage != "system" else { return .main }
+        guard let path = Bundle.main.path(forResource: selectedLanguage, ofType: "lproj"),
+              let bundle = Bundle(path: path) else { return .main }
+        return bundle
+    }
+
     // MARK: - Repeat Mode State
 
     /// Current repeat mode.
@@ -330,6 +350,7 @@ final class AppState: ObservableObject {
         userDefaults.set(activePlaylistIndex, forKey: PersistenceKey.activePlaylistIndex)
         userDefaults.set(allowDuplicateTracks, forKey: PersistenceKey.allowDuplicates)
         userDefaults.set(volume, forKey: PersistenceKey.volume)
+        userDefaults.set(selectedLanguage, forKey: PersistenceKey.selectedLanguage)
         if let repeatData = try? JSONEncoder().encode(repeatMode) {
             userDefaults.set(repeatData, forKey: PersistenceKey.repeatMode)
         }
@@ -373,6 +394,9 @@ final class AppState: ObservableObject {
         }
         if userDefaults.object(forKey: PersistenceKey.volume) != nil {
             volume = userDefaults.float(forKey: PersistenceKey.volume)
+        }
+        if let lang = userDefaults.string(forKey: PersistenceKey.selectedLanguage) {
+            selectedLanguage = lang
         }
         if let repeatData = userDefaults.data(forKey: PersistenceKey.repeatMode),
            let decoded = try? JSONDecoder().decode(RepeatMode.self, from: repeatData) {

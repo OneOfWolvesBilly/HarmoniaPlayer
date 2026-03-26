@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Latviešu (lv)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Fails nav atrasts";
+"alert_file_not_found_multi" = "Šādus failus nevarēja atvērt un tie tika izlaisti:\n%@";
+"alert_file_not_found_single" = "Nevarēja atvērt \"%@\". Iespējams, tas ir pārvietots vai izdzēsts.";
+"alert_file_not_found_generic" = "Failu nevarēja atvērt. Iespējams, tas ir pārvietots vai izdzēsts.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Jau atskaņošanas sarakstā";
+"alert_already_in_playlist_body" = "Šādi faili jau ir atskaņošanas sarakstā un netika pievienoti:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Atskaņošanas kļūda";
+"error_unsupported_format" = "Šis formāts netiek atbalstīts bezmaksas versijā.";
+"error_failed_to_decode" = "Failu nevarēja atšifrēt.";
+"error_output_error" = "Radās atskaņošanas izvades kļūda.";
+"error_core_error" = "Atskaņošanas laikā radās kļūda.\n\nKods: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Nav ielādēts neviens celiņš";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Iepriekšējais celiņš";
+"help_pause" = "Pauze";
+"help_play" = "Atskaņot";
+"help_stop" = "Apturēt";
+"help_next_track" = "Nākamais celiņš";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Atkārtot: izslēgts";
+"repeat_all" = "Atkārtot: visus";
+"repeat_one" = "Atkārtot: vienu";
+"shuffle_on" = "Jaukt: ieslēgts";
+"shuffle_off" = "Jaukt: izslēgts";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Apturēts";
+"status_loading" = "Ielāde";
+"status_playing" = "Atskaņo";
+"status_paused" = "Pauzēts";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Nosaukums";
+"col_artist" = "Izpildītājs";
+"col_duration" = "Ilgums";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Atskaņot";
+"ctx_play_next" = "Atskaņot nākamo";
+"ctx_remove" = "Noņemt no atskaņošanas saraksta";
+"ctx_rename" = "Pārdēvēt";
+"ctx_delete" = "Dzēst";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Atjaunot pievienošanas kārtību";
+"help_show_shuffle_queue" = "Rādīt jaukšanas rindu";
+"help_add_files" = "Pievienot failus atskaņošanas sarakstam";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Pievienojiet mūziku, lai sāktu";
+"empty_state_secondary" = "Noklikšķiniet + vai velciet failus šeit";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "celiņš";
+"footer_track_plural" = "celiņi";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Jaukšanas rinda";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Iestatījumi";
+"settings_section_playlist" = "Atskaņošanas saraksts";
+"settings_allow_duplicates" = "Atļaut dublikātus";
+"settings_allow_duplicates_desc" = "Ja iespējots, to pašu failu var pievienot atskaņošanas sarakstam vairākas reizes.";
+"settings_section_language" = "Valoda";
+"settings_language_system" = "Sistēmas valoda";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Pievienot failus…";
+"menu_new_playlist" = "Jauns atskaņošanas saraksts";
+"menu_rename_playlist" = "Pārdēvēt atskaņošanas sarakstu";
+"menu_delete_playlist" = "Dzēst atskaņošanas sarakstu";
+"menu_export_playlist" = "Eksportēt atskaņošanas sarakstu…";
+"menu_import_playlist" = "Importēt atskaņošanas sarakstu…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Atskaņošana";
+"menu_play" = "Atskaņot";
+"menu_pause" = "Pauzēt";
+"menu_stop" = "Apturēt";
+"menu_next_track" = "Nākamais celiņš";
+"menu_previous_track" = "Iepriekšējais celiņš";
+"menu_seek_forward" = "Pārtīt 5 sekundes uz priekšu";
+"menu_seek_backward" = "Pārtīt 5 sekundes atpakaļ";
+"menu_repeat_mode" = "Atkārtošanas režīms";
+"menu_shuffle_mode" = "Jaukšanas režīms";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Eksportēt sarakstu";
+"panel_export_relative" = "Izmantot relatīvos ceļus (USB / koplietošana)";
+"panel_import_title" = "Importēt sarakstu";
+"alert_export_failed" = "Eksports neizdevās";
+"alert_import_missing_title" = "Daži faili nav atrasti";
+"alert_import_missing_body" = "Šādi faili tika izlaisti:\n\n%@";

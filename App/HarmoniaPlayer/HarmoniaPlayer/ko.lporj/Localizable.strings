@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — 한국어 (ko)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "파일을 찾을 수 없음";
+"alert_file_not_found_multi" = "다음 파일을 열 수 없어 건너뛰었습니다:\n%@";
+"alert_file_not_found_single" = "「%@」을(를) 열 수 없습니다. 이동되었거나 삭제된 것 같습니다.";
+"alert_file_not_found_generic" = "파일을 열 수 없습니다. 이동되었거나 삭제된 것 같습니다.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "이미 재생목록에 있음";
+"alert_already_in_playlist_body" = "다음 파일은 이미 재생목록에 있어 추가하지 않았습니다:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "재생 오류";
+"error_unsupported_format" = "이 형식은 무료 버전에서 지원되지 않습니다.";
+"error_failed_to_decode" = "파일을 디코딩할 수 없습니다.";
+"error_output_error" = "재생 출력 오류가 발생했습니다.";
+"error_core_error" = "재생 중 오류가 발생했습니다.\n\n코드: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "트랙 없음";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "이전 트랙";
+"help_pause" = "일시 정지";
+"help_play" = "재생";
+"help_stop" = "정지";
+"help_next_track" = "다음 트랙";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "반복: 끔";
+"repeat_all" = "반복: 전체";
+"repeat_one" = "반복: 한 곡";
+"shuffle_on" = "셔플: 켬";
+"shuffle_off" = "셔플: 끔";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "정지됨";
+"status_loading" = "로딩 중";
+"status_playing" = "재생 중";
+"status_paused" = "일시 정지됨";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "제목";
+"col_artist" = "아티스트";
+"col_duration" = "재생 시간";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "재생";
+"ctx_play_next" = "다음에 재생";
+"ctx_remove" = "재생목록에서 제거";
+"ctx_rename" = "이름 변경";
+"ctx_delete" = "삭제";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "추가 순서 복원";
+"help_show_shuffle_queue" = "셔플 대기열 표시";
+"help_add_files" = "재생목록에 파일 추가";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "음악을 추가하여 시작하세요";
+"empty_state_secondary" = "+ 클릭 또는 여기에 파일 드래그";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "곡";
+"footer_track_plural" = "곡";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "셔플 대기열";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "설정";
+"settings_section_playlist" = "재생목록";
+"settings_allow_duplicates" = "중복 트랙 허용";
+"settings_allow_duplicates_desc" = "활성화하면 동일한 파일을 재생목록에 여러 번 추가할 수 있습니다.";
+"settings_section_language" = "언어";
+"settings_language_system" = "시스템 기본값";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "파일 추가…";
+"menu_new_playlist" = "새 재생목록";
+"menu_rename_playlist" = "재생목록 이름 변경";
+"menu_delete_playlist" = "재생목록 삭제";
+"menu_export_playlist" = "재생목록 내보내기…";
+"menu_import_playlist" = "재생목록 가져오기…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "재생";
+"menu_play" = "재생";
+"menu_pause" = "일시 정지";
+"menu_stop" = "정지";
+"menu_next_track" = "다음 트랙";
+"menu_previous_track" = "이전 트랙";
+"menu_seek_forward" = "5초 앞으로";
+"menu_seek_backward" = "5초 뒤로";
+"menu_repeat_mode" = "반복 모드";
+"menu_shuffle_mode" = "셔플 모드";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "재생목록 내보내기";
+"panel_export_relative" = "상대 경로 사용 (USB 드라이브 / 공유용)";
+"panel_import_title" = "재생목록 가져오기";
+"alert_export_failed" = "내보내기 실패";
+"alert_import_missing_title" = "일부 파일을 찾을 수 없음";
+"alert_import_missing_body" = "다음 파일을 건너뛰었습니다:\n\n%@";

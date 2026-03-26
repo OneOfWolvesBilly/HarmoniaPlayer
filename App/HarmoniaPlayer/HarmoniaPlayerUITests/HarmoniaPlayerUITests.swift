@@ -35,6 +35,13 @@ final class HarmoniaPlayerUITests: XCTestCase {
     override func setUpWithError() throws {
         continueAfterFailure = false
         app = XCUIApplication()
+        // Force English so menu item labels and UI strings are predictable
+        // regardless of system language or previously saved language preference.
+        app.launchArguments += [
+            "-AppleLanguages", "(en)",
+            "-AppleLocale", "en_US",
+            "-hp.selectedLanguage", "en",
+        ]
         app.launch()
         app.activate()
         // Click the window to ensure macOS exposes the full accessibility tree.

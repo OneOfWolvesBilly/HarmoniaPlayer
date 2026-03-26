@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — العربية (ar)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "الملف غير موجود";
+"alert_file_not_found_multi" = "تعذّر فتح الملفات التالية وتم تخطّيها:\n%@";
+"alert_file_not_found_single" = "تعذّر فتح «%@». ربما تم نقله أو حذفه.";
+"alert_file_not_found_generic" = "تعذّر فتح الملف. ربما تم نقله أو حذفه.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "موجود بالفعل في قائمة التشغيل";
+"alert_already_in_playlist_body" = "الملفات التالية موجودة بالفعل في قائمة التشغيل ولم تُضَف:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "خطأ في التشغيل";
+"error_unsupported_format" = "هذا التنسيق غير مدعوم في الإصدار المجاني.";
+"error_failed_to_decode" = "تعذّر فك تشفير الملف.";
+"error_output_error" = "حدث خطأ في مخرجات التشغيل.";
+"error_core_error" = "حدث خطأ أثناء التشغيل.\n\nالرمز: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "لم يتم تحميل أي مقطع";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "المقطع السابق";
+"help_pause" = "إيقاف مؤقت";
+"help_play" = "تشغيل";
+"help_stop" = "إيقاف";
+"help_next_track" = "المقطع التالي";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "تكرار: إيقاف";
+"repeat_all" = "تكرار: الكل";
+"repeat_one" = "تكرار: واحد";
+"shuffle_on" = "عشوائي: تشغيل";
+"shuffle_off" = "عشوائي: إيقاف";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "متوقف";
+"status_loading" = "جارٍ التحميل";
+"status_playing" = "قيد التشغيل";
+"status_paused" = "متوقف مؤقتاً";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "العنوان";
+"col_artist" = "الفنان";
+"col_duration" = "المدة";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "تشغيل";
+"ctx_play_next" = "تشغيل كالتالي";
+"ctx_remove" = "إزالة من قائمة التشغيل";
+"ctx_rename" = "إعادة التسمية";
+"ctx_delete" = "حذف";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "استعادة ترتيب الإضافة";
+"help_show_shuffle_queue" = "عرض قائمة انتظار العشوائي";
+"help_add_files" = "إضافة ملفات إلى قائمة التشغيل";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "أضف موسيقى للبدء";
+"empty_state_secondary" = "انقر + أو اسحب الملفات هنا";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "مقطع";
+"footer_track_plural" = "مقاطع";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "قائمة انتظار العشوائي";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "الإعدادات";
+"settings_section_playlist" = "قائمة التشغيل";
+"settings_allow_duplicates" = "السماح بالمكررات";
+"settings_allow_duplicates_desc" = "عند التفعيل، يمكن إضافة نفس الملف عدة مرات إلى قائمة التشغيل.";
+"settings_section_language" = "اللغة";
+"settings_language_system" = "لغة النظام";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "إضافة ملفات…";
+"menu_new_playlist" = "قائمة تشغيل جديدة";
+"menu_rename_playlist" = "إعادة تسمية قائمة التشغيل";
+"menu_delete_playlist" = "حذف قائمة التشغيل";
+"menu_export_playlist" = "تصدير قائمة التشغيل…";
+"menu_import_playlist" = "استيراد قائمة تشغيل…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "التشغيل";
+"menu_play" = "تشغيل";
+"menu_pause" = "إيقاف مؤقت";
+"menu_stop" = "إيقاف";
+"menu_next_track" = "المقطع التالي";
+"menu_previous_track" = "المقطع السابق";
+"menu_seek_forward" = "تقديم 5 ثوانٍ";
+"menu_seek_backward" = "ترجيع 5 ثوانٍ";
+"menu_repeat_mode" = "وضع التكرار";
+"menu_shuffle_mode" = "وضع العشوائي";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "تصدير قائمة التشغيل";
+"panel_export_relative" = "استخدام المسارات النسبية (لـ USB / المشاركة)";
+"panel_import_title" = "استيراد قائمة التشغيل";
+"alert_export_failed" = "فشل التصدير";
+"alert_import_missing_title" = "بعض الملفات غير موجودة";
+"alert_import_missing_body" = "تم تخطّي الملفات التالية:\n\n%@";

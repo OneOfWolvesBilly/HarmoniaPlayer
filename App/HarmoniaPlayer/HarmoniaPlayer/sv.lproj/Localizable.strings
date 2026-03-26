@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Svenska (sv)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Filen hittades inte";
+"alert_file_not_found_multi" = "Följande filer kunde inte öppnas och hoppades över:\n%@";
+"alert_file_not_found_single" = "\"%@\" kunde inte öppnas. Den kan ha flyttats eller tagits bort.";
+"alert_file_not_found_generic" = "Filen kunde inte öppnas. Den kan ha flyttats eller tagits bort.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Finns redan i spellistan";
+"alert_already_in_playlist_body" = "Följande filer finns redan i spellistan och lades inte till:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Uppspelningsfel";
+"error_unsupported_format" = "Det här formatet stöds inte i gratisversionen.";
+"error_failed_to_decode" = "Filen kunde inte avkodas.";
+"error_output_error" = "Ett uppspelningsutgångsfel inträffade.";
+"error_core_error" = "Ett uppspelningsfel inträffade.\n\nKod: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Inget spår laddat";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Föregående spår";
+"help_pause" = "Pausa";
+"help_play" = "Spela";
+"help_stop" = "Stoppa";
+"help_next_track" = "Nästa spår";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Upprepa: av";
+"repeat_all" = "Upprepa: alla";
+"repeat_one" = "Upprepa: ett";
+"shuffle_on" = "Blanda: på";
+"shuffle_off" = "Blanda: av";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Stoppad";
+"status_loading" = "Läser in";
+"status_playing" = "Spelar";
+"status_paused" = "Pausad";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Titel";
+"col_artist" = "Artist";
+"col_duration" = "Längd";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Spela";
+"ctx_play_next" = "Spela härnäst";
+"ctx_remove" = "Ta bort från spellistan";
+"ctx_rename" = "Byt namn";
+"ctx_delete" = "Radera";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Återställ tillagd ordning";
+"help_show_shuffle_queue" = "Visa blandningskö";
+"help_add_files" = "Lägg till filer i spellistan";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Lägg till musik för att börja";
+"empty_state_secondary" = "Klicka på + eller dra filer hit";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "spår";
+"footer_track_plural" = "spår";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Blandningskö";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Inställningar";
+"settings_section_playlist" = "Spellista";
+"settings_allow_duplicates" = "Tillåt dubbletter";
+"settings_allow_duplicates_desc" = "När aktiverat kan samma fil läggas till spellistan flera gånger.";
+"settings_section_language" = "Språk";
+"settings_language_system" = "Systemspråk";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Lägg till filer…";
+"menu_new_playlist" = "Ny spellista";
+"menu_rename_playlist" = "Byt namn på spellista";
+"menu_delete_playlist" = "Radera spellista";
+"menu_export_playlist" = "Exportera spellista…";
+"menu_import_playlist" = "Importera spellista…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Uppspelning";
+"menu_play" = "Spela";
+"menu_pause" = "Pausa";
+"menu_stop" = "Stoppa";
+"menu_next_track" = "Nästa spår";
+"menu_previous_track" = "Föregående spår";
+"menu_seek_forward" = "Spola fram 5 sekunder";
+"menu_seek_backward" = "Spola tillbaka 5 sekunder";
+"menu_repeat_mode" = "Upprepningsläge";
+"menu_shuffle_mode" = "Blandningsläge";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Exportera spellista";
+"panel_export_relative" = "Använd relativa sökvägar (för USB / delning)";
+"panel_import_title" = "Importera spellista";
+"alert_export_failed" = "Export misslyckades";
+"alert_import_missing_title" = "Vissa filer hittades inte";
+"alert_import_missing_body" = "Följande filer hoppades över:\n\n%@";

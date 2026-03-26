@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Français (fr)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Fichier introuvable";
+"alert_file_not_found_multi" = "Les fichiers suivants n'ont pas pu être ouverts et ont été ignorés :\n%@";
+"alert_file_not_found_single" = "« %@ » n'a pas pu être ouvert. Il a peut-être été déplacé ou supprimé.";
+"alert_file_not_found_generic" = "Le fichier n'a pas pu être ouvert. Il a peut-être été déplacé ou supprimé.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Déjà dans la liste de lecture";
+"alert_already_in_playlist_body" = "Les fichiers suivants sont déjà dans la liste de lecture et n'ont pas été ajoutés :\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Erreur de lecture";
+"error_unsupported_format" = "Ce format n'est pas pris en charge dans la version gratuite.";
+"error_failed_to_decode" = "Le fichier n'a pas pu être décodé.";
+"error_output_error" = "Une erreur de sortie de lecture s'est produite.";
+"error_core_error" = "Une erreur de lecture s'est produite.\n\nCode : %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Aucune piste chargée";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Piste précédente";
+"help_pause" = "Pause";
+"help_play" = "Lecture";
+"help_stop" = "Arrêter";
+"help_next_track" = "Piste suivante";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Répéter : désactivé";
+"repeat_all" = "Répéter : tout";
+"repeat_one" = "Répéter : un";
+"shuffle_on" = "Aléatoire : activé";
+"shuffle_off" = "Aléatoire : désactivé";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Arrêté";
+"status_loading" = "Chargement";
+"status_playing" = "Lecture";
+"status_paused" = "En pause";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Titre";
+"col_artist" = "Artiste";
+"col_duration" = "Durée";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Lire";
+"ctx_play_next" = "Lire ensuite";
+"ctx_remove" = "Retirer de la liste de lecture";
+"ctx_rename" = "Renommer";
+"ctx_delete" = "Supprimer";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Restaurer l'ordre d'ajout";
+"help_show_shuffle_queue" = "Afficher la file aléatoire";
+"help_add_files" = "Ajouter des fichiers à la liste de lecture";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Ajoutez de la musique pour commencer";
+"empty_state_secondary" = "Cliquez sur + ou faites glisser des fichiers ici";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "piste";
+"footer_track_plural" = "pistes";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "File aléatoire";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Réglages";
+"settings_section_playlist" = "Liste de lecture";
+"settings_allow_duplicates" = "Autoriser les doublons";
+"settings_allow_duplicates_desc" = "Lorsqu'activé, le même fichier peut être ajouté plusieurs fois à la liste de lecture.";
+"settings_section_language" = "Langue";
+"settings_language_system" = "Langue du système";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Ajouter des fichiers…";
+"menu_new_playlist" = "Nouvelle liste de lecture";
+"menu_rename_playlist" = "Renommer la liste de lecture";
+"menu_delete_playlist" = "Supprimer la liste de lecture";
+"menu_export_playlist" = "Exporter la liste de lecture…";
+"menu_import_playlist" = "Importer une liste de lecture…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Lecture";
+"menu_play" = "Lire";
+"menu_pause" = "Pause";
+"menu_stop" = "Arrêter";
+"menu_next_track" = "Piste suivante";
+"menu_previous_track" = "Piste précédente";
+"menu_seek_forward" = "Avancer de 5 secondes";
+"menu_seek_backward" = "Reculer de 5 secondes";
+"menu_repeat_mode" = "Mode répétition";
+"menu_shuffle_mode" = "Mode aléatoire";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Exporter la liste de lecture";
+"panel_export_relative" = "Utiliser des chemins relatifs (pour clés USB / partage)";
+"panel_import_title" = "Importer une liste de lecture";
+"alert_export_failed" = "Échec de l'exportation";
+"alert_import_missing_title" = "Certains fichiers introuvables";
+"alert_import_missing_body" = "Les fichiers suivants ont été ignorés :\n\n%@";

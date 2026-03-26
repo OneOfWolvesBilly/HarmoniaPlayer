@@ -25,6 +25,8 @@
 //  - All transport actions are dispatched via `Task { await appState.method() }`
 //    to satisfy Swift 6 concurrency requirements.
 //  - No `import HarmoniaCore` — all state access goes through `AppState`.
+//  - All UI strings use `String(localized:bundle:appState.languageBundle)`
+//    for runtime language switching support.
 //
 
 import SwiftUI
@@ -55,6 +57,12 @@ struct PlayerView: View {
 
     /// Task that delays hiding the volume label after drag ends.
     @State private var volumeLabelHideTask: Task<Void, Never>? = nil
+
+    // MARK: - Localization helper
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+    }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -104,7 +112,7 @@ struct PlayerView: View {
     /// Track title and artist labels.
     private var metadataView: some View {
         VStack(spacing: 4) {
-            Text(appState.currentTrack?.title ?? "No Track Loaded")
+            Text(appState.currentTrack?.title ?? L("no_track_loaded"))
                 .font(.title3)
                 .fontWeight(.semibold)
                 .lineLimit(1)
@@ -172,7 +180,7 @@ struct PlayerView: View {
                     .font(.title2)
             }
             .accessibilityIdentifier("previous-button")
-            .help("Previous track")
+            .help(L("help_previous_track"))
 
             Button {
                 Task {
@@ -187,7 +195,7 @@ struct PlayerView: View {
                     .font(.title)
             }
             .accessibilityIdentifier("play-pause-button")
-            .help(appState.playbackState == .playing ? "Pause" : "Play")
+            .help(appState.playbackState == .playing ? L("help_pause") : L("help_play"))
 
             Button {
                 Task { await appState.stop() }
@@ -196,7 +204,7 @@ struct PlayerView: View {
                     .font(.title2)
             }
             .accessibilityIdentifier("stop-button")
-            .help("Stop")
+            .help(L("help_stop"))
 
             Button {
                 Task { await appState.playNextTrack() }
@@ -205,7 +213,7 @@ struct PlayerView: View {
                     .font(.title2)
             }
             .accessibilityIdentifier("next-button")
-            .help("Next track")
+            .help(L("help_next_track"))
         }
         .buttonStyle(.plain)
         .disabled(appState.playlist.tracks.isEmpty)
@@ -238,7 +246,7 @@ struct PlayerView: View {
                         : Color.secondary)
             }
             .accessibilityIdentifier("shuffle-button")
-            .help(appState.isShuffled ? "Shuffle: On" : "Shuffle: Off")
+            .help(appState.isShuffled ? L("shuffle_on") : L("shuffle_off"))
         }
         .buttonStyle(.plain)
         .disabled(appState.playlist.tracks.isEmpty)
@@ -350,9 +358,9 @@ struct PlayerView: View {
     /// Tooltip text for the repeat button.
     private var repeatHelpText: String {
         switch appState.repeatMode {
-        case .off: return "Repeat: Off"
-        case .all: return "Repeat: All"
-        case .one: return "Repeat: One"
+        case .off: return L("repeat_off")
+        case .all: return L("repeat_all")
+        case .one: return L("repeat_one")
         }
     }
 
@@ -362,11 +370,11 @@ struct PlayerView: View {
         guard !appState.playlist.tracks.isEmpty else { return "" }
         switch appState.playbackState {
         case .idle:         return ""
-        case .stopped:      return "Stopped"
-        case .loading:      return "Loading"
-        case .playing:      return "Playing"
-        case .paused:       return "Paused"
-        case .error:        return "Stopped"
+        case .stopped:      return L("status_stopped")
+        case .loading:      return L("status_loading")
+        case .playing:      return L("status_playing")
+        case .paused:       return L("status_paused")
+        case .error:        return L("status_stopped")
         }
     }
 

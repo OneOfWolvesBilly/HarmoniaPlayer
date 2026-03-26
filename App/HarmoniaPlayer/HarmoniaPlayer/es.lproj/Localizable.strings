@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Español (es)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Archivo no encontrado";
+"alert_file_not_found_multi" = "Los siguientes archivos no se pudieron abrir y se omitieron:\n%@";
+"alert_file_not_found_single" = "\"%@\" no se pudo abrir. Es posible que se haya movido o eliminado.";
+"alert_file_not_found_generic" = "El archivo no se pudo abrir. Es posible que se haya movido o eliminado.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Ya está en la lista de reproducción";
+"alert_already_in_playlist_body" = "Los siguientes archivos ya están en la lista de reproducción y no se agregaron:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Error de reproducción";
+"error_unsupported_format" = "Este formato no es compatible con la versión gratuita.";
+"error_failed_to_decode" = "El archivo no pudo ser decodificado.";
+"error_output_error" = "Se produjo un error en la salida de reproducción.";
+"error_core_error" = "Se produjo un error de reproducción.\n\nCódigo: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Sin pista cargada";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Pista anterior";
+"help_pause" = "Pausar";
+"help_play" = "Reproducir";
+"help_stop" = "Detener";
+"help_next_track" = "Pista siguiente";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Repetir: desactivado";
+"repeat_all" = "Repetir: todo";
+"repeat_one" = "Repetir: uno";
+"shuffle_on" = "Aleatorio: activado";
+"shuffle_off" = "Aleatorio: desactivado";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Detenido";
+"status_loading" = "Cargando";
+"status_playing" = "Reproduciendo";
+"status_paused" = "En pausa";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Título";
+"col_artist" = "Artista";
+"col_duration" = "Duración";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Reproducir";
+"ctx_play_next" = "Reproducir a continuación";
+"ctx_remove" = "Eliminar de la lista de reproducción";
+"ctx_rename" = "Renombrar";
+"ctx_delete" = "Eliminar";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Restaurar orden de adición";
+"help_show_shuffle_queue" = "Mostrar cola aleatoria";
+"help_add_files" = "Agregar archivos a la lista de reproducción";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Añade música para empezar";
+"empty_state_secondary" = "Haz clic en + o arrastra archivos aquí";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "pista";
+"footer_track_plural" = "pistas";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Cola aleatoria";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Ajustes";
+"settings_section_playlist" = "Lista de reproducción";
+"settings_allow_duplicates" = "Permitir duplicados";
+"settings_allow_duplicates_desc" = "Cuando está activado, el mismo archivo se puede agregar varias veces a la lista.";
+"settings_section_language" = "Idioma";
+"settings_language_system" = "Idioma del sistema";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Añadir archivos…";
+"menu_new_playlist" = "Nueva lista de reproducción";
+"menu_rename_playlist" = "Renombrar lista de reproducción";
+"menu_delete_playlist" = "Eliminar lista de reproducción";
+"menu_export_playlist" = "Exportar lista de reproducción…";
+"menu_import_playlist" = "Importar lista de reproducción…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Reproducción";
+"menu_play" = "Reproducir";
+"menu_pause" = "Pausar";
+"menu_stop" = "Detener";
+"menu_next_track" = "Pista siguiente";
+"menu_previous_track" = "Pista anterior";
+"menu_seek_forward" = "Adelantar 5 segundos";
+"menu_seek_backward" = "Retroceder 5 segundos";
+"menu_repeat_mode" = "Modo repetición";
+"menu_shuffle_mode" = "Modo aleatorio";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Exportar lista de reproducción";
+"panel_export_relative" = "Usar rutas relativas (para USB / compartir)";
+"panel_import_title" = "Importar lista de reproducción";
+"alert_export_failed" = "Error al exportar";
+"alert_import_missing_title" = "Algunos archivos no encontrados";
+"alert_import_missing_body" = "Los siguientes archivos fueron omitidos:\n\n%@";

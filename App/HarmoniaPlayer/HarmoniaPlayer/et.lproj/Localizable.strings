@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Eesti (et)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Faili ei leitud";
+"alert_file_not_found_multi" = "Järgmisi faile ei saanud avada ja need jäeti vahele:\n%@";
+"alert_file_not_found_single" = "\"%@\" ei saanud avada. See võib olla teisaldatud või kustutatud.";
+"alert_file_not_found_generic" = "Faili ei saanud avada. See võib olla teisaldatud või kustutatud.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Juba esitusloendis";
+"alert_already_in_playlist_body" = "Järgmised failid on juba esitusloendis ja neid ei lisatud:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Esitusviga";
+"error_unsupported_format" = "Seda vormingut ei toetata tasuta versioonis.";
+"error_failed_to_decode" = "Faili ei saanud dekodeerida.";
+"error_output_error" = "Ilmnes esituse väljundviga.";
+"error_core_error" = "Esitamise ajal ilmnes viga.\n\nKood: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Ühtegi lugu pole laaditud";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Eelmine lugu";
+"help_pause" = "Peata";
+"help_play" = "Esita";
+"help_stop" = "Peata";
+"help_next_track" = "Järgmine lugu";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Korda: väljas";
+"repeat_all" = "Korda: kõik";
+"repeat_one" = "Korda: üks";
+"shuffle_on" = "Sega: sees";
+"shuffle_off" = "Sega: väljas";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Peatatud";
+"status_loading" = "Laadimine";
+"status_playing" = "Esitatakse";
+"status_paused" = "Peatatud";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Pealkiri";
+"col_artist" = "Esitaja";
+"col_duration" = "Kestus";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Esita";
+"ctx_play_next" = "Esita järgmisena";
+"ctx_remove" = "Eemalda esitusloendist";
+"ctx_rename" = "Nimeta ümber";
+"ctx_delete" = "Kustuta";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Taasta lisamisjärjekord";
+"help_show_shuffle_queue" = "Kuva segamise järjekord";
+"help_add_files" = "Lisa faile esitusloendisse";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Lisa muusikat alustamiseks";
+"empty_state_secondary" = "Klõpsa + või lohista failid siia";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "lugu";
+"footer_track_plural" = "lugu";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Segamise järjekord";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Seaded";
+"settings_section_playlist" = "Esitusloend";
+"settings_allow_duplicates" = "Luba korduvaid lugusid";
+"settings_allow_duplicates_desc" = "Kui see on lubatud, saab sama faili esitusloendisse lisada mitu korda.";
+"settings_section_language" = "Keel";
+"settings_language_system" = "Süsteemi keel";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Lisa faile…";
+"menu_new_playlist" = "Uus esitusloend";
+"menu_rename_playlist" = "Nimeta esitusloend ümber";
+"menu_delete_playlist" = "Kustuta esitusloend";
+"menu_export_playlist" = "Ekspordi esitusloend…";
+"menu_import_playlist" = "Impordi esitusloend…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Esitus";
+"menu_play" = "Esita";
+"menu_pause" = "Peata";
+"menu_stop" = "Peata";
+"menu_next_track" = "Järgmine lugu";
+"menu_previous_track" = "Eelmine lugu";
+"menu_seek_forward" = "Keri 5 sekundit edasi";
+"menu_seek_backward" = "Keri 5 sekundit tagasi";
+"menu_repeat_mode" = "Kordamisrežiim";
+"menu_shuffle_mode" = "Segamisrežiim";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Ekspordi esitusloend";
+"panel_export_relative" = "Kasuta suhtelisi teid (USB / jagamine)";
+"panel_import_title" = "Impordi esitusloend";
+"alert_export_failed" = "Eksport ebaõnnestus";
+"alert_import_missing_title" = "Mõnda faili ei leitud";
+"alert_import_missing_body" = "Järgmised failid jäeti vahele:\n\n%@";

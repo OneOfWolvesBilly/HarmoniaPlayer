@@ -1,0 +1,108 @@
+/* =========================================================
+   Localizable.strings — English (en)
+   HarmoniaPlayer
+   ========================================================= */
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "File Not Found";
+"alert_file_not_found_multi" = "The following files could not be opened and were skipped:\n%@";
+"alert_file_not_found_single" = "\"%@\" could not be opened. It may have been moved or deleted.";
+"alert_file_not_found_generic" = "The file could not be opened. It may have been moved or deleted.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Already in Playlist";
+"alert_already_in_playlist_body" = "The following files are already in the playlist and were not added:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Playback Error";
+"error_unsupported_format" = "This format is not supported in the Free version.";
+"error_failed_to_decode" = "The file could not be decoded.";
+"error_output_error" = "A playback output error occurred.";
+"error_core_error" = "A playback error occurred.\n\nCode: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "No Track Loaded";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Previous track";
+"help_pause" = "Pause";
+"help_play" = "Play";
+"help_stop" = "Stop";
+"help_next_track" = "Next track";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Repeat: Off";
+"repeat_all" = "Repeat: All";
+"repeat_one" = "Repeat: One";
+"shuffle_on" = "Shuffle: On";
+"shuffle_off" = "Shuffle: Off";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Stopped";
+"status_loading" = "Loading";
+"status_playing" = "Playing";
+"status_paused" = "Paused";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Title";
+"col_artist" = "Artist";
+"col_duration" = "Duration";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Play";
+"ctx_play_next" = "Play Next";
+"ctx_remove" = "Remove from Playlist";
+"ctx_rename" = "Rename";
+"ctx_delete" = "Delete";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Restore added order";
+"help_show_shuffle_queue" = "Show shuffle queue";
+"help_add_files" = "Add files to playlist";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Add music to get started";
+"empty_state_secondary" = "Click + or drag files here";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "track";
+"footer_track_plural" = "tracks";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Shuffle Queue";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Settings";
+"settings_section_playlist" = "Playlist";
+"settings_allow_duplicates" = "Allow duplicate tracks";
+"settings_allow_duplicates_desc" = "When enabled, the same file can be added to the playlist more than once.";
+"settings_section_language" = "Language";
+"settings_language_system" = "System Default";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Add Files…";
+"menu_new_playlist" = "New Playlist";
+"menu_rename_playlist" = "Rename Playlist";
+"menu_delete_playlist" = "Delete Playlist";
+"menu_export_playlist" = "Export Playlist…";
+"menu_import_playlist" = "Import Playlist…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Playback";
+"menu_play" = "Play";
+"menu_pause" = "Pause";
+"menu_stop" = "Stop";
+"menu_next_track" = "Next Track";
+"menu_previous_track" = "Previous Track";
+"menu_seek_forward" = "Seek Forward 5 Seconds";
+"menu_seek_backward" = "Seek Backward 5 Seconds";
+"menu_repeat_mode" = "Repeat Mode";
+"menu_shuffle_mode" = "Shuffle Mode";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Export Playlist";
+"panel_export_relative" = "Use relative paths (for USB drives / sharing)";
+"panel_import_title" = "Import Playlist";
+"alert_export_failed" = "Export Failed";
+"alert_import_missing_title" = "Some Files Were Not Found";
+"alert_import_missing_body" = "The following files were skipped:\n\n%@";

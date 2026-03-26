@@ -133,16 +133,15 @@ final class AppStateFormatGatingTests: XCTestCase {
         XCTAssertEqual(fakePlaybackService.loadCallCount, 0)
     }
 
-    /// Verifies that `currentTrack` is set to the matching track even when the format
-    /// gate fires — the gate is applied AFTER `currentTrack` is assigned.
+    /// Verifies that `currentTrack` is nil when the format gate fires on the Free tier.
+    /// Playing a gated format must not update currentTrack.
     func testFormatGating_FLAC_FreeTier_SetsCurrentTrack() async {
         makeSUT(isProUnlocked: false)
         let track = await addTrack(extension: "flac")
 
         await sut.play(trackID: track.id)
 
-        // currentTrack is set before the gate check, so it must reflect the track.
-        XCTAssertEqual(sut.currentTrack, track)
+        XCTAssertNil(sut.currentTrack)
     }
 
     // MARK: - DSF / Free Tier (1 case)

@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Norsk bokmål (nb)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Filen ble ikke funnet";
+"alert_file_not_found_multi" = "Følgende filer kunne ikke åpnes og ble hoppet over:\n%@";
+"alert_file_not_found_single" = "\"%@\" kunne ikke åpnes. Den kan ha blitt flyttet eller slettet.";
+"alert_file_not_found_generic" = "Filen kunne ikke åpnes. Den kan ha blitt flyttet eller slettet.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Allerede i spillelisten";
+"alert_already_in_playlist_body" = "Følgende filer er allerede i spillelisten og ble ikke lagt til:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Avspillingsfeil";
+"error_unsupported_format" = "Dette formatet støttes ikke i gratisversjonen.";
+"error_failed_to_decode" = "Filen kunne ikke dekodes.";
+"error_output_error" = "En avspillingsutgangsfeil oppstod.";
+"error_core_error" = "Det oppstod en avspillingsfeil.\n\nKode: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Ingen spor lastet";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Forrige spor";
+"help_pause" = "Pause";
+"help_play" = "Spill av";
+"help_stop" = "Stopp";
+"help_next_track" = "Neste spor";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Gjenta: av";
+"repeat_all" = "Gjenta: alle";
+"repeat_one" = "Gjenta: én";
+"shuffle_on" = "Bland: på";
+"shuffle_off" = "Bland: av";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Stoppet";
+"status_loading" = "Laster";
+"status_playing" = "Spiller";
+"status_paused" = "Pauset";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Tittel";
+"col_artist" = "Artist";
+"col_duration" = "Varighet";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Spill av";
+"ctx_play_next" = "Spill neste";
+"ctx_remove" = "Fjern fra spillelisten";
+"ctx_rename" = "Gi nytt navn";
+"ctx_delete" = "Slett";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Gjenopprett tilleggs-rekkefølge";
+"help_show_shuffle_queue" = "Vis tilfeldig kø";
+"help_add_files" = "Legg til filer i spillelisten";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Legg til musikk for å starte";
+"empty_state_secondary" = "Klikk + eller dra filer hit";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "spor";
+"footer_track_plural" = "spor";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Tilfeldig kø";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Innstillinger";
+"settings_section_playlist" = "Spilleliste";
+"settings_allow_duplicates" = "Tillat duplikater";
+"settings_allow_duplicates_desc" = "Når aktivert kan den samme filen legges til spillelisten flere ganger.";
+"settings_section_language" = "Språk";
+"settings_language_system" = "Systemspråk";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Legg til filer…";
+"menu_new_playlist" = "Ny spilleliste";
+"menu_rename_playlist" = "Gi nytt navn til spilleliste";
+"menu_delete_playlist" = "Slett spilleliste";
+"menu_export_playlist" = "Eksporter spilleliste…";
+"menu_import_playlist" = "Importer spilleliste…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Avspilling";
+"menu_play" = "Spill av";
+"menu_pause" = "Pause";
+"menu_stop" = "Stopp";
+"menu_next_track" = "Neste spor";
+"menu_previous_track" = "Forrige spor";
+"menu_seek_forward" = "Spol frem 5 sekunder";
+"menu_seek_backward" = "Spol tilbake 5 sekunder";
+"menu_repeat_mode" = "Gjentakelsesmodus";
+"menu_shuffle_mode" = "Blandingsmodus";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Eksporter spilleliste";
+"panel_export_relative" = "Bruk relative stier (for USB / deling)";
+"panel_import_title" = "Importer spilleliste";
+"alert_export_failed" = "Eksport mislyktes";
+"alert_import_missing_title" = "Noen filer ble ikke funnet";
+"alert_import_missing_body" = "Følgende filer ble hoppet over:\n\n%@";

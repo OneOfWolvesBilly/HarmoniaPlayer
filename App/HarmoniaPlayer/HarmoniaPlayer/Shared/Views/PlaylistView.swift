@@ -20,6 +20,8 @@
 //  - Playlist tabs bind directly to appState.activePlaylistIndex.
 //  - Inline rename triggered by Notification.Name.renameActivePlaylist
 //    (defined in HarmoniaPlayerCommands.swift).
+//  - All UI strings use `String(localized:bundle:appState.languageBundle)`
+//    for runtime language switching support.
 //
 
 import SwiftUI
@@ -38,6 +40,12 @@ struct PlaylistView: View {
     @State private var renameText: String = ""
     /// Focus state for the rename TextField.
     @FocusState private var isRenameFieldFocused: Bool
+
+    // MARK: - Localization helper
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+    }
 
     // MARK: - Computed
 
@@ -149,11 +157,11 @@ struct PlaylistView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("playlist-tab-\(index)")
         .contextMenu {
-            Button("Rename") {
+            Button(L("ctx_rename")) {
                 beginRename(at: index)
             }
             Divider()
-            Button("Delete", role: .destructive) {
+            Button(L("ctx_delete"), role: .destructive) {
                 appState.deletePlaylist(at: index)
             }
         }
@@ -170,7 +178,7 @@ struct PlaylistView: View {
                 } label: {
                     Image(systemName: "arrow.up.arrow.down.circle")
                 }
-                .help("Restore added order")
+                .help(L("help_restore_order"))
             }
             if appState.isShuffled {
                 Button {
@@ -179,7 +187,7 @@ struct PlaylistView: View {
                     Image(systemName: "list.number")
                 }
                 .accessibilityIdentifier("shuffle-queue-button")
-                .help("Show shuffle queue")
+                .help(L("help_show_shuffle_queue"))
                 .popover(isPresented: $showShuffleQueue, arrowEdge: .bottom) {
                     shuffleQueuePopover
                 }
@@ -190,7 +198,7 @@ struct PlaylistView: View {
                 Image(systemName: "plus")
             }
             .accessibilityIdentifier("add-files-button")
-            .help("Add files to playlist")
+            .help(L("help_add_files"))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -210,7 +218,7 @@ struct PlaylistView: View {
             }
             .width(24)
 
-            TableColumn("Title", value: \.title) { track in
+            TableColumn(L("col_title"), value: \.title) { track in
                 Text(track.title)
                     .lineLimit(1)
                     .foregroundStyle(track.isAccessible ? Color.primary : Color(nsColor: .tertiaryLabelColor))
@@ -218,7 +226,7 @@ struct PlaylistView: View {
             }
             .width(min: 120)
 
-            TableColumn("Artist", value: \.artist) { track in
+            TableColumn(L("col_artist"), value: \.artist) { track in
                 Text(track.artist.isEmpty ? "—" : track.artist)
                     .lineLimit(1)
                     .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
@@ -226,7 +234,7 @@ struct PlaylistView: View {
             }
             .width(min: 100)
 
-            TableColumn("Duration", value: \.duration) { track in
+            TableColumn(L("col_duration"), value: \.duration) { track in
                 Text(formatDuration(track.duration))
                     .monospacedDigit()
                     .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
@@ -255,14 +263,14 @@ struct PlaylistView: View {
         }
         .contextMenu(forSelectionType: Track.ID.self) { ids in
             if let id = ids.first {
-                Button("Play") {
+                Button(L("ctx_play")) {
                     Task { await appState.play(trackID: id) }
                 }
-                Button("Play Next") {
+                Button(L("ctx_play_next")) {
                     appState.playNext(id)
                 }
                 Divider()
-                Button("Remove from Playlist", role: .destructive) {
+                Button(L("ctx_remove"), role: .destructive) {
                     appState.removeTrack(id)
                     selectedTrackIDs.remove(id)
                 }
@@ -282,10 +290,10 @@ struct PlaylistView: View {
             Image(systemName: "music.note.list")
                 .font(.largeTitle)
                 .foregroundStyle(Color.secondary)
-            Text("Add music to get started")
+            Text(L("empty_state_primary"))
                 .font(.callout)
                 .foregroundStyle(Color.secondary)
-            Text("Click + or drag files here")
+            Text(L("empty_state_secondary"))
                 .font(.caption)
                 .foregroundStyle(Color.secondary.opacity(0.7))
         }
@@ -297,7 +305,8 @@ struct PlaylistView: View {
     private var footerView: some View {
         HStack {
             let count = appState.playlist.tracks.count
-            Text("\(count) \(count == 1 ? "track" : "tracks")")
+            let word = count == 1 ? L("footer_track_singular") : L("footer_track_plural")
+            Text("\(count) \(word)")
                 .font(.caption)
                 .foregroundStyle(Color.secondary)
             Spacer()
@@ -322,7 +331,7 @@ struct PlaylistView: View {
         }
 
         return VStack(alignment: .leading, spacing: 0) {
-            Text("Shuffle Queue")
+            Text(L("shuffle_queue_title"))
                 .font(.headline)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)

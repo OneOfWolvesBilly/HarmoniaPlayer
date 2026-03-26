@@ -19,6 +19,8 @@
 //  - `failedToOpenFile` alert auto-dismisses after 3 seconds.
 //    Other playback errors require manual dismissal.
 //  - No `import HarmoniaCore` — all state access goes through `AppState`.
+//  - All UI strings use `String(localized:bundle:appState.languageBundle)`
+//    for runtime language switching support.
 //
 
 import SwiftUI
@@ -34,6 +36,12 @@ import SwiftUI
 struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
+
+    // MARK: - Localization helper
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+    }
 
     var body: some View {
         HSplitView {
@@ -54,53 +62,62 @@ struct ContentView: View {
                 appState.clearLastError()
             }
         }
-        .alert("File Not Found", isPresented: $appState.showFileNotFoundAlert) {
+        .alert(
+            Text(L("alert_file_not_found_title")),
+            isPresented: $appState.showFileNotFoundAlert
+        ) {
             Button("OK") {
                 appState.clearLastError()
             }
         } message: {
             if !appState.skippedInaccessibleNames.isEmpty {
                 let names = appState.skippedInaccessibleNames.map { "• \($0)" }.joined(separator: "\n")
-                Text("The following files could not be opened and were skipped:\n\(names)")
+                Text(String(format: L("alert_file_not_found_multi"), names))
             } else if let name = appState.failedTrackName {
-                Text("\"\(name)\" could not be opened. It may have been moved or deleted.")
+                Text(String(format: L("alert_file_not_found_single"), name))
             } else {
-                Text("The file could not be opened. It may have been moved or deleted.")
+                Text(L("alert_file_not_found_generic"))
             }
         }
-        .alert("Already in Playlist", isPresented: Binding(
-            get: { !appState.skippedDuplicateURLs.isEmpty },
-            set: { if !$0 { appState.skippedDuplicateURLs = [] } }
-        )) {
+        .alert(
+            Text(L("alert_already_in_playlist_title")),
+            isPresented: Binding(
+                get: { !appState.skippedDuplicateURLs.isEmpty },
+                set: { if !$0 { appState.skippedDuplicateURLs = [] } }
+            )
+        ) {
             Button("OK") { appState.skippedDuplicateURLs = [] }
         } message: {
             let names = appState.skippedDuplicateURLs
                 .map { $0.lastPathComponent }
                 .joined(separator: "\n")
-            Text("The following files are already in the playlist and were not added:\n\(names)")
+            Text(String(format: L("alert_already_in_playlist_body"), names))
         }
-        .alert("Playback Error", isPresented: Binding(
-            get: {
-                switch appState.lastError {
-                case .failedToOpenFile, nil: return false
-                default: return true
-                }
-            },
-            set: { if !$0 { appState.clearLastError() } }
-        )) {
+        .alert(
+            Text(L("alert_playback_error_title")),
+            isPresented: Binding(
+                get: {
+                    switch appState.lastError {
+                    case .failedToOpenFile, nil: return false
+                    default: return true
+                    }
+                },
+                set: { if !$0 { appState.clearLastError() } }
+            )
+        ) {
             Button("OK") { appState.clearLastError() }
         } message: {
             switch appState.lastError {
             case .unsupportedFormat:
-                Text("This format is not supported in the Free version.")
+                Text(L("error_unsupported_format"))
             case .failedToDecode:
-                Text("The file could not be decoded.")
+                Text(L("error_failed_to_decode"))
             case .outputError:
-                Text("A playback output error occurred.")
-            case .coreError(let msg):
-                Text(msg)
+                Text(L("error_output_error"))
+            case .coreError(let code):
+                Text(String(format: L("error_core_error"), code))
             default:
-                Text("")
+                Text(verbatim: "")
             }
         }
     }

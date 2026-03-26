@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Čeština (cs)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "Soubor nenalezen";
+"alert_file_not_found_multi" = "Následující soubory nebylo možné otevřít a byly přeskočeny:\n%@";
+"alert_file_not_found_single" = "\"%@\" nelze otevřít. Soubor mohl být přesunut nebo odstraněn.";
+"alert_file_not_found_generic" = "Soubor nelze otevřít. Mohl být přesunut nebo odstraněn.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Již v seznamu skladeb";
+"alert_already_in_playlist_body" = "Následující soubory jsou již v seznamu skladeb a nebyly přidány:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Chyba přehrávání";
+"error_unsupported_format" = "Tento formát není v bezplatné verzi podporován.";
+"error_failed_to_decode" = "Soubor nelze dekódovat.";
+"error_output_error" = "Došlo k chybě výstupu přehrávání.";
+"error_core_error" = "Při přehrávání došlo k chybě.\n\nKód: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Žádná skladba nenačtena";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Předchozí skladba";
+"help_pause" = "Pozastavit";
+"help_play" = "Přehrát";
+"help_stop" = "Zastavit";
+"help_next_track" = "Další skladba";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Opakovat: vypnuto";
+"repeat_all" = "Opakovat: vše";
+"repeat_one" = "Opakovat: jeden";
+"shuffle_on" = "Náhodně: zapnuto";
+"shuffle_off" = "Náhodně: vypnuto";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Zastaveno";
+"status_loading" = "Načítání";
+"status_playing" = "Přehrávání";
+"status_paused" = "Pozastaveno";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Název";
+"col_artist" = "Umělec";
+"col_duration" = "Délka";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Přehrát";
+"ctx_play_next" = "Přehrát jako další";
+"ctx_remove" = "Odebrat ze seznamu skladeb";
+"ctx_rename" = "Přejmenovat";
+"ctx_delete" = "Smazat";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Obnovit pořadí přidání";
+"help_show_shuffle_queue" = "Zobrazit náhodnou frontu";
+"help_add_files" = "Přidat soubory do seznamu skladeb";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Přidejte hudbu pro začátek";
+"empty_state_secondary" = "Klikněte na + nebo přetáhněte soubory sem";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "skladba";
+"footer_track_plural" = "skladby";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Náhodná fronta";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Nastavení";
+"settings_section_playlist" = "Seznam skladeb";
+"settings_allow_duplicates" = "Povolit duplikáty";
+"settings_allow_duplicates_desc" = "Pokud je zapnuto, stejný soubor lze přidat do seznamu vícekrát.";
+"settings_section_language" = "Jazyk";
+"settings_language_system" = "Jazyk systému";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Přidat soubory…";
+"menu_new_playlist" = "Nový seznam skladeb";
+"menu_rename_playlist" = "Přejmenovat seznam skladeb";
+"menu_delete_playlist" = "Smazat seznam skladeb";
+"menu_export_playlist" = "Exportovat seznam skladeb…";
+"menu_import_playlist" = "Importovat seznam skladeb…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Přehrávání";
+"menu_play" = "Přehrát";
+"menu_pause" = "Pozastavit";
+"menu_stop" = "Zastavit";
+"menu_next_track" = "Další skladba";
+"menu_previous_track" = "Předchozí skladba";
+"menu_seek_forward" = "Přeskočit o 5 sekund dopředu";
+"menu_seek_backward" = "Přeskočit o 5 sekund zpět";
+"menu_repeat_mode" = "Režim opakování";
+"menu_shuffle_mode" = "Náhodný režim";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Exportovat seznam skladeb";
+"panel_export_relative" = "Použít relativní cesty (pro USB / sdílení)";
+"panel_import_title" = "Importovat seznam skladeb";
+"alert_export_failed" = "Export selhal";
+"alert_import_missing_title" = "Některé soubory nenalezeny";
+"alert_import_missing_body" = "Následující soubory byly přeskočeny:\n\n%@";

@@ -1,0 +1,109 @@
+/* =========================================================
+   Localizable.strings — Italiano (it)
+   HarmoniaPlayer
+   ========================================================= */
+
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "File non trovato";
+"alert_file_not_found_multi" = "I seguenti file non potevano essere aperti e sono stati ignorati:\n%@";
+"alert_file_not_found_single" = "Impossibile aprire \"%@\". Potrebbe essere stato spostato o eliminato.";
+"alert_file_not_found_generic" = "Impossibile aprire il file. Potrebbe essere stato spostato o eliminato.";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "Già nella playlist";
+"alert_already_in_playlist_body" = "I seguenti file sono già nella playlist e non sono stati aggiunti:\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "Errore di riproduzione";
+"error_unsupported_format" = "Questo formato non è supportato nella versione gratuita.";
+"error_failed_to_decode" = "Impossibile decodificare il file.";
+"error_output_error" = "Si è verificato un errore di output di riproduzione.";
+"error_core_error" = "Si è verificato un errore di riproduzione.\n\nCodice: %@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "Nessuna traccia caricata";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "Traccia precedente";
+"help_pause" = "Pausa";
+"help_play" = "Riproduci";
+"help_stop" = "Ferma";
+"help_next_track" = "Traccia successiva";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "Ripeti: disattivato";
+"repeat_all" = "Ripeti: tutto";
+"repeat_one" = "Ripeti: uno";
+"shuffle_on" = "Casuale: attivato";
+"shuffle_off" = "Casuale: disattivato";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "Fermo";
+"status_loading" = "Caricamento";
+"status_playing" = "In riproduzione";
+"status_paused" = "In pausa";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "Titolo";
+"col_artist" = "Artista";
+"col_duration" = "Durata";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "Riproduci";
+"ctx_play_next" = "Riproduci dopo";
+"ctx_remove" = "Rimuovi dalla playlist";
+"ctx_rename" = "Rinomina";
+"ctx_delete" = "Elimina";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "Ripristina ordine di aggiunta";
+"help_show_shuffle_queue" = "Mostra coda casuale";
+"help_add_files" = "Aggiungi file alla playlist";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "Aggiungi musica per iniziare";
+"empty_state_secondary" = "Fai clic su + o trascina file qui";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "traccia";
+"footer_track_plural" = "tracce";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "Coda casuale";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "Impostazioni";
+"settings_section_playlist" = "Playlist";
+"settings_allow_duplicates" = "Consenti duplicati";
+"settings_allow_duplicates_desc" = "Se attivato, lo stesso file può essere aggiunto più volte alla playlist.";
+"settings_section_language" = "Lingua";
+"settings_language_system" = "Lingua di sistema";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "Aggiungi file…";
+"menu_new_playlist" = "Nuova playlist";
+"menu_rename_playlist" = "Rinomina playlist";
+"menu_delete_playlist" = "Elimina playlist";
+"menu_export_playlist" = "Esporta playlist…";
+"menu_import_playlist" = "Importa playlist…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "Riproduzione";
+"menu_play" = "Riproduci";
+"menu_pause" = "Pausa";
+"menu_stop" = "Ferma";
+"menu_next_track" = "Traccia successiva";
+"menu_previous_track" = "Traccia precedente";
+"menu_seek_forward" = "Vai avanti 5 secondi";
+"menu_seek_backward" = "Vai indietro 5 secondi";
+"menu_repeat_mode" = "Modalità ripetizione";
+"menu_shuffle_mode" = "Modalità casuale";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "Esporta playlist";
+"panel_export_relative" = "Usa percorsi relativi (per USB / condivisione)";
+"panel_import_title" = "Importa playlist";
+"alert_export_failed" = "Esportazione fallita";
+"alert_import_missing_title" = "Alcuni file non trovati";
+"alert_import_missing_body" = "I seguenti file sono stati ignorati:\n\n%@";

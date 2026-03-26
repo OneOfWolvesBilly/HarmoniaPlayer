@@ -1,0 +1,108 @@
+/* =========================================================
+   Localizable.strings — 日本語 (ja)
+   HarmoniaPlayer
+   ========================================================= */
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "ファイルが見つかりません";
+"alert_file_not_found_multi" = "以下のファイルを開けなかったためスキップしました：\n%@";
+"alert_file_not_found_single" = "「%@」を開けませんでした。移動または削除された可能性があります。";
+"alert_file_not_found_generic" = "ファイルを開けませんでした。移動または削除された可能性があります。";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "プレイリストに登録済み";
+"alert_already_in_playlist_body" = "以下のファイルはすでにプレイリストにあるため追加しませんでした：\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "再生エラー";
+"error_unsupported_format" = "このフォーマットは無料版では対応していません。";
+"error_failed_to_decode" = "ファイルをデコードできませんでした。";
+"error_output_error" = "再生出力エラーが発生しました。";
+"error_core_error" = "再生中にエラーが発生しました。\n\nコード：%@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "トラック未選択";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "前のトラック";
+"help_pause" = "一時停止";
+"help_play" = "再生";
+"help_stop" = "停止";
+"help_next_track" = "次のトラック";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "リピート：オフ";
+"repeat_all" = "リピート：すべて";
+"repeat_one" = "リピート：1曲";
+"shuffle_on" = "シャッフル：オン";
+"shuffle_off" = "シャッフル：オフ";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "停止中";
+"status_loading" = "読み込み中";
+"status_playing" = "再生中";
+"status_paused" = "一時停止中";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "タイトル";
+"col_artist" = "アーティスト";
+"col_duration" = "時間";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "再生";
+"ctx_play_next" = "次に再生";
+"ctx_remove" = "プレイリストから削除";
+"ctx_rename" = "名前を変更";
+"ctx_delete" = "削除";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "追加順に戻す";
+"help_show_shuffle_queue" = "シャッフルキューを表示";
+"help_add_files" = "プレイリストにファイルを追加";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "音楽を追加して始めましょう";
+"empty_state_secondary" = "＋をクリックするかここにファイルをドロップ";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "曲";
+"footer_track_plural" = "曲";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "シャッフルキュー";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "設定";
+"settings_section_playlist" = "プレイリスト";
+"settings_allow_duplicates" = "重複トラックを許可";
+"settings_allow_duplicates_desc" = "有効にすると、同じファイルをプレイリストに複数回追加できます。";
+"settings_section_language" = "言語";
+"settings_language_system" = "システムに従う";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "ファイルを追加…";
+"menu_new_playlist" = "新規プレイリスト";
+"menu_rename_playlist" = "プレイリスト名を変更";
+"menu_delete_playlist" = "プレイリストを削除";
+"menu_export_playlist" = "プレイリストを書き出す…";
+"menu_import_playlist" = "プレイリストを読み込む…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "再生";
+"menu_play" = "再生";
+"menu_pause" = "一時停止";
+"menu_stop" = "停止";
+"menu_next_track" = "次のトラック";
+"menu_previous_track" = "前のトラック";
+"menu_seek_forward" = "5秒進む";
+"menu_seek_backward" = "5秒戻る";
+"menu_repeat_mode" = "リピートモード";
+"menu_shuffle_mode" = "シャッフルモード";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "プレイリストを書き出す";
+"panel_export_relative" = "相対パスを使用（USBドライブや共有向け）";
+"panel_import_title" = "プレイリストを読み込む";
+"alert_export_failed" = "書き出し失敗";
+"alert_import_missing_title" = "一部のファイルが見つかりません";
+"alert_import_missing_body" = "以下のファイルをスキップしました：\n\n%@";

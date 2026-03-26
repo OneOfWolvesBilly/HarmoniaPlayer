@@ -1,0 +1,108 @@
+/* =========================================================
+   Localizable.strings — 繁體中文 (zh-Hant)
+   HarmoniaPlayer
+   ========================================================= */
+
+/* MARK: - ContentView: File Not Found Alert */
+"alert_file_not_found_title" = "找不到檔案";
+"alert_file_not_found_multi" = "下列檔案無法開啟，已略過：\n%@";
+"alert_file_not_found_single" = "「%@」無法開啟，可能已被移動或刪除。";
+"alert_file_not_found_generic" = "檔案無法開啟，可能已被移動或刪除。";
+
+/* MARK: - ContentView: Already in Playlist Alert */
+"alert_already_in_playlist_title" = "已在播放清單中";
+"alert_already_in_playlist_body" = "下列檔案已在播放清單中，未重複加入：\n%@";
+
+/* MARK: - ContentView: Playback Error Alert */
+"alert_playback_error_title" = "播放錯誤";
+"error_unsupported_format" = "免費版本不支援此格式。";
+"error_failed_to_decode" = "無法解碼此檔案。";
+"error_output_error" = "播放輸出發生錯誤。";
+"error_core_error" = "播放時發生錯誤。\n\n錯誤碼：%@";
+
+/* MARK: - PlayerView: Metadata */
+"no_track_loaded" = "尚未載入曲目";
+
+/* MARK: - PlayerView: Transport Button Help */
+"help_previous_track" = "上一首";
+"help_pause" = "暫停";
+"help_play" = "播放";
+"help_stop" = "停止";
+"help_next_track" = "下一首";
+
+/* MARK: - PlayerView: Mode Button Help */
+"repeat_off" = "重複：關閉";
+"repeat_all" = "重複：全部";
+"repeat_one" = "重複：單曲";
+"shuffle_on" = "隨機：開啟";
+"shuffle_off" = "隨機：關閉";
+
+/* MARK: - PlayerView: Status Label */
+"status_stopped" = "已停止";
+"status_loading" = "載入中";
+"status_playing" = "播放中";
+"status_paused" = "已暫停";
+
+/* MARK: - PlaylistView: Table Column Headers */
+"col_title" = "標題";
+"col_artist" = "演出者";
+"col_duration" = "時長";
+
+/* MARK: - PlaylistView: Context Menu */
+"ctx_play" = "播放";
+"ctx_play_next" = "接下來播放";
+"ctx_remove" = "從播放清單移除";
+"ctx_rename" = "重新命名";
+"ctx_delete" = "刪除";
+
+/* MARK: - PlaylistView: Toolbar Help */
+"help_restore_order" = "還原加入順序";
+"help_show_shuffle_queue" = "顯示隨機佇列";
+"help_add_files" = "加入檔案至播放清單";
+
+/* MARK: - PlaylistView: Empty State */
+"empty_state_primary" = "加入音樂以開始使用";
+"empty_state_secondary" = "點按 + 或拖放檔案至此";
+
+/* MARK: - PlaylistView: Footer */
+"footer_track_singular" = "首";
+"footer_track_plural" = "首";
+
+/* MARK: - PlaylistView: Shuffle Queue Popover */
+"shuffle_queue_title" = "隨機佇列";
+
+/* MARK: - SettingsView */
+"nav_title_settings" = "設定";
+"settings_section_playlist" = "播放清單";
+"settings_allow_duplicates" = "允許重複曲目";
+"settings_allow_duplicates_desc" = "啟用後，同一個檔案可以多次加入播放清單。";
+"settings_section_language" = "語言";
+"settings_language_system" = "跟隨系統";
+
+/* MARK: - HarmoniaPlayerCommands: File Menu */
+"menu_add_files" = "加入檔案…";
+"menu_new_playlist" = "新增播放清單";
+"menu_rename_playlist" = "重新命名播放清單";
+"menu_delete_playlist" = "刪除播放清單";
+"menu_export_playlist" = "匯出播放清單…";
+"menu_import_playlist" = "匯入播放清單…";
+
+/* MARK: - HarmoniaPlayerCommands: Playback Menu */
+"menu_playback" = "播放";
+"menu_play" = "播放";
+"menu_pause" = "暫停";
+"menu_stop" = "停止";
+"menu_next_track" = "下一首";
+"menu_previous_track" = "上一首";
+"menu_seek_forward" = "快轉 5 秒";
+"menu_seek_backward" = "倒退 5 秒";
+"menu_repeat_mode" = "重複模式";
+"menu_shuffle_mode" = "隨機模式";
+
+/* MARK: - HarmoniaPlayerCommands: Panels & Alerts */
+"panel_export_title" = "匯出播放清單";
+"panel_export_relative" = "使用相對路徑（適合 USB 或分享）";
+"panel_import_title" = "匯入播放清單";
+"alert_export_failed" = "匯出失敗";
+"alert_import_missing_title" = "部分檔案未找到";
+"alert_import_missing_body" = "下列檔案已略過：\n\n%@";
