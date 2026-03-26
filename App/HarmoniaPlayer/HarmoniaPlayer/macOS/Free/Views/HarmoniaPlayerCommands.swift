@@ -45,6 +45,17 @@ struct HarmoniaPlayerCommands: Commands {
         // Remove default "New" item — not applicable for a music player.
         CommandGroup(replacing: .newItem) {}
 
+        // Remove system menus that cannot be localized by the app.
+        CommandGroup(replacing: .undoRedo) {}
+        CommandGroup(replacing: .pasteboard) {}
+        CommandGroup(replacing: .systemServices) {}
+        CommandGroup(replacing: .textEditing) {}
+        CommandGroup(replacing: .textFormatting) {}
+        CommandGroup(replacing: .help) {}
+
+        // Remove "Close" from File menu (system-provided, shows in system language)
+        CommandGroup(replacing: .windowArrangement) {}
+
         // Add "Add Files…" and playlist management to the File menu.
         CommandGroup(after: .newItem) {
             Button(L("menu_add_files")) {
@@ -168,7 +179,12 @@ struct HarmoniaPlayerCommands: Commands {
     private func exportPlaylist(appState: AppState) {
         let panel = NSSavePanel()
         panel.title = L("panel_export_title")
-        panel.allowedContentTypes = [.init(filenameExtension: "m3u8")!]
+        // UTType(filenameExtension:) can return nil for custom extensions;
+        // fall back to setting allowedFileTypes via the deprecated API or
+        // leave unfiltered and rely on the file extension in nameFieldStringValue.
+        if let m3u8Type = UTType(filenameExtension: "m3u8") {
+            panel.allowedContentTypes = [m3u8Type]
+        }
         panel.nameFieldStringValue = "\(appState.playlist.name).m3u8"
         panel.canCreateDirectories = true
 
@@ -203,7 +219,9 @@ struct HarmoniaPlayerCommands: Commands {
     private func importPlaylist(appState: AppState) {
         let panel = NSOpenPanel()
         panel.title = L("panel_import_title")
-        panel.allowedContentTypes = [.init(filenameExtension: "m3u8")!]
+        if let m3u8Type = UTType(filenameExtension: "m3u8") {
+            panel.allowedContentTypes = [m3u8Type]
+        }
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
 
