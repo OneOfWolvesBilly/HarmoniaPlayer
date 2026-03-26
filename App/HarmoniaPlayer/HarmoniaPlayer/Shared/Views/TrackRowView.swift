@@ -28,7 +28,8 @@ struct TrackRowView: View {
             // Title column
             Text(track.title)
                 .font(.body)
-                .foregroundStyle(isSelected ? Color.white : Color.primary)
+                .foregroundStyle(rowTitleColor)
+                .strikethrough(!track.isAccessible, color: rowTitleColor)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 8)
@@ -36,7 +37,8 @@ struct TrackRowView: View {
             // Artist column
             Text(track.artist.isEmpty ? "—" : track.artist)
                 .font(.body)
-                .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+                .foregroundStyle(rowSecondaryColor)
+                .strikethrough(!track.isAccessible, color: rowSecondaryColor)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.trailing, 8)
@@ -44,13 +46,31 @@ struct TrackRowView: View {
             // Duration column
             Text(formatDuration(track.duration))
                 .font(.body)
-                .foregroundStyle(isSelected ? Color.white.opacity(0.8) : Color.secondary)
+                .foregroundStyle(rowSecondaryColor)
+                .strikethrough(!track.isAccessible, color: rowSecondaryColor)
                 .monospacedDigit()
                 .frame(width: 64, alignment: .trailing)
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
+        .opacity(track.isAccessible ? 1.0 : 0.6)
         .accessibilityIdentifier("track-row-\(track.id)")
+    }
+
+    // MARK: - Helpers
+
+    /// Title text color.
+    /// Inaccessible tracks use .tertiary which adapts to both light and dark mode —
+    /// more visible than .secondary on dark backgrounds.
+    private var rowTitleColor: Color {
+        guard track.isAccessible else { return Color(nsColor: .tertiaryLabelColor) }
+        return isSelected ? .white : .primary
+    }
+
+    /// Secondary text color (artist, duration).
+    private var rowSecondaryColor: Color {
+        guard track.isAccessible else { return Color(nsColor: .tertiaryLabelColor) }
+        return isSelected ? Color.white.opacity(0.8) : .secondary
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {

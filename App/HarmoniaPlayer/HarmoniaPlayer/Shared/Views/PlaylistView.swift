@@ -87,17 +87,6 @@ struct PlaylistView: View {
         .onReceive(NotificationCenter.default.publisher(for: .renameActivePlaylist)) { _ in
             beginRename(at: appState.activePlaylistIndex)
         }
-        .alert("Already in Playlist", isPresented: Binding(
-            get: { !appState.skippedDuplicateURLs.isEmpty },
-            set: { if !$0 { appState.skippedDuplicateURLs = [] } }
-        )) {
-            Button("OK") { appState.skippedDuplicateURLs = [] }
-        } message: {
-            let names = appState.skippedDuplicateURLs
-                .map { $0.lastPathComponent }
-                .joined(separator: "\n")
-            Text("The following files are already in the playlist and were not added:\n\(names)")
-        }
     }
 
     // MARK: - Playlist Tab Bar
@@ -217,26 +206,31 @@ struct PlaylistView: View {
                     .foregroundStyle(appState.currentTrack?.id == track.id
                                      ? Color.accentColor : Color.secondary)
                     .frame(width: 16)
+                    .opacity(track.isAccessible ? 1.0 : 0.6)
             }
             .width(24)
 
             TableColumn("Title", value: \.title) { track in
                 Text(track.title)
                     .lineLimit(1)
+                    .foregroundStyle(track.isAccessible ? Color.primary : Color(nsColor: .tertiaryLabelColor))
+                    .strikethrough(!track.isAccessible)
             }
             .width(min: 120)
 
             TableColumn("Artist", value: \.artist) { track in
                 Text(track.artist.isEmpty ? "—" : track.artist)
                     .lineLimit(1)
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
+                    .strikethrough(!track.isAccessible)
             }
             .width(min: 100)
 
             TableColumn("Duration", value: \.duration) { track in
                 Text(formatDuration(track.duration))
                     .monospacedDigit()
-                    .foregroundStyle(Color.secondary)
+                    .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
+                    .strikethrough(!track.isAccessible)
             }
             .width(min: 52, ideal: 64)
         }

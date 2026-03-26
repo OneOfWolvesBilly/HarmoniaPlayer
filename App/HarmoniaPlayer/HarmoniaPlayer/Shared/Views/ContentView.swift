@@ -16,6 +16,8 @@
 //    collapsing completely.
 //  - `AppState` is provided via `@EnvironmentObject` injected by
 //    `HarmoniaPlayerApp`; this view does not create or own it.
+//  - `failedToOpenFile` alert auto-dismisses after 3 seconds.
+//    Other playback errors require manual dismissal.
 //  - No `import HarmoniaCore` — all state access goes through `AppState`.
 //
 
@@ -33,6 +35,9 @@ struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
 
+    /// Whether the auto-dismiss file-not-found alert is showing.
+    @State private var showFileNotFoundAlert = false
+
     var body: some View {
         HSplitView {
             PlaylistView()
@@ -45,6 +50,28 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Auto-dismiss alert for failedToOpenFile (3 seconds)
+        .onChange(of: appState.lastError) {
+            if case .failedToOpenFile = appState.lastError {
+                showFileNotFoundAlert = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    showFileNotFoundAlert = false
+                    appState.clearLastError()
+                }
+            }
+        }
+        .alert("File Not Found", isPresented: $showFileNotFoundAlert) {
+            Button("OK") {
+                showFileNotFoundAlert = false
+                appState.clearLastError()
+            }
+        } message: {
+            if let name = appState.failedTrackName {
+                Text("\"\(name)\" could not be opened. It may have been moved or deleted.")
+            } else {
+                Text("The file could not be opened. It may have been moved or deleted.")
+            }
+        }
         .alert("Already in Playlist", isPresented: Binding(
             get: { !appState.skippedDuplicateURLs.isEmpty },
             set: { if !$0 { appState.skippedDuplicateURLs = [] } }
@@ -55,6 +82,30 @@ struct ContentView: View {
                 .map { $0.lastPathComponent }
                 .joined(separator: "\n")
             Text("The following files are already in the playlist and were not added:\n\(names)")
+        }
+        .alert("Playback Error", isPresented: Binding(
+            get: {
+                switch appState.lastError {
+                case .failedToOpenFile, nil: return false
+                default: return true
+                }
+            },
+            set: { if !$0 { appState.clearLastError() } }
+        )) {
+            Button("OK") { appState.clearLastError() }
+        } message: {
+            switch appState.lastError {
+            case .unsupportedFormat:
+                Text("This format is not supported in the Free version.")
+            case .failedToDecode:
+                Text("The file could not be decoded.")
+            case .outputError:
+                Text("A playback output error occurred.")
+            case .coreError(let msg):
+                Text(msg)
+            default:
+                Text("")
+            }
         }
     }
 }

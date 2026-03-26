@@ -44,6 +44,10 @@ final class AppStateFormatGatingTests: XCTestCase {
     /// Fake playback service used to inspect call counts without real audio I/O.
     private var fakePlaybackService: FakePlaybackService!
 
+    /// Isolated UserDefaults suite — prevents persistence state leaking between tests.
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
+
     // Workaround: Xcode 26 beta TaskLocal deallocation crash on @MainActor deinit.
     nonisolated deinit {}
 
@@ -54,6 +58,9 @@ final class AppStateFormatGatingTests: XCTestCase {
         // observed under Xcode 26 beta when @MainActor objects are torn down.
         sut = nil
         fakePlaybackService = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         super.tearDown()
     }
 
@@ -64,10 +71,13 @@ final class AppStateFormatGatingTests: XCTestCase {
     /// - Parameter isProUnlocked: Determines whether `CoreFeatureFlags.supportsFLAC`
     ///   is `true` (Pro) or `false` (Free).
     private func makeSUT(isProUnlocked: Bool) {
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         fakePlaybackService = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: isProUnlocked)
-        sut = AppState(iapManager: iap, provider: provider)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
     }
 
     /// Adds one track with the given file extension to the SUT playlist via `load(urls:)`.

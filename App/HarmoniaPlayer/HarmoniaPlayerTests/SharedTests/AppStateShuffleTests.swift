@@ -11,6 +11,18 @@ import XCTest
 @MainActor
 final class AppStateShuffleTests: XCTestCase {
 
+    // MARK: - Lifecycle
+
+    private var createdSuiteNames: [String] = []
+
+    override func tearDown() async throws {
+        for name in createdSuiteNames {
+            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        }
+        createdSuiteNames.removeAll()
+        try await super.tearDown()
+    }
+
     // MARK: - Helpers
 
     private func makeURL(_ name: String) -> URL {
@@ -20,7 +32,10 @@ final class AppStateShuffleTests: XCTestCase {
     private func makeSUT() -> (AppState, FakePlaybackService) {
         let fake = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fake)
-        let sut = AppState(iapManager: MockIAPManager(), provider: provider)
+        let suiteName = "hp-test-\(UUID().uuidString)"
+        createdSuiteNames.append(suiteName)
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: defaults)
         return (sut, fake)
     }
 

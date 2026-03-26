@@ -25,6 +25,13 @@ struct HarmoniaPlayerApp: App {
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: NSApplication.willTerminateNotification
+                    )
+                ) { _ in
+                    appState.saveState()
+                }
         }
         .commands {
             HarmoniaPlayerCommands()

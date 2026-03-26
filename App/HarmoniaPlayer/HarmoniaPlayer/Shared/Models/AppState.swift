@@ -15,6 +15,20 @@ private extension Array {
     }
 }
 
+// MARK: - Persistence Keys
+
+private enum PersistenceKey {
+    static let playlists           = "hp.playlists"
+    static let activePlaylistIndex = "hp.activePlaylistIndex"
+    static let allowDuplicates     = "hp.allowDuplicateTracks"
+    static let volume              = "hp.volume"
+    static let selectedLanguage    = "hp.selectedLanguage"
+    static let sortKey             = "hp.sortKey"
+    static let sortAscending       = "hp.sortAscending"
+    static let repeatMode          = "hp.repeatMode"
+    static let isShuffled          = "hp.isShuffled"
+}
+
 /// Central application state container.
 ///
 /// Wires all dependencies (IAP → FeatureFlags → CoreFactory → Services)
@@ -36,6 +50,9 @@ final class AppState: ObservableObject {
 
     /// IAP manager (determines Free/Pro)
     private let iapManager: IAPManager
+
+    /// UserDefaults store used for persistence.
+    private let userDefaults: UserDefaults
 
     /// Feature flags (derived from IAP).
     /// Exposes tier-specific capabilities used by format gating and UI.
@@ -133,6 +150,12 @@ final class AppState: ObservableObject {
     /// Views observe this to present error banners or alerts.
     @Published private(set) var lastError: PlaybackError?
 
+    /// Display name of the track that triggered the most recent `failedToOpenFile` error.
+    ///
+    /// Set to "Title - Artist" when artist is available, otherwise the URL filename.
+    /// Cleared when `clearLastError()` is called.
+    @Published private(set) var failedTrackName: String?
+
     /// URLs that were skipped during the last load() call because they
     /// already exist in the playlist. Non-empty triggers a duplicate alert.
     @Published var skippedDuplicateURLs: [URL] = []
@@ -203,7 +226,8 @@ final class AppState: ObservableObject {
     /// ```
     init(
         iapManager: IAPManager,
-        provider: CoreServiceProviding
+        provider: CoreServiceProviding,
+        userDefaults: UserDefaults = .standard
     ) {
         // Step 1: Store IAP manager
         self.iapManager = iapManager
@@ -228,14 +252,92 @@ final class AppState: ObservableObject {
         self.playlists = [Playlist(name: "Playlist 1")]
         self.currentTrack = nil
 
+        // Step 7: Store UserDefaults instance
+        self.userDefaults = userDefaults
+
         // Note: viewPreferences and lastError use property-level defaults;
         // no explicit assignment needed in init.
+
+        // Step 8: Restore persisted state (overrides Step 6 defaults if data exists)
+        restoreState()
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
     // Required on all @MainActor classes that are deallocated in test contexts.
     // Remove when Xcode 26 stable is released.
     nonisolated deinit {}
+
+    // MARK: - Persistence
+
+    /// Clears the last playback error. Called when the user dismisses an error alert.
+    func clearLastError() {
+        lastError = nil
+        failedTrackName = nil
+        if case .error = playbackState {
+            playbackState = .stopped
+        }
+    }
+
+    /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.
+    ///
+    /// Called by the app entry point when `NSApplication.willTerminateNotification` fires.
+    func saveState() {
+        if let data = try? JSONEncoder().encode(playlists) {
+            userDefaults.set(data, forKey: PersistenceKey.playlists)
+        }
+        userDefaults.set(activePlaylistIndex, forKey: PersistenceKey.activePlaylistIndex)
+        userDefaults.set(allowDuplicateTracks, forKey: PersistenceKey.allowDuplicates)
+        userDefaults.set(volume, forKey: PersistenceKey.volume)
+        if let repeatData = try? JSONEncoder().encode(repeatMode) {
+            userDefaults.set(repeatData, forKey: PersistenceKey.repeatMode)
+        }
+        userDefaults.set(isShuffled, forKey: PersistenceKey.isShuffled)
+    }
+
+    /// Restores previously saved state from UserDefaults.
+    ///
+    /// Called once in `init` after services are wired.
+    /// When no persisted data exists, the default values set in `init` are preserved.
+    func restoreState() {
+        if let data = userDefaults.data(forKey: PersistenceKey.playlists) {
+            do {
+                let decoded = try JSONDecoder().decode([Playlist].self, from: data)
+                if !decoded.isEmpty {
+                    playlists = decoded
+                    let savedIndex = userDefaults.integer(forKey: PersistenceKey.activePlaylistIndex)
+                    activePlaylistIndex = max(0, min(savedIndex, playlists.count - 1))
+
+                    // Application Layer accessibility check: mark tracks inaccessible
+                    // if the file no longer exists at its original stored path.
+                    // Use originalPath (urlPath stored at encode time), not url.path
+                    // which bookmark may have resolved to Trash or another location.
+                    for i in playlists.indices {
+                        for j in playlists[i].tracks.indices {
+                            let path = playlists[i].tracks[j].originalPath
+                            if path.isEmpty || !FileManager.default.fileExists(atPath: path) {
+                                playlists[i].tracks[j].isAccessible = false
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Decode failure is non-fatal; app starts with default empty playlist.
+            }
+        }
+        if userDefaults.object(forKey: PersistenceKey.allowDuplicates) != nil {
+            allowDuplicateTracks = userDefaults.bool(forKey: PersistenceKey.allowDuplicates)
+        }
+        if userDefaults.object(forKey: PersistenceKey.volume) != nil {
+            volume = userDefaults.float(forKey: PersistenceKey.volume)
+        }
+        if let repeatData = userDefaults.data(forKey: PersistenceKey.repeatMode),
+           let decoded = try? JSONDecoder().decode(RepeatMode.self, from: repeatData) {
+            repeatMode = decoded
+        }
+        if userDefaults.object(forKey: PersistenceKey.isShuffled) != nil {
+            isShuffled = userDefaults.bool(forKey: PersistenceKey.isShuffled)
+        }
+    }
 
     // MARK: - Playlist Operations
 
@@ -295,12 +397,15 @@ final class AppState: ObservableObject {
                 shuffleQueue.insert(id, at: insertIndex)
             }
         }
+
+        saveState()
     }
 
     /// Resets the playlist to empty and clears `currentTrack`.
     func clearPlaylist() {
         playlists[activePlaylistIndex].tracks = []
         currentTrack = nil
+        saveState()
     }
 
     // MARK: - Playlist Management
@@ -315,6 +420,7 @@ final class AppState: ObservableObject {
         let resolvedName = name.isEmpty ? nextAvailablePlaylistName() : name
         playlists.append(Playlist(name: resolvedName))
         activePlaylistIndex = playlists.count - 1
+        saveState()
     }
 
     /// Returns the next available "Playlist N" name by finding the lowest
@@ -338,6 +444,7 @@ final class AppState: ObservableObject {
     func renamePlaylist(at index: Int, name: String) {
         guard playlists.indices.contains(index) else { return }
         playlists[index].name = name
+        saveState()
     }
 
     /// Deletes the playlist at the given index.
@@ -361,6 +468,7 @@ final class AppState: ObservableObject {
         } else {
             activePlaylistIndex = min(activePlaylistIndex, playlists.count - 1)
         }
+        saveState()
     }
 
     /// Removes the track with the given ID from the playlist.
@@ -431,6 +539,8 @@ final class AppState: ObservableObject {
             // If removed track was the current position, index stays the same
             // (now pointing to the next track in queue).
         }
+
+        saveState()
     }
 
     /// Inserts a track immediately after the currently playing track.
@@ -477,6 +587,7 @@ final class AppState: ObservableObject {
         // Do NOT rebuild shuffleQueue here — sort only changes the visual display
         // order in PlaylistView. shuffleQueue is an independent playback order
         // and must not be affected by column sorting.
+        saveState()
     }
 
     /// Restores insertion order and clears sort state.
@@ -488,6 +599,7 @@ final class AppState: ObservableObject {
         playlists[activePlaylistIndex].sortKey = .none
         playlists[activePlaylistIndex].sortAscending = true
         // Do NOT rebuild shuffleQueue here — same reason as applySort().
+        saveState()
     }
 
     /// Reorders tracks in the playlist.
@@ -509,6 +621,7 @@ final class AppState: ObservableObject {
         // Keep insertionOrder in sync with the new track order so that
         // restoreInsertionOrder() reflects the user's manual reorder.
         playlists[activePlaylistIndex].insertionOrder = result.map { $0.id }
+        saveState()
     }
 
     // MARK: - Transport Controls
@@ -630,12 +743,31 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter trackID: The `UUID` of the track to load and play.
     func play(trackID: Track.ID) async {
-        // Step 1: Resolve track in playlist. Nil currentTrack and bail if not found.
-        guard let track = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID }) else {
+        // Step 1: Resolve track across all playlists.
+        // Search activePlaylistIndex first, then other playlists.
+        // If found in a different playlist, switch activePlaylistIndex to that playlist.
+        var resolvedTrack: Track? = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
+        var resolvedPlaylistIndex = activePlaylistIndex
+
+        if resolvedTrack == nil {
+            for (i, playlist) in playlists.enumerated() where i != activePlaylistIndex {
+                if let found = playlist.tracks.first(where: { $0.id == trackID }) {
+                    resolvedTrack = found
+                    resolvedPlaylistIndex = i
+                    break
+                }
+            }
+        }
+
+        guard let track = resolvedTrack else {
             currentTrack = nil
             return
         }
-        currentTrack = track
+
+        // Switch to the playlist that owns this track.
+        if resolvedPlaylistIndex != activePlaylistIndex {
+            activePlaylistIndex = resolvedPlaylistIndex
+        }
 
         // If shuffle is active, sync shuffleQueueIndex to the manually selected track
         // so Next/Previous continue from the correct position in the queue.
@@ -649,12 +781,46 @@ final class AppState: ObservableObject {
         }
 
         // Step 2: Format gate — reject Pro-only formats on the Free tier.
-        // The gate fires BEFORE playbackState is changed and BEFORE any service call.
+        // currentTrack is set before this gate so PlayerView shows which track
+        // was attempted (consistent with original Slice 4 behaviour).
+        currentTrack = track
         let ext = track.url.pathExtension.lowercased()
         if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
             lastError = .unsupportedFormat
             playbackState = .error(.unsupportedFormat)
             return  // playbackService.load is never called for gated formats.
+        }
+
+        // Step 2b: Accessibility gate — reject tracks marked inaccessible at restore time.
+        // Revert currentTrack to nil so PlayerView is not updated with an inaccessible track.
+        // I/O checks (fileExists, Trash) are done in restoreState(), not here.
+        if !track.isAccessible {
+            lastError = .failedToOpenFile
+            failedTrackName = track.artist.isEmpty
+                ? track.url.deletingPathExtension().lastPathComponent
+                : "\(track.title) - \(track.artist)"
+            playbackState = .error(.failedToOpenFile)
+            // Ensure isAccessible=false is written back into playlists so PlaylistView re-renders.
+            if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
+                playlists[activePlaylistIndex].tracks[idx].isAccessible = false
+            }
+            // Auto-advance: find and play the next accessible track from the current position.
+            // Uses the known index of this track so currentTrack=nil does not break navigation.
+            let tracks = playlists[activePlaylistIndex].tracks
+            if let currentIndex = tracks.firstIndex(where: { $0.id == trackID }) {
+                let nextIndex = currentIndex + 1
+                if nextIndex < tracks.count {
+                    let nextID = tracks[nextIndex].id
+                    currentTrack = nil
+                    Task { await play(trackID: nextID) }
+                } else {
+                    currentTrack = nil
+                    playbackState = .stopped
+                }
+            } else {
+                currentTrack = nil
+            }
+            return
         }
 
         // Step 3–6: Standard load-and-play flow.
@@ -676,6 +842,14 @@ final class AppState: ObservableObject {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
             playbackState = .error(mapped)
+            if mapped == .failedToOpenFile {
+                failedTrackName = track.artist.isEmpty
+                    ? track.url.deletingPathExtension().lastPathComponent
+                    : "\(track.title) - \(track.artist)"
+                if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
+                    playlists[activePlaylistIndex].tracks[idx].isAccessible = false
+                }
+            }
         }
     }
 
@@ -974,6 +1148,15 @@ final class AppState: ObservableObject {
     /// Otherwise, the error's localized description is wrapped in `.coreError`.
     private func mapToPlaybackError(_ error: Error) -> PlaybackError {
         if let playbackError = error as? PlaybackError { return playbackError }
-        return .coreError(error.localizedDescription)
+        let desc = error.localizedDescription
+        // HarmoniaCore.CoreError error 3 = notFound / cannot open file
+        // Map file-related core errors to user-friendly failedToOpenFile
+        if desc.contains("CoreError error 3") ||
+           desc.contains("notFound") ||
+           desc.contains("not found") ||
+           desc.contains("No such file") {
+            return .failedToOpenFile
+        }
+        return .coreError(desc)
     }
 }

@@ -14,7 +14,7 @@ import Foundation
 /// - `off`: Advance to next track; stop after the last track.
 /// - `all`: Advance to next track; loop back to first after the last.
 /// - `one`: Repeat the current track indefinitely.
-enum RepeatMode: Equatable, Sendable {
+enum RepeatMode: String, Equatable, Sendable, Codable {
     case off
     case all
     case one

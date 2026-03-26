@@ -13,16 +13,24 @@ final class AppSettingsTests: XCTestCase {
 
     private var sut: AppState!
     private var fakeService: FakePlaybackService!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         fakeService = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fakeService)
-        sut = AppState(iapManager: MockIAPManager(), provider: provider)
+        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults)
     }
 
     override func tearDown() {
         sut = nil
         fakeService = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
     }
 
     private func makeURL(_ name: String) -> URL {

@@ -23,14 +23,22 @@ final class AppStatePlaybackStateTests: XCTestCase {
     // MARK: - Fixture
 
     private var sut: AppState!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
-        sut = AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider())
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
+        sut = AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider(), userDefaults: testDefaults)
     }
 
     override func tearDown() {
         sut = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         super.tearDown()
     }
 

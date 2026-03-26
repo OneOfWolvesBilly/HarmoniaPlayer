@@ -30,19 +30,28 @@ final class AppStatePlaylistTests: XCTestCase {
     // MARK: - SUT
 
     private var sut: AppState!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     // MARK: - Lifecycle
 
     override func setUp() async throws {
         try await super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         sut = AppState(
             iapManager: MockIAPManager(),
-            provider: FakeCoreProvider()
+            provider: FakeCoreProvider(),
+            userDefaults: testDefaults
         )
     }
 
     override func tearDown() async throws {
         sut = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         try await super.tearDown()
     }
 

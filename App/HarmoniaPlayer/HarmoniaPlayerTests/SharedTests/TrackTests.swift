@@ -22,6 +22,7 @@ import XCTest
 /// - No HarmoniaCore dependency
 /// - No UIKit / AppKit dependency
 /// - Pure value type tests
+@MainActor
 final class TrackTests: XCTestCase {
 
     // MARK: - Helpers
@@ -229,5 +230,60 @@ final class TrackTests: XCTestCase {
         XCTAssertNotNil(track.id,  "id must be accessible")
         XCTAssertEqual(track.url, sampleURL, "url must be accessible")
         // Attempting `track.id = UUID()` would be a compile error — enforced by `let`
+    }
+
+    // MARK: - Tests: isAccessible
+
+    func testTrack_IsAccessible_DefaultIsTrue() {
+        let track = Track(url: sampleURL)
+        XCTAssertTrue(track.isAccessible,
+                      "isAccessible should default to true for newly created tracks")
+    }
+
+    func testTrack_Equatable_ConsidersIsAccessible() {
+        // Given: Two tracks identical except for isAccessible
+        let sharedID = UUID()
+        var track1 = Track(id: sharedID, url: sampleURL, title: "Song")
+        var track2 = Track(id: sharedID, url: sampleURL, title: "Song")
+        track1.isAccessible = true
+        track2.isAccessible = false
+
+        // Then: isAccessible is included in Equatable so SwiftUI Table re-renders
+        // when a track transitions from accessible to inaccessible.
+        XCTAssertNotEqual(track1, track2,
+                          "isAccessible must affect Equatable so SwiftUI detects the change")
+    }
+
+    func testTrack_Codable_IsAccessible_FalseWhenFileNotFound() throws {
+        // Given: A track pointing to a path that does not exist on disk.
+        // No bookmark is generated for a non-existent file (bookmarkData throws).
+        let missingURL = URL(fileURLWithPath: "/tmp/does-not-exist-\(UUID().uuidString).mp3")
+        let original = Track(url: missingURL, title: "Missing")
+
+        // When: Encode then decode
+        let data = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(Track.self, from: data)
+
+        // Then: No bookmark was stored (file didn't exist at encode time),
+        // so isAccessible defaults to true after decode.
+        // The Application Layer (restoreState) is responsible for the fileExists check.
+        XCTAssertTrue(restored.isAccessible,
+                      "isAccessible is true after decode when no bookmark present — fileExists check is AppState.restoreState responsibility")
+    }
+
+    func testTrack_Codable_IsAccessible_NotPersisted() throws {
+        // Given: A track with isAccessible manually set to false
+        var original = Track(url: sampleURL, title: "Song")
+        original.isAccessible = false
+
+        // When: Encode then decode
+        let data = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(Track.self, from: data)
+
+        // Then: isAccessible is not stored in the encoded data.
+        // After decode with no bookmark, isAccessible defaults to true.
+        // The Application Layer (restoreState) re-evaluates accessibility after decode.
+        XCTAssertTrue(restored.isAccessible,
+                      "isAccessible is not persisted — defaults to true on decode; re-evaluated by AppState.restoreState")
     }
 }

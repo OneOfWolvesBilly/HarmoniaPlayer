@@ -361,12 +361,12 @@ struct PlayerView: View {
         // No text when playlist is empty
         guard !appState.playlist.tracks.isEmpty else { return "" }
         switch appState.playbackState {
-        case .idle:         return "Stopped"
+        case .idle:         return ""
         case .stopped:      return "Stopped"
         case .loading:      return "Loading"
         case .playing:      return "Playing"
         case .paused:       return "Paused"
-        case .error(let e): return "Error: \(e)"
+        case .error:        return "Stopped"
         }
     }
 

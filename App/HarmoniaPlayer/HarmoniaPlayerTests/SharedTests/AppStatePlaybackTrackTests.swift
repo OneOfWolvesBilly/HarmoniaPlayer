@@ -26,18 +26,26 @@ final class AppStatePlaybackTrackTests: XCTestCase {
 
     private var sut: AppState!
     private var fakePlaybackService: FakePlaybackService!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         fakePlaybackService = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: provider)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
     }
 
     override func tearDown() {
         sut = nil
         fakePlaybackService = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         super.tearDown()
     }
 

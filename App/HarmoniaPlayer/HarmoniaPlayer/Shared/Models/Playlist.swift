@@ -29,14 +29,14 @@ import Foundation
 /// Stored in `Playlist` so each playlist can have its own independent
 /// sort state, and so the state survives playlist switching and can be
 /// persisted with the playlist in a future save/load implementation.
-enum PlaylistSortKey: String, Equatable, Sendable {
+enum PlaylistSortKey: String, Equatable, Sendable, Codable {
     case none       // insertion order
     case title
     case artist
     case duration
 }
 
-struct Playlist: Identifiable, Equatable, Sendable {
+struct Playlist: Identifiable, Equatable, Sendable, Codable {
 
     // MARK: - Identity
 

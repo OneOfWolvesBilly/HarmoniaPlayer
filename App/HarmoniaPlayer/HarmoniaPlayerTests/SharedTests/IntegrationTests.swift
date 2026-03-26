@@ -59,6 +59,8 @@ final class IntegrationTests: XCTestCase {
     // MARK: - Test Fixtures
 
     var sut: AppState!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     // Workaround: Xcode 26 beta TaskLocal deallocation crash on @MainActor deinit.
     nonisolated deinit {}
@@ -66,14 +68,20 @@ final class IntegrationTests: XCTestCase {
     // MARK: - Setup / Teardown
 
     override func setUp() async throws {
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         let provider = HarmoniaCoreProvider()
         let iap = MockIAPManager()
-        sut = AppState(iapManager: iap, provider: provider)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
     }
 
     override func tearDown() async throws {
         await sut.stop()
         sut = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
     }
 
     // MARK: - Resource Helper

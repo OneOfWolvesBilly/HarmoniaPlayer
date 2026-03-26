@@ -21,7 +21,27 @@ import XCTest
 @MainActor
 final class AppStateTests: XCTestCase {
 
+    // MARK: - Lifecycle
+
+    private var createdSuiteNames: [String] = []
+
+    override func tearDown() {
+        for name in createdSuiteNames {
+            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        }
+        createdSuiteNames.removeAll()
+        super.tearDown()
+    }
+
     // MARK: - Helpers
+
+    /// Creates an isolated UserDefaults suite to prevent persistence state
+    /// leaking between tests.
+    private func makeIsolatedDefaults() -> UserDefaults {
+        let name = "hp-test-\(UUID().uuidString)"
+        createdSuiteNames.append(name)
+        return UserDefaults(suiteName: name)!
+    }
 
     /// Creates a minimal AppState for testing.
     ///
@@ -30,7 +50,7 @@ final class AppStateTests: XCTestCase {
     private func makeSUT(isProUnlocked: Bool = false) -> AppState {
         let iap = MockIAPManager(isProUnlocked: isProUnlocked)
         let provider = FakeCoreProvider()
-        return AppState(iapManager: iap, provider: provider)
+        return AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
     }
 
     // MARK: - Tests: Free User
@@ -43,7 +63,8 @@ final class AppStateTests: XCTestCase {
         // When: Initialize AppState
         let appState = AppState(
             iapManager: iapManager,
-            provider: fakeProvider
+            provider: fakeProvider,
+            userDefaults: makeIsolatedDefaults()
         )
 
         // Then: Dependencies are wired
@@ -63,7 +84,7 @@ final class AppStateTests: XCTestCase {
         let fakeProvider = FakeCoreProvider()
 
         // When: Initialize AppState
-        _ = AppState(iapManager: iapManager, provider: fakeProvider)
+        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults())
 
         // Then: Provider called with Free configuration
         XCTAssertEqual(fakeProvider.makePlaybackServiceCallCount, 1,
@@ -84,7 +105,8 @@ final class AppStateTests: XCTestCase {
         // When: Initialize AppState
         let appState = AppState(
             iapManager: iapManager,
-            provider: fakeProvider
+            provider: fakeProvider,
+            userDefaults: makeIsolatedDefaults()
         )
 
         // Then: Dependencies are wired with Pro features
@@ -104,7 +126,7 @@ final class AppStateTests: XCTestCase {
         let fakeProvider = FakeCoreProvider()
 
         // When: Initialize AppState
-        _ = AppState(iapManager: iapManager, provider: fakeProvider)
+        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults())
 
         // Then: Provider called with Pro configuration
         XCTAssertEqual(fakeProvider.makePlaybackServiceCallCount, 1,
@@ -122,7 +144,8 @@ final class AppStateTests: XCTestCase {
         XCTAssertNoThrow(
             _ = AppState(
                 iapManager: MockIAPManager(),
-                provider: FakeCoreProvider()
+                provider: FakeCoreProvider(),
+                userDefaults: makeIsolatedDefaults()
             )
         )
     }
@@ -135,7 +158,8 @@ final class AppStateTests: XCTestCase {
         // When: Initialize AppState
         let appState = AppState(
             iapManager: iapManager,
-            provider: fakeProvider
+            provider: fakeProvider,
+            userDefaults: makeIsolatedDefaults()
         )
 
         // Then: Services are created but no behavior executed
@@ -152,7 +176,8 @@ final class AppStateTests: XCTestCase {
         let freeIAP = MockIAPManager(isProUnlocked: false)
         let freeAppState = AppState(
             iapManager: freeIAP,
-            provider: FakeCoreProvider()
+            provider: FakeCoreProvider(),
+            userDefaults: makeIsolatedDefaults()
         )
 
         // Then: Feature flags match IAP state
@@ -166,7 +191,8 @@ final class AppStateTests: XCTestCase {
         let proIAP = MockIAPManager(isProUnlocked: true)
         let proAppState = AppState(
             iapManager: proIAP,
-            provider: FakeCoreProvider()
+            provider: FakeCoreProvider(),
+            userDefaults: makeIsolatedDefaults()
         )
 
         // Then: Feature flags match IAP state
@@ -225,7 +251,7 @@ final class AppStateTests: XCTestCase {
         let provider = FakeCoreProvider()
 
         // When
-        _ = AppState(iapManager: iap, provider: provider)
+        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
 
         // Then
         XCTAssertEqual(provider.makeTagReaderServiceCallCount, 1,
@@ -253,7 +279,7 @@ final class AppStateTests: XCTestCase {
         let iap = MockIAPManager(isProUnlocked: false)
 
         // When
-        let sut = AppState(iapManager: iap, provider: provider)
+        let sut = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
 
         // Then: AppState holds the exact instance the provider returned
         XCTAssertTrue(
@@ -273,7 +299,7 @@ final class AppStateTests: XCTestCase {
         let iap = MockIAPManager(isProUnlocked: false)
 
         // When
-        _ = AppState(iapManager: iap, provider: provider)
+        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
 
         // Then: No metadata reads triggered by init
         XCTAssertEqual(knownFake.readMetadataCallCount, 0,

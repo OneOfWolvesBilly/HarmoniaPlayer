@@ -27,17 +27,25 @@ final class AppStateErrorHandlingTests: XCTestCase {
 
     private var fakeTagReader: FakeTagReaderService!
     private var sut: AppState!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() async throws {
         try await super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         fakeTagReader = FakeTagReaderService()
         let provider = FakeCoreProvider(tagReader: fakeTagReader)
-        sut = AppState(iapManager: MockIAPManager(), provider: provider)
+        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults)
     }
 
     override func tearDown() async throws {
         sut = nil
         fakeTagReader = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         try await super.tearDown()
     }
 

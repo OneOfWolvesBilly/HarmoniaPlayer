@@ -29,17 +29,25 @@ final class AppStateTrackSelectionTests: XCTestCase {
 
     private var sut: AppState!
     private var fakeProvider: FakeCoreProvider!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
     override func setUp() {
         super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+
+        testDefaults = UserDefaults(suiteName: suiteName)!
         fakeProvider = FakeCoreProvider()
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: fakeProvider)
+        sut = AppState(iapManager: iap, provider: fakeProvider, userDefaults: testDefaults)
     }
 
     override func tearDown() {
         sut = nil
         fakeProvider = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
         super.tearDown()
     }
 
