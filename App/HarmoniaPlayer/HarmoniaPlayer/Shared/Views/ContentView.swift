@@ -35,9 +35,6 @@ struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
 
-    /// Whether the auto-dismiss file-not-found alert is showing.
-    @State private var showFileNotFoundAlert = false
-
     var body: some View {
         HSplitView {
             PlaylistView()
@@ -51,22 +48,21 @@ struct ContentView: View {
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // Auto-dismiss alert for failedToOpenFile (3 seconds)
-        .onChange(of: appState.lastError) {
-            if case .failedToOpenFile = appState.lastError {
-                showFileNotFoundAlert = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    showFileNotFoundAlert = false
-                    appState.clearLastError()
-                }
+        .onChange(of: appState.showFileNotFoundAlert) {
+            guard appState.showFileNotFoundAlert else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                appState.clearLastError()
             }
         }
-        .alert("File Not Found", isPresented: $showFileNotFoundAlert) {
+        .alert("File Not Found", isPresented: $appState.showFileNotFoundAlert) {
             Button("OK") {
-                showFileNotFoundAlert = false
                 appState.clearLastError()
             }
         } message: {
-            if let name = appState.failedTrackName {
+            if !appState.skippedInaccessibleNames.isEmpty {
+                let names = appState.skippedInaccessibleNames.map { "• \($0)" }.joined(separator: "\n")
+                Text("The following files could not be opened and were skipped:\n\(names)")
+            } else if let name = appState.failedTrackName {
                 Text("\"\(name)\" could not be opened. It may have been moved or deleted.")
             } else {
                 Text("The file could not be opened. It may have been moved or deleted.")

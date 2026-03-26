@@ -156,6 +156,20 @@ final class AppState: ObservableObject {
     /// Cleared when `clearLastError()` is called.
     @Published private(set) var failedTrackName: String?
 
+    /// Controls the file-not-found alert presentation.
+    ///
+    /// Set to `true` by `setFileNotFoundError(for:)`.
+    /// ContentView binds directly to this flag so the alert is not
+    /// dependent on `onChange(of: lastError)` timing.
+    @Published var showFileNotFoundAlert: Bool = false
+
+    /// Names of tracks skipped during auto-play due to inaccessibility.
+    ///
+    /// Populated during `trackDidFinishPlaying()` skip logic.
+    /// ContentView shows a single alert listing all skipped tracks.
+    /// Cleared when the alert is dismissed.
+    @Published var skippedInaccessibleNames: [String] = []
+
     /// URLs that were skipped during the last load() call because they
     /// already exist in the playlist. Non-empty triggers a duplicate alert.
     @Published var skippedDuplicateURLs: [URL] = []
@@ -200,6 +214,13 @@ final class AppState: ObservableObject {
     /// `shuffleQueueIndex` points to the current position in this queue.
     private(set) var shuffleQueue: [Track.ID] = []
     private(set) var shuffleQueueIndex: Int = 0
+
+    /// The ID of the last successfully played track.
+    ///
+    /// Set after `playbackService.play()` succeeds in `play(trackID:)`.
+    /// Used by `trackDidFinishPlaying()` to find the current position in the playlist
+    /// when `currentTrack` has been cleared (e.g. after a failed play attempt).
+    private var lastPlayedTrackID: Track.ID?
 
     // MARK: - Polling
 
@@ -269,10 +290,31 @@ final class AppState: ObservableObject {
 
     // MARK: - Persistence
 
+    /// Returns a human-readable display name for a track.
+    ///
+    /// Priority:
+    /// 1. title + artist → "title - artist"
+    /// 2. title only    → "title"
+    /// 3. artist only   → "artist"
+    /// 4. neither       → filename from originalPath (no extension)
+    private func displayName(for track: Track) -> String {
+        let hasTitle = !track.title.isEmpty
+        let hasArtist = !track.artist.isEmpty
+        switch (hasTitle, hasArtist) {
+        case (true, true):   return "\(track.title) - \(track.artist)"
+        case (true, false):  return track.title
+        case (false, true):  return track.artist
+        case (false, false): return URL(fileURLWithPath: track.originalPath)
+                                 .deletingPathExtension().lastPathComponent
+        }
+    }
+
     /// Clears the last playback error. Called when the user dismisses an error alert.
     func clearLastError() {
         lastError = nil
         failedTrackName = nil
+        showFileNotFoundAlert = false
+        skippedInaccessibleNames = []
         if case .error = playbackState {
             playbackState = .stopped
         }
@@ -308,13 +350,15 @@ final class AppState: ObservableObject {
                     activePlaylistIndex = max(0, min(savedIndex, playlists.count - 1))
 
                     // Application Layer accessibility check: mark tracks inaccessible
-                    // if the file no longer exists at its original stored path.
+                    // if the file no longer exists at its original stored path, or is in Trash.
                     // Use originalPath (urlPath stored at encode time), not url.path
                     // which bookmark may have resolved to Trash or another location.
                     for i in playlists.indices {
                         for j in playlists[i].tracks.indices {
                             let path = playlists[i].tracks[j].originalPath
-                            if path.isEmpty || !FileManager.default.fileExists(atPath: path) {
+                            if path.isEmpty
+                                || path.contains("/.Trash/")
+                                || !FileManager.default.fileExists(atPath: path) {
                                 playlists[i].tracks[j].isAccessible = false
                             }
                         }
@@ -780,53 +824,34 @@ final class AppState: ObservableObject {
             }
         }
 
-        // Step 2: Format gate — reject Pro-only formats on the Free tier.
-        // currentTrack is set before this gate so PlayerView shows which track
-        // was attempted (consistent with original Slice 4 behaviour).
-        currentTrack = track
-        let ext = track.url.pathExtension.lowercased()
-        if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
-            lastError = .unsupportedFormat
-            playbackState = .error(.unsupportedFormat)
-            return  // playbackService.load is never called for gated formats.
-        }
-
-        // Step 2b: Accessibility gate — reject tracks marked inaccessible at restore time.
-        // Revert currentTrack to nil so PlayerView is not updated with an inaccessible track.
-        // I/O checks (fileExists, Trash) are done in restoreState(), not here.
+        // Step 2: Accessibility gate — reject inaccessible tracks BEFORE setting currentTrack
+        // so PlayerView is never updated with a track that cannot be played.
         if !track.isAccessible {
+            // Stop current playback so the playing track does not continue.
+            stopPolling()
+            await playbackService.stop()
+            currentTrack = nil
             lastError = .failedToOpenFile
-            failedTrackName = track.artist.isEmpty
-                ? track.url.deletingPathExtension().lastPathComponent
-                : "\(track.title) - \(track.artist)"
+            failedTrackName = displayName(for: track)
+            showFileNotFoundAlert = true
             playbackState = .error(.failedToOpenFile)
-            // Ensure isAccessible=false is written back into playlists so PlaylistView re-renders.
+            // Write back so PlaylistView re-renders with strikethrough.
             if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
                 playlists[activePlaylistIndex].tracks[idx].isAccessible = false
-            }
-            // Auto-advance: find and play the next accessible track from the current position.
-            // Uses the known index of this track so currentTrack=nil does not break navigation.
-            let tracks = playlists[activePlaylistIndex].tracks
-            if let currentIndex = tracks.firstIndex(where: { $0.id == trackID }) {
-                let nextIndex = currentIndex + 1
-                if nextIndex < tracks.count {
-                    let nextID = tracks[nextIndex].id
-                    currentTrack = nil
-                    Task { await play(trackID: nextID) }
-                } else {
-                    currentTrack = nil
-                    playbackState = .stopped
-                }
-            } else {
-                currentTrack = nil
             }
             return
         }
 
+        // Step 2b: Format gate — reject Pro-only formats on the Free tier.
+        let ext = track.url.pathExtension.lowercased()
+        if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
+            currentTrack = nil
+            lastError = .unsupportedFormat
+            playbackState = .error(.unsupportedFormat)
+            return
+        }
+
         // Step 3–6: Standard load-and-play flow.
-        // Stop any current playback before loading a new track.
-        // This ensures AVAudioEngine and decoder are in a clean state,
-        // including when replaying the same track.
         stopPolling()
         await playbackService.stop()
         playbackState = .loading
@@ -835,17 +860,19 @@ final class AppState: ObservableObject {
             try await playbackService.load(url: track.url)
             duration = await playbackService.duration()
             try await playbackService.play()
+            currentTrack = track
+            lastPlayedTrackID = track.id
             playbackState = .playing
             playingPlaylistID = playlists[activePlaylistIndex].id
             startPolling()
         } catch {
             let mapped = mapToPlaybackError(error)
+            currentTrack = nil
             lastError = mapped
             playbackState = .error(mapped)
             if mapped == .failedToOpenFile {
-                failedTrackName = track.artist.isEmpty
-                    ? track.url.deletingPathExtension().lastPathComponent
-                    : "\(track.title) - \(track.artist)"
+                failedTrackName = displayName(for: track)
+                showFileNotFoundAlert = true
                 if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
                     playlists[activePlaylistIndex].tracks[idx].isAccessible = false
                 }
@@ -885,7 +912,9 @@ final class AppState: ObservableObject {
     /// If `startID` is provided, places it first so the currently playing
     /// track stays at the head of the new queue.
     private func buildShuffleQueue(startingWith startID: Track.ID? = nil) {
-        var ids = playlists[activePlaylistIndex].tracks.map { $0.id }
+        var ids = playlists[activePlaylistIndex].tracks
+            .filter { $0.isAccessible }
+            .map { $0.id }
         ids.shuffle()
         if let startID, let idx = ids.firstIndex(of: startID) {
             ids.remove(at: idx)
@@ -1004,44 +1033,124 @@ final class AppState: ObservableObject {
     ///
     /// No-op if `currentTrack` is `nil`.
     func trackDidFinishPlaying() async {
-        guard let current = currentTrack else { return }
+        guard let lastID = lastPlayedTrackID else { return }
         switch repeatMode {
         case .off:
             if isShuffled {
-                // Shuffle mode: advance shuffleQueueIndex directly.
-                // Do NOT call playNextTrack() — that is for manual button presses
-                // and always wraps when the queue is exhausted.
-                let nextIndex = shuffleQueueIndex + 1
-                if nextIndex < shuffleQueue.count {
-                    shuffleQueueIndex = nextIndex
-                    if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
-                        await play(trackID: trackID)
+                // Shuffle mode: advance through queue skipping inaccessible tracks.
+                var skipped: [String] = []
+                var nextIndex = shuffleQueueIndex + 1
+                while nextIndex < shuffleQueue.count {
+                    guard let trackID = shuffleQueue[safe: nextIndex],
+                          let next = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
+                    else { nextIndex += 1; continue }
+                    if next.isAccessible {
+                        shuffleQueueIndex = nextIndex
+                        await play(trackID: next.id)
+                        if case .error(.failedToOpenFile) = playbackState {
+                            skipped.append(displayName(for: next))
+                            nextIndex += 1
+                            continue
+                        }
+                        if !skipped.isEmpty {
+                            skippedInaccessibleNames = skipped
+                            showFileNotFoundAlert = true
+                        }
+                        return
+                    } else {
+                        skipped.append(displayName(for: next))
                     }
-                } else {
-                    // Shuffle queue exhausted — stop and reset queue.
-                    await stop()
-                    currentTrack = nil
-                    shuffleQueue = []
-                    shuffleQueueIndex = 0
+                    nextIndex += 1
                 }
+                // Queue exhausted — show popup and stop.
+                if !skipped.isEmpty {
+                    skippedInaccessibleNames = skipped
+                    showFileNotFoundAlert = true
+                }
+                await stop()
+                currentTrack = nil
+                shuffleQueue = []
+                shuffleQueueIndex = 0
             } else {
-                // Normal mode: use playlist order.
-                guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
+                // Normal mode: skip inaccessible tracks, collect names, show one popup, stop at end.
+                guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
                 else { return }
-                let nextIndex = currentIndex + 1
-                if nextIndex < playlists[activePlaylistIndex].tracks.count {
-                    await play(trackID: playlists[activePlaylistIndex].tracks[nextIndex].id)
-                } else {
-                    // Last track finished — stop and clear currentTrack so
-                    // PlayerView resets to "No Track Loaded" state.
-                    await stop()
-                    currentTrack = nil
+                var skipped: [String] = []
+                var nextIndex = currentIndex + 1
+                while nextIndex < playlists[activePlaylistIndex].tracks.count {
+                    let next = playlists[activePlaylistIndex].tracks[nextIndex]
+                    if next.isAccessible {
+                        await play(trackID: next.id)
+                        if case .error(.failedToOpenFile) = playbackState {
+                            skipped.append(displayName(for: next))
+                            nextIndex += 1
+                            continue
+                        }
+                        if !skipped.isEmpty {
+                            skippedInaccessibleNames = skipped
+                            showFileNotFoundAlert = true
+                        }
+                        return
+                    } else {
+                        skipped.append(displayName(for: next))
+                    }
+                    nextIndex += 1
                 }
+                // No more accessible tracks — show popup and stop.
+                if !skipped.isEmpty {
+                    skippedInaccessibleNames = skipped
+                    showFileNotFoundAlert = true
+                }
+                await stop()
+                currentTrack = nil
             }
         case .all:
-            await playNextTrack()
+            // Wrap around skipping inaccessible tracks, collect names, show one popup.
+            guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
+            else { return }
+            let count = playlists[activePlaylistIndex].tracks.count
+            var nextIndex = (currentIndex + 1) % count
+            var attempts = 0
+            var skipped: [String] = []
+            while attempts < count {
+                let next = playlists[activePlaylistIndex].tracks[nextIndex]
+                if next.isAccessible {
+                    await play(trackID: next.id)
+                    if case .error(.failedToOpenFile) = playbackState {
+                        skipped.append(displayName(for: next))
+                        nextIndex = (nextIndex + 1) % count
+                        attempts += 1
+                        continue
+                    }
+                    if !skipped.isEmpty {
+                        skippedInaccessibleNames = skipped
+                        showFileNotFoundAlert = true
+                    }
+                    return
+                } else {
+                    skipped.append(displayName(for: next))
+                }
+                nextIndex = (nextIndex + 1) % count
+                attempts += 1
+            }
+            // All tracks inaccessible — show popup and stop.
+            if !skipped.isEmpty {
+                skippedInaccessibleNames = skipped
+                showFileNotFoundAlert = true
+            }
+            await stop()
+            currentTrack = nil
         case .one:
-            await play(trackID: current.id)
+            guard let current = playlists[activePlaylistIndex].tracks.first(where: { $0.id == lastID })
+            else { return }
+            if !current.isAccessible {
+                failedTrackName = displayName(for: current)
+                showFileNotFoundAlert = true
+                await stop()
+                currentTrack = nil
+            } else {
+                await play(trackID: lastID)
+            }
         }
     }
 
