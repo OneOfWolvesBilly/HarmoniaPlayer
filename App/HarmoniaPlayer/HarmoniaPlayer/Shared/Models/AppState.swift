@@ -527,6 +527,15 @@ final class AppState: ObservableObject {
     /// - Parameter index: Index of the playlist to delete.
     func deletePlaylist(at index: Int) {
         guard playlists.indices.contains(index) else { return }
+
+        // If deleting the playlist that is currently playing, stop playback first.
+        if playlists[index].id == playingPlaylistID {
+            Task {
+                await stop()
+                currentTrack = nil
+            }
+        }
+
         if playlists.count == 1 {
             playlists.append(Playlist(name: "Playlist 1"))
         }
