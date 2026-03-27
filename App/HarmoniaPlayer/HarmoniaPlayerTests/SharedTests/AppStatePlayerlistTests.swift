@@ -172,3 +172,76 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertEqual(sut.playlist.tracks.last?.id, originalFirstID)
     }
 }
+
+// MARK: - playNext(trackID:) — "Play Next" context menu action
+
+extension AppStatePlaylistTests {
+
+    func testPlayNext_MovesTrackAfterCurrentTrack() async {
+        // Given: playlist [A, B, C], playing A
+        let urls = makeURLs(["a", "b", "c"])
+        await sut.load(urls: urls)
+        let trackA = sut.playlist.tracks[0]
+        let trackC = sut.playlist.tracks[2]
+        await sut.play(trackID: trackA.id)
+
+        // When: Play Next on C
+        sut.playNext(trackC.id)
+
+        // Then: order is [A, C, B]
+        XCTAssertEqual(sut.playlist.tracks.map { $0.url.lastPathComponent },
+                       ["a.mp3", "c.mp3", "b.mp3"])
+    }
+
+    func testPlayNext_UpdatesInsertionOrder() async {
+        // Given: playlist [A, B, C], playing A
+        let urls = makeURLs(["a", "b", "c"])
+        await sut.load(urls: urls)
+        let trackA = sut.playlist.tracks[0]
+        let trackC = sut.playlist.tracks[2]
+        await sut.play(trackID: trackA.id)
+
+        // When: Play Next on C
+        sut.playNext(trackC.id)
+
+        // Then: insertionOrder matches tracks
+        XCTAssertEqual(sut.playlist.insertionOrder,
+                       sut.playlist.tracks.map { $0.id },
+                       "insertionOrder must stay in sync with tracks after playNext")
+    }
+
+    func testPlayNext_PersistsOrderAfterSaveAndRestore() async {
+        // Given: playlist [A, B, C], playing A
+        let urls = makeURLs(["a", "b", "c"])
+        await sut.load(urls: urls)
+        let trackA = sut.playlist.tracks[0]
+        let trackC = sut.playlist.tracks[2]
+        await sut.play(trackID: trackA.id)
+
+        // When: Play Next on C, then save
+        sut.playNext(trackC.id)
+
+        // Then: a fresh AppState restoring from same UserDefaults sees same order
+        let restored = AppState(
+            iapManager: MockIAPManager(),
+            provider: FakeCoreProvider(),
+            userDefaults: testDefaults
+        )
+        XCTAssertEqual(restored.playlist.tracks.map { $0.url.lastPathComponent },
+                       ["a.mp3", "c.mp3", "b.mp3"],
+                       "playNext order must survive app relaunch via saveState()")
+    }
+
+    func testPlayNext_NoCurrentTrack_InsertsAtFront() async {
+        // Given: playlist [A, B, C], nothing playing
+        let urls = makeURLs(["a", "b", "c"])
+        await sut.load(urls: urls)
+        let trackC = sut.playlist.tracks[2]
+
+        // When: Play Next (no current track → currentIndex == -1 → insertIndex == 0)
+        sut.playNext(trackC.id)
+
+        // Then: C moves to front
+        XCTAssertEqual(sut.playlist.tracks[0].url.lastPathComponent, "c.mp3")
+    }
+}

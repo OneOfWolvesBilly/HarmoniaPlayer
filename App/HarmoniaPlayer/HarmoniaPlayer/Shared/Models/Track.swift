@@ -67,6 +67,20 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var lastPlayedAt: Date? = nil
     var rating: Double? = nil
 
+    // MARK: - Metadata version
+
+    /// Version of the metadata reading logic used to populate this track.
+    ///
+    /// Incremented in `AppState.currentMetadataVersion` whenever new fields
+    /// are added. `restoreState()` triggers a background re-read for any
+    /// track whose version is lower than the current version, ensuring new
+    /// fields are populated without requiring the user to re-add files.
+    ///
+    /// History:
+    /// - 0: legacy (Slices 1–6; no Groups A–E)
+    /// - 1: Groups A–D added (Slice 7-G)
+    var metadataVersion: Int = 0
+
     // MARK: - Runtime-only fields (not persisted)
 
     var isAccessible: Bool = true
@@ -115,7 +129,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         fileFormat: String = "",
         playCount: Int = 0,
         lastPlayedAt: Date? = nil,
-        rating: Double? = nil
+        rating: Double? = nil,
+        metadataVersion: Int = 0
     ) {
         self.id              = id
         self.url             = url
@@ -144,6 +159,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         self.playCount       = playCount
         self.lastPlayedAt    = lastPlayedAt
         self.rating          = rating
+        self.metadataVersion = metadataVersion
     }
 
     /// Convenience initializer that derives title from URL filename.
@@ -166,6 +182,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         case comment
         case bitrate, sampleRate, channels, fileSize, fileFormat
         case playCount, lastPlayedAt, rating
+        case metadataVersion
     }
 
     // MARK: - Encodable
@@ -207,6 +224,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         try c.encode(playCount,               forKey: .playCount)
         try c.encodeIfPresent(lastPlayedAt,   forKey: .lastPlayedAt)
         try c.encodeIfPresent(rating,         forKey: .rating)
+        try c.encode(metadataVersion,         forKey: .metadataVersion)
     }
 
     // MARK: - Decodable
@@ -284,9 +302,10 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         fileFormat = try c.decodeIfPresent(String.self, forKey: .fileFormat) ?? ""
 
         // Group E
-        playCount    = try c.decodeIfPresent(Int.self,    forKey: .playCount)    ?? 0
+        playCount    = try c.decodeIfPresent(Int.self,    forKey: .playCount)         ?? 0
         lastPlayedAt = try c.decodeIfPresent(Date.self,   forKey: .lastPlayedAt)
         rating       = try c.decodeIfPresent(Double.self, forKey: .rating)
+        metadataVersion = try c.decodeIfPresent(Int.self, forKey: .metadataVersion)  ?? 0
     }
 
     // MARK: - Equatable

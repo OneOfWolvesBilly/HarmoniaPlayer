@@ -649,12 +649,17 @@ final class AppState: ObservableObject {
         let clampedIndex = min(insertIndex, playlists[activePlaylistIndex].tracks.count)
         playlists[activePlaylistIndex].tracks.insert(track, at: clampedIndex)
 
+        // Keep insertionOrder in sync with the new track order
+        playlists[activePlaylistIndex].insertionOrder = playlists[activePlaylistIndex].tracks.map { $0.id }
+
         // If shuffle is active, also insert at next position in queue
         if isShuffled {
             shuffleQueue.removeAll { $0 == trackID }
             let nextQueueIndex = min(shuffleQueueIndex + 1, shuffleQueue.count)
             shuffleQueue.insert(trackID, at: nextQueueIndex)
         }
+
+        saveState()
     }
 
     /// Applies a sorted track order to the playlist.
