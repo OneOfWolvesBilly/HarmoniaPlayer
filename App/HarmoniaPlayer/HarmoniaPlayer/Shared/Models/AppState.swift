@@ -202,19 +202,16 @@ final class AppState: ObservableObject {
     ///
     /// Default: `"system"`. Updated by `SettingsView` language picker.
     /// Persisted across launches via `UserDefaults`.
+    /// Changing this value triggers an app restart; the new language takes effect
+    /// after relaunch, keeping UI strings and system menus in sync.
     @Published var selectedLanguage: String = "system"
 
-    /// Returns the `Bundle` that should be used for all `String(localized:bundle:)` calls.
+    /// The `Bundle` used for all `NSLocalizedString(bundle:)` calls.
     ///
-    /// When `selectedLanguage == "system"`, returns `Bundle.main` so the OS locale applies.
-    /// Otherwise loads the matching `.lproj` sub-bundle; falls back to `Bundle.main`
-    /// if the bundle cannot be found (e.g. language pack not yet included).
-    var languageBundle: Bundle {
-        guard selectedLanguage != "system" else { return .main }
-        guard let path = Bundle.main.path(forResource: selectedLanguage, ofType: "lproj"),
-              let bundle = Bundle(path: path) else { return .main }
-        return bundle
-    }
+    /// Fixed at launch from the persisted `hp.selectedLanguage` value so that
+    /// UI strings and system menus (which also require a restart) change together.
+    /// Not recomputed when `selectedLanguage` changes — the app must restart first.
+    let languageBundle: Bundle
 
     // MARK: - Repeat Mode State
 
@@ -296,10 +293,18 @@ final class AppState: ObservableObject {
         // Step 7: Store UserDefaults instance
         self.userDefaults = userDefaults
 
-        // Note: viewPreferences and lastError use property-level defaults;
-        // no explicit assignment needed in init.
+        // Step 8: Resolve languageBundle from persisted setting.
+        // Fixed at launch so UI strings and system menus change together after restart.
+        let persistedLang = userDefaults.string(forKey: "hp.selectedLanguage") ?? "en"
+        if persistedLang != "system",
+           let path = Bundle.main.path(forResource: persistedLang, ofType: "lproj"),
+           let bundle = Bundle(path: path) {
+            self.languageBundle = bundle
+        } else {
+            self.languageBundle = .main
+        }
 
-        // Step 8: Restore persisted state (overrides Step 6 defaults if data exists)
+        // Step 9: Restore persisted state (overrides Step 6 defaults if data exists)
         restoreState()
     }
 

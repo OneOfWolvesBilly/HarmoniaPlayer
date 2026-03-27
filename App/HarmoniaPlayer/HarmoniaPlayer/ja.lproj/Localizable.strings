@@ -5,23 +5,23 @@
 
 /* MARK: - ContentView: File Not Found Alert */
 "alert_file_not_found_title" = "ファイルが見つかりません";
-"alert_file_not_found_multi" = "以下のファイルを開けなかったためスキップしました：\n%@";
+"alert_file_not_found_multi" = "以下のファイルを開けなかったため、スキップしました：\n%@";
 "alert_file_not_found_single" = "「%@」を開けませんでした。移動または削除された可能性があります。";
 "alert_file_not_found_generic" = "ファイルを開けませんでした。移動または削除された可能性があります。";
 
 /* MARK: - ContentView: Already in Playlist Alert */
-"alert_already_in_playlist_title" = "プレイリストに登録済み";
+"alert_already_in_playlist_title" = "すでにプレイリストに追加されています";
 "alert_already_in_playlist_body" = "以下のファイルはすでにプレイリストにあるため追加しませんでした：\n%@";
 
 /* MARK: - ContentView: Playback Error Alert */
 "alert_playback_error_title" = "再生エラー";
 "error_unsupported_format" = "このフォーマットは無料版では対応していません。";
 "error_failed_to_decode" = "ファイルをデコードできませんでした。";
-"error_output_error" = "再生出力エラーが発生しました。";
-"error_core_error" = "再生中にエラーが発生しました。\n\nコード：%@";
+"error_output_error" = "再生中に出力エラーが発生しました。";
+"error_core_error" = "再生中にエラーが発生しました。\n\nエラーコード%@";
 
 /* MARK: - PlayerView: Metadata */
-"no_track_loaded" = "トラック未選択";
+"no_track_playing" = "再生中の曲はありません";
 
 /* MARK: - PlayerView: Transport Button Help */
 "help_previous_track" = "前のトラック";

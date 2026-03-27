@@ -21,7 +21,7 @@
 "error_core_error" = "播放時發生錯誤。\n\n錯誤碼：%@";
 
 /* MARK: - PlayerView: Metadata */
-"no_track_loaded" = "尚未載入曲目";
+"no_track_playing" = "尚未載入曲目";
 
 /* MARK: - PlayerView: Transport Button Help */
 "help_previous_track" = "上一首";

@@ -21,7 +21,7 @@
 "error_core_error" = "A playback error occurred.\n\nCode: %@";
 
 /* MARK: - PlayerView: Metadata */
-"no_track_loaded" = "No Track Loaded";
+"no_track_playing" = "No Track Playing";
 
 /* MARK: - PlayerView: Transport Button Help */
 "help_previous_track" = "Previous track";

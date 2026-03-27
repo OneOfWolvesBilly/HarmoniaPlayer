@@ -29,31 +29,9 @@ struct SettingsView: View {
     /// Language options available in the picker.
     /// Each entry is (BCP-47 tag or "system", display name in its own script).
     private let languageOptions: [(id: String, name: String)] = [
-        ("system",   "System Default"),
         ("en",       "English"),
         ("zh-Hant",  "繁體中文"),
-        ("zh-Hans",  "简体中文"),
         ("ja",       "日本語"),
-        ("ko",       "한국어"),
-        ("fr",       "Français"),
-        ("de",       "Deutsch"),
-        ("es",       "Español"),
-        ("pt",       "Português"),
-        ("it",       "Italiano"),
-        ("cs",       "Čeština"),
-        ("sv",       "Svenska"),
-        ("fi",       "Suomi"),
-        ("nb",       "Norsk bokmål"),
-        ("ru",       "Русский"),
-        ("pl",       "Polski"),
-        ("et",       "Eesti"),
-        ("lv",       "Latviešu"),
-        ("lt",       "Lietuvių"),
-        ("ar",       "العربية"),
-        ("th",       "ไทย"),
-        ("vi",       "Tiếng Việt"),
-        ("id",       "Bahasa Indonesia"),
-        ("hi",       "हिन्दी"),
     ]
     
     var body: some View {

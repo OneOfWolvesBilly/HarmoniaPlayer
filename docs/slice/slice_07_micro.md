@@ -2,9 +2,9 @@
 
 ## Purpose
 
-This document defines **Slice 7: Persistence, Volume, Multiple Playlists,
-Drag-to-Reorder, Column Customization, File Info Panel, and UI Localisation**
-for HarmoniaPlayer.
+This document defines **Slice 7: Volume Control, Multiple Playlists,
+Playlist Import/Export, Drag-to-Reorder, Persistence, UI Localisation,
+Column Customization, and File Info Panel** for HarmoniaPlayer.
 
 Slice 7 is the first post-v0.1 slice. It adds data persistence so the app
 remembers the user's playlist and settings across launches, plus several UI
@@ -45,68 +45,54 @@ improvements that bring HarmoniaPlayer closer to a production music player.
 
 ---
 
-## Slice 7-A: Volume Control
+## Slice 7-A: Volume Control ✅
 
 ### Goal
 Add a volume slider to `PlayerView`. Volume is controlled end-to-end through
 the full stack: `AudioOutputPort` → `DefaultPlaybackService` →
 `HarmoniaPlaybackServiceAdapter` → `AppState` → `PlayerView`.
 
-> **Dependency note:** Volume state persistence requires Slice 7-E (Persistence).
-> The slider is fully functional without persistence — it just resets to 1.0 on relaunch.
-
 ### Scope
 
 #### HarmoniaCore-Swift changes
-
-- Add `setVolume(_ volume: Float)` to `AudioOutputPort` protocol
-  - Range 0.0–1.0; clamped by implementations
+- Add `setVolume(_ volume: Float)` to `AudioOutputPort` protocol (range 0.0–1.0; clamped)
 - Implement in `AVAudioEngineOutputAdapter` using `engine.mainMixerNode.outputVolume`
 - Add `setVolumeCallCount` tracking + no-op implementation to `MockAudioOutputPort`
 - Add `func setVolume(_ volume: Float)` to `PlaybackService` protocol
 - Implement in `DefaultPlaybackService` — forwards to `AudioOutputPort`
-- Update specs: `docs/specs/03_ports.md` (AudioOutputPort section),
-  `docs/specs/04_services.md` (PlaybackService section),
-  `docs/impl/02_01_apple.adapters_impl.md`
 
 #### HarmoniaPlayer changes
-
 - Add `func setVolume(_ volume: Float) async` to `HarmoniaPlayer.PlaybackService` protocol
 - Implement in `HarmoniaPlaybackServiceAdapter` — delegates to `core.setVolume()`
 - Add `setVolumeCallCount` + `lastSetVolume` stub to `FakePlaybackService`
 - Add `@Published var volume: Float = 1.0` to `AppState`
 - Add `func setVolume(_ volume: Float) async` to `AppState`
   — clamps to 0.0–1.0, sets `self.volume`, calls `playbackService.setVolume()`
-- Add volume slider to `PlayerView` (range 0.0–1.0, default 1.0)
-  — bind to `appState.volume`; call `appState.setVolume()` on change
-- Volume state persisted via Slice 7-A (`volume` saved to `UserDefaults`)
+- Add volume slider to `PlayerView` with thumb-anchored percentage label
+  (appears on drag, fades after 1.5s)
 
-### Files (HarmoniaCore-Swift)
+### Files
+
+#### HarmoniaCore-Swift
 - `Sources/HarmoniaCore/Ports/AudioOutputPort.swift` (modify — add `setVolume`)
 - `Sources/HarmoniaCore/Services/PlaybackService.swift` (modify — add `setVolume` to protocol)
 - `Sources/HarmoniaCore/Services/DefaultPlaybackService.swift` (modify — implement `setVolume`)
 - `Sources/HarmoniaCore/Adapters/AVAudioEngineOutputAdapter.swift` (modify — implement `setVolume`)
-- `Tests/HarmoniaCoreTests/TestSupport/MockAudioOutputPort.swift` (modify — add `setVolumeCallCount` + no-op)
-- `docs/specs/03_ports.md` (modify — add `setVolume` to AudioOutputPort section)
-- `docs/specs/04_services.md` (modify — add `setVolume` to PlaybackService section)
-- `docs/impl/02_01_apple.adapters_impl.md` (modify — document `setVolume` implementation)
+- `Tests/HarmoniaCoreTests/TestSupport/MockAudioOutputPort.swift` (modify — add `setVolumeCallCount`)
 
-### Files (HarmoniaPlayer)
+#### HarmoniaPlayer
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/PlaybackService.swift` (modify — add `setVolume`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaPlaybackServiceAdapter.swift` (modify — bridge `setVolume`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add `volume`, `setVolume()`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlayerView.swift` (modify — add volume slider)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` (modify — add `setVolumeCallCount`, `lastSetVolume` to `FakePlaybackService`)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateVolumeTests.swift` (new — unit tests)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` (modify — add `setVolumeCallCount`, `lastSetVolume`)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateVolumeTests.swift` (new)
 
 ### Public API shape
 
 ```swift
 // HarmoniaCore: AudioOutputPort addition
 func setVolume(_ volume: Float)  // clamp to 0.0–1.0
-
-// HarmoniaCore: PlaybackService protocol addition
-func setVolume(_ volume: Float)
 
 // HarmoniaPlayer: PlaybackService protocol addition
 func setVolume(_ volume: Float) async
@@ -117,6 +103,14 @@ func setVolume(_ volume: Float) async
 func setVolume(_ volume: Float) async
 // Implementation: clamp to 0...1, set self.volume, call playbackService.setVolume()
 ```
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testSetVolume_ForwardsToService` | Any state | `appState.setVolume(0.5)` | `fakeService.setVolumeCallCount == 1` |
+| `testSetVolume_Clamps_AboveOne` | Any state | `appState.setVolume(1.5)` | `fakeService.lastSetVolume == 1.0` |
+| `testSetVolume_Clamps_BelowZero` | Any state | `appState.setVolume(-0.1)` | `fakeService.lastSetVolume == 0.0` |
 
 ### Done criteria
 - Volume slider visible in `PlayerView`
@@ -144,27 +138,35 @@ HarmoniaPlayer:
 - Add AppStateVolumeTests
 ```
 
+---
 
-## Slice 7-B: Multiple Playlist Tabs
+## Slice 7-B: Multiple Playlist Tabs ✅
+
+### Goal
+Replace the single `playlist: Playlist` in `AppState` with `playlists: [Playlist]`
+and a tab bar in `PlaylistView`.
 
 ### Scope
 - `AppState` holds `[Playlist]` instead of a single `Playlist`
 - `AppState.activePlaylistIndex` tracks the current playlist
-- `PlaylistView` shows tabs at the top (one per playlist)
+- `PlaylistView` shows tabs at the top (one per playlist) with inline rename
 - Menu bar additions: File → New Playlist, Rename Playlist, Delete Playlist
-- All playlists persisted via Slice 7-A
+- Deleting the currently playing playlist stops playback and clears `currentTrack`
+- New playlist auto-numbered (`"Playlist N"`, lowest unused N)
+- 🔊 icon on tab whose `playlist.id == playingPlaylistID`
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` (modify)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/HarmoniaPlayerCommands.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateMultiPlaylistTests.swift` (new)
 
 ### Public API shape
 
 ```swift
 // AppState changes
 @Published private(set) var playlists: [Playlist]
-@Published private(set) var activePlaylistIndex: Int
+@Published var activePlaylistIndex: Int
 
 var playlist: Playlist { playlists[activePlaylistIndex] }  // computed accessor
 
@@ -173,40 +175,66 @@ func renamePlaylist(at index: Int, name: String)
 func deletePlaylist(at index: Int)
 ```
 
+### TDD matrix
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testInitialState_HasOnePlaylist` | Fresh `AppState` | — | `playlists.count == 1` |
+| `testInitialState_ActiveIndexIsZero` | Fresh `AppState` | — | `activePlaylistIndex == 0` |
+| `testPlaylist_ComputedReturnsActive` | 2 playlists, index = 1 | read `playlist` | `playlists[1]` |
+| `testNewPlaylist_IncreasesCount` | 1 playlist | `newPlaylist(name: "Rock")` | `playlists.count == 2` |
+| `testNewPlaylist_SetsActiveIndex` | 1 playlist | `newPlaylist(name: "Rock")` | `activePlaylistIndex == 1` |
+| `testNewPlaylist_EmptyName_UsesDefault` | 1 playlist | `newPlaylist(name: "")` | `playlists[1].name == "Playlist 2"` |
+| `testRenamePlaylist_UpdatesName` | 1 playlist | `renamePlaylist(at: 0, name: "Jazz")` | `playlists[0].name == "Jazz"` |
+| `testRenamePlaylist_OutOfRange_NoOp` | 1 playlist | `renamePlaylist(at: 5, name: "X")` | no crash |
+| `testDeletePlaylist_DecreasesCount` | 2 playlists | `deletePlaylist(at: 1)` | `playlists.count == 1` |
+| `testDeletePlaylist_LastOne_AutoInsertsSession` | 1 playlist | `deletePlaylist(at: 0)` | `playlists.count == 1` |
+| `testDeletePlaylist_AdjustsActiveIndex_WhenDeletingActive` | 2 playlists, index = 1 | `deletePlaylist(at: 1)` | `activePlaylistIndex == 0` |
+| `testDeletePlaylist_DecrementsActiveIndex_WhenDeletingBeforeActive` | 3 playlists, index = 2 | `deletePlaylist(at: 0)` | `activePlaylistIndex == 1` |
+| `testDeletePlaylist_OutOfRange_NoOp` | 1 playlist | `deletePlaylist(at: 5)` | no crash |
+| `testDeletePlaylist_StopsPlayback_WhenDeletingPlayingPlaylist` | Playing, 2 playlists | `deletePlaylist(at: playingIndex)` | `playbackState == .stopped`, `currentTrack == nil` |
+| `testSwitchPlaylist_DoesNotStopPlayback` | Playing, 2 playlists | `activePlaylistIndex = 1` | `playbackState == .playing` |
+
 ### Done criteria
 - Can create, rename, and delete playlists
 - Each playlist has independent track list and sort state
-- Switching playlists updates the now-playing context
+- Switching playlists updates the now-playing context without stopping playback
+- Deleting playing playlist stops playback and clears `currentTrack`
 - All playlists survive app relaunch
+- `AppStateMultiPlaylistTests` green
 
 ### Suggested commit message
 ```
 feat(slice 7-B): add multiple playlist tabs with create/rename/delete
+
+- Replace AppState.playlist with playlists: [Playlist]
+- Add activePlaylistIndex, playlist computed accessor
+- Add newPlaylist(name:), renamePlaylist(at:name:), deletePlaylist(at:)
+- deletePlaylist stops playback when deleting playing playlist
+- Add PlaylistView tab bar with inline rename
+- Add File menu: New Playlist, Rename Playlist, Delete Playlist
+- Add AppStateMultiPlaylistTests (15 cases)
 ```
 
 ---
 
-## Slice 7-C: Playlist Import/Export (M3U8)
+## Slice 7-C: Playlist Import/Export (M3U8) ✅
 
 ### Goal
 Allow users to export playlists as M3U8 files and import M3U8 files from
 other apps (VLC, foobar2000, Apple Music).
 
-Export supports both absolute paths (for local use) and relative paths
-(relative to the saved `.m3u8` file, for portable use on USB drives or
-sharing with others).
-
 ### Scope
 
 #### Export
 - `File → Export Playlist…` opens `NSSavePanel` (macOS layer)
+- Requires `User Selected File Read/Write` entitlement in App Sandbox
 - `NSSavePanel` offers a path-style picker: **Absolute** or **Relative**
 - Writes current active playlist as `.m3u8` with `#EXTINF` metadata
 
 #### Import
-- `File → Import Playlist…` opens `NSOpenPanel` (macOS layer), limited to `.m3u8`
+- `File → Import Playlist…` opens `NSOpenPanel` (macOS layer)
 - Reads the file, resolves all paths to absolute URLs
-  (relative paths are resolved relative to the `.m3u8` file's directory)
 - Ignores `#EXTINF` lines — re-reads metadata via `TagReaderService`
 - Creates a **new playlist tab** named after the `.m3u8` filename (without extension)
 - Files not found on disk: skipped; a warning alert lists all missing paths
@@ -216,72 +244,38 @@ sharing with others).
 - `#EXTINF:<duration_seconds>,<title>` when artist is empty
 - `duration == 0` → use `-1` (M3U8 standard for unknown duration)
 
-### Architecture decisions
+#### Architecture decisions
 - `M3U8Service` is a pure value type — no I/O, no platform APIs
-- `NSSavePanel` and `NSOpenPanel` live in `HarmoniaPlayerCommands` (macOS layer);
-  `AppState` receives only plain `URL` values and never touches platform UI
-- Path-style selection UI is owned by `HarmoniaPlayerCommands`
+- `NSSavePanel` and `NSOpenPanel` live in `HarmoniaPlayerCommands` (macOS layer)
+- `AppState` receives only plain `URL` values
+- `UTType(filenameExtension: "m3u8")` may return nil; use `if let` not `!`
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/M3U8Service.swift` (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
   (modify — add Export/Import to File menu, own NSSavePanel/NSOpenPanel)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `writeExport(to:pathStyle:)`, `importPlaylist(from:)`,
-  `skippedImportURLs`)
+  (modify — add `writeExport(to:pathStyle:)`, `importPlaylist(from:)`, `skippedImportURLs`)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/M3U8ServiceTests.swift` (new)
 
 ### Public API shape
 
 ```swift
-// M3U8Service
 enum M3U8PathStyle {
     case absolute
-    case relative(to: URL)  // URL of the .m3u8 file being written
+    case relative(to: URL)
 }
 
 struct M3U8Service {
-    /// Generates M3U8 string from playlist.
-    /// Paths are written as absolute or relative depending on pathStyle.
     func export(playlist: Playlist, pathStyle: M3U8PathStyle) -> String
-
-    /// Parses M3U8 string and returns absolute URLs.
-    /// Relative paths are resolved against baseURL (directory of the .m3u8 file).
     func parse(m3u8: String, baseURL: URL?) -> [URL]
 }
 
 // AppState additions
 @Published var skippedImportURLs: [URL] = []
 
-/// Writes M3U8 string to the given URL.
-/// Called by HarmoniaPlayerCommands after NSSavePanel resolves the destination.
 func writeExport(to url: URL, pathStyle: M3U8PathStyle) throws
-
-/// Reads .m3u8 at url, creates a new playlist tab named after the filename,
-/// re-reads metadata via TagReaderService, populates skippedImportURLs for
-/// any files not found on disk.
 func importPlaylist(from url: URL) async
-```
-
-### Done criteria
-- Export produces valid M3U8 readable by VLC / foobar2000
-- Absolute path export: paths are fully qualified `file://` or POSIX paths
-- Relative path export: paths are relative to the `.m3u8` file location
-- Import reads M3U8, creates a new playlist tab named after the filename
-- Import re-reads metadata via `TagReaderService` (ignores `#EXTINF` text)
-- Missing files on import: skipped, warning alert lists all missing paths
-- All M3U8ServiceTests green
-
-### Suggested commit message
-```
-feat(slice 7-C): add M3U8 playlist import/export
-
-- Add M3U8Service: export(playlist:pathStyle:) → M3U8 string
-- Add M3U8Service: parse(m3u8:baseURL:) → absolute URLs
-- Add AppState.writeExport(to:pathStyle:): write .m3u8 file
-- Add AppState.importPlaylist(from:): new tab + TagReaderService
-- Add File menu: Export Playlist…, Import Playlist…
-- Add M3U8ServiceTests
 ```
 
 ### TDD matrix
@@ -299,51 +293,96 @@ feat(slice 7-C): add M3U8 playlist import/export
 | `testParse_IgnoresCommentLines` | M3U8 with `#EXTM3U` and `#EXTINF` lines | `parse(m3u8:baseURL:nil)` | only returns path lines |
 | `testParse_EmptyString` | `""` | `parse(m3u8:baseURL:nil)` | returns `[]` |
 
+### Done criteria
+- Export produces valid M3U8 readable by VLC / foobar2000
+- Absolute path export: paths are fully qualified `file://` or POSIX paths
+- Relative path export: paths are relative to the `.m3u8` file location
+- Import reads M3U8, creates new playlist tab named after filename
+- Import re-reads metadata via `TagReaderService` (ignores `#EXTINF` text)
+- Missing files on import: skipped, warning alert lists all missing paths
+- `User Selected File Read/Write` entitlement added to project
+- All M3U8ServiceTests green
 
-## Slice 7-D: Drag-to-Reorder
+### Suggested commit message
+```
+feat(slice 7-C): add M3U8 playlist import/export
+
+- Add M3U8Service: export(playlist:pathStyle:) → M3U8 string
+- Add M3U8Service: parse(m3u8:baseURL:) → absolute URLs
+- Add AppState.writeExport(to:pathStyle:): write .m3u8 file
+- Add AppState.importPlaylist(from:): new tab + TagReaderService
+- Add File menu: Export Playlist…, Import Playlist…
+- Fix UTType(filenameExtension:) force-unwrap crash in NSSavePanel
+- Add User Selected File Read/Write entitlement
+- Add M3U8ServiceTests (10 cases)
+```
+
+---
+
+## Slice 7-D: Drag-to-Reorder ✅
+
+### Goal
+Fix `AppState.moveTrack` to keep `insertionOrder` in sync with `tracks`.
+Drag UI is deferred to Slice 7-G (SwiftUI Table intercepts drag gestures).
 
 ### Scope
-- SwiftUI `Table` does not support `onMove`; implement custom drag using
-  `.onDrag` / `.onDrop` on table rows, or migrate to `List` for native reorder
-- Reorder updates `playlist.tracks` and `playlist.insertionOrder`
+- Fix `AppState.moveTrack(fromOffsets:toOffset:)` to update `insertionOrder`
+  after reordering `tracks`
+- `shuffleQueue` must not be touched by `moveTrack`
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — fix `moveTrack` to sync `insertionOrder`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
+  (modify — fix `moveTrack` to sync `insertionOrder`)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateDragReorderTests.swift` (new)
 
 ### Public API shape
 No new public API. Uses existing `moveTrack(fromOffsets:toOffset:)` in `AppState`.
 
+### TDD matrix
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testMoveTrack_UpdatesInsertionOrder` | Playlist [A, B, C] | `moveTrack(fromOffsets:[2], toOffset:0)` | `insertionOrder == [C.id, A.id, B.id]` |
+| `testMoveTrack_InsertionOrder_MatchesTracks` | Playlist [A, B, C] | `moveTrack(fromOffsets:[0], toOffset:3)` | `insertionOrder == tracks.map(\.id)` |
+
 ### Done criteria
 - `AppState.moveTrack` syncs `insertionOrder` with `tracks` after every reorder
 - `AppStateDragReorderTests` green
 - All Slice 1–7-C tests still green
-- Drag UI implemented in Slice 7-G (SwiftUI Table row-selection gesture intercepts drag)
 
 ### Suggested commit message
 ```
-fix(slice 7-d): sync insertionOrder in moveTrack
+fix(slice 7-D): sync insertionOrder in moveTrack
 
 - moveTrack was updating tracks but not insertionOrder
-- add AppStateDragReorderTests
+- add AppStateDragReorderTests (2 cases)
 - drag UI deferred to slice 7-G (SwiftUI Table blocks drag gestures)
 ```
 
 ---
 
-## Slice 7-E: Persistence
+## Slice 7-E: Persistence ✅
+
+### Goal
+Persist playlist, settings, and sort state to `UserDefaults` so they survive
+app quit and relaunch.
 
 ### Scope
 - `Track` conforms to `Codable`
 - `Playlist` conforms to `Codable`
-- `AppState` saves playlist and sort state to `UserDefaults` on quit;
-  restores on launch
-- `AppState` saves and restores `allowDuplicateTracks`
+- `AppState.saveState()` writes playlists, activePlaylistIndex, allowDuplicateTracks,
+  volume, selectedLanguage, repeatMode, isShuffled to `UserDefaults`
+- `AppState.restoreState()` reads them back on init
+- `saveState()` wired to `NSApplication.willTerminateNotification` in `HarmoniaPlayerApp`
+- `restoreState()` called in `AppState.init()` after services are wired
+- `TableColumnCustomization` persisted separately via `@AppStorage` (SwiftUI automatic)
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Track.swift` (modify — add `Codable`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Playlist.swift` (modify — add `Codable`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — save/restore on launch/quit)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
+  (modify — add `saveState()`, `restoreState()`)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStatePersistenceTests.swift` (new)
 
 ### Public API shape
 
@@ -351,56 +390,131 @@ fix(slice 7-d): sync insertionOrder in moveTrack
 // AppState additions
 func saveState()     // called on app quit
 func restoreState()  // called on app launch
+
+// UserDefaults keys (private enum PersistenceKey)
+// hp.playlists, hp.activePlaylistIndex, hp.allowDuplicateTracks,
+// hp.volume, hp.selectedLanguage, hp.sortKey, hp.sortAscending,
+// hp.repeatMode, hp.isShuffled
 ```
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|------|-------|------|------|
+| `testSaveAndRestore_Playlist_SurvivesRelaunch` | Playlist with 3 tracks | `saveState()` then `restoreState()` | `playlist.tracks.count == 3` |
+| `testSaveAndRestore_TrackURL_Preserved` | Track with URL | save → restore | `url` matches |
+| `testSaveAndRestore_SortKey_Survives` | `sortKey == .title` | `saveState()` then `restoreState()` | `sortKey == .title` |
+| `testSaveAndRestore_AllowDuplicates_Survives` | `allowDuplicateTracks == true` | save → restore | `true` |
+| `testSaveAndRestore_Volume_Survives` | `volume == 0.7` | save → restore | `0.7` |
+| `testRestoreState_WhenNoData_UsesDefaults` | Empty UserDefaults | `restoreState()` | 1 empty playlist, volume 1.0 |
 
 ### Done criteria
 - Playlist survives app quit and relaunch
 - Sort state survives app quit and relaunch
-- `allowDuplicateTracks` survives app quit and relaunch
+- `allowDuplicateTracks`, `volume`, `selectedLanguage` survive app quit and relaunch
+- `AppStatePersistenceTests` green
 
 ### Suggested commit message
 ```
 feat(slice 7-E): add persistence for playlist and settings via UserDefaults
+
+- Add Codable to Track and Playlist
+- Add AppState.saveState(): writes playlists, settings, sort state
+- Add AppState.restoreState(): restores on launch with defaults fallback
+- Wire saveState() to NSApplication.willTerminateNotification
+- Add AppStatePersistenceTests (6 cases)
 ```
 
 ---
 
-## Slice 7-F: UI Localisation
+## Slice 7-F: UI Localisation ✅
+
+### Goal
+Replace all hardcoded UI strings with localised equivalents and add a
+language picker to Settings so users can override the app language at runtime.
 
 ### Supported languages
 en, zh-Hant, zh-Hans, ja, ko, fr, de, es, pt, it, cs, sv, fi, nb, ru, pl,
 et, lv, lt, ar, th, vi, id, hi
 
 ### Scope
-- Replace all hardcoded UI strings with `String(localized:)` or `LocalizedStringKey`
-- Create `Localizable.strings` for all 24 languages
-- Add `selectedLanguage` setting to `AppState` (persisted via Slice 7-A)
-- Override app language at runtime using `Bundle` locale override
+- Replace all hardcoded UI strings with
+  `NSLocalizedString(key, bundle: appState.languageBundle, comment: "")` via
+  a private `L(_ key: String)` helper in each View
+- Create `Localizable.strings` for all 24 languages (70 keys each)
+- Add `@Published var selectedLanguage: String = "system"` to `AppState`
+- Add `var languageBundle: Bundle` computed property to `AppState`
+  — loads matching `.lproj` sub-bundle; falls back to `Bundle.main`
+- App defaults to English on first launch (writes `AppleLanguages = ["en"]`
+  in `HarmoniaPlayerApp.init()`)
+- Language change writes `AppleLanguages` to `UserDefaults` and restarts app
+  so system menus also switch language
 - Settings: language picker (system default + 24 languages)
-- Arabic (`ar`) is RTL — verify all views in RTL mode
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift` (modify — add `selectedLanguage`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/SettingsView.swift` (modify — add language picker)
-- All View files (modify — replace hardcoded strings)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Resources/` (new — `Localizable.strings` × 24)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
+  (modify — add `selectedLanguage`, `languageBundle`, saveState/restoreState)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
+  (modify — `init()` applies saved language, defaults to en on first launch)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/SettingsView.swift`
+  (modify — add language picker, `applyLanguageAndRestart()`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift` (modify — L() helper)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlayerView.swift` (modify — L() helper)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` (modify — L() helper)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift` (modify — L() helper)
+- `App/HarmoniaPlayer/HarmoniaPlayer/{lang}.lproj/Localizable.strings` × 24 (new)
+- `App/HarmoniaPlayer/HarmoniaPlayerUITests/HarmoniaPlayerUITests.swift`
+  (modify — force English via launchArguments)
 
 ### Public API shape
 
 ```swift
-// AppState addition
+// AppState additions
 @Published var selectedLanguage: String = "system"  // "system" or BCP-47 tag
+
+var languageBundle: Bundle {
+    guard selectedLanguage != "system" else { return .main }
+    guard let path = Bundle.main.path(forResource: selectedLanguage, ofType: "lproj"),
+          let bundle = Bundle(path: path) else { return .main }
+    return bundle
+}
+```
+
+### TDD matrix
+No dedicated unit tests for 7-F (UI-layer strings; verified by XCUITest
+English-forced launch). UI tests force English via:
+
+```swift
+app.launchArguments += [
+    "-AppleLanguages", "(en)",
+    "-AppleLocale", "en_US",
+    "-hp.selectedLanguage", "en",
+]
 ```
 
 ### Done criteria
 - All UI text is localised
-- Changing language in Settings updates UI immediately
+- First launch defaults to English regardless of system language
+- Language change triggers app restart; system menus update after restart
 - Language selection persists across launches
-- RTL layout verified for Arabic
+- `Localizable.strings` × 24 present in target bundle (70 keys each)
+- All existing XCUITests pass with English-forced launch
 
 ### Suggested commit message
 ```
 feat(slice 7-F): add UI localisation for 24 languages
+
+- Add AppState.selectedLanguage (@Published, persisted via UserDefaults)
+- Add AppState.languageBundle (runtime .lproj bundle switching)
+- Add saveState/restoreState for selectedLanguage
+- Add Localizable.strings x24: en, zh-Hant, zh-Hans, ja, ko, fr, de, es,
+  pt, it, cs, sv, fi, nb, ru, pl, et, lv, lt, ar, th, vi, id, hi (70 keys each)
+- Replace all hardcoded UI strings with NSLocalizedString(bundle:) in
+  ContentView, PlayerView, PlaylistView, SettingsView, HarmoniaPlayerCommands
+- Add language picker to SettingsView (system default + 24 languages)
+- Write AppleLanguages on language change and restart app for full effect
+- Default to English on first launch via HarmoniaPlayerApp.init()
+- Fix HarmoniaPlayerUITests: force English via launchArguments
 ```
 
 ---
@@ -443,6 +557,9 @@ later slices (ReplayGain in 8-D, Tag Editor in Slice 9).
 ### Public API shape
 
 ```swift
+// Track new fields (Groups A–E)
+// See HarmoniaPlayer_slice_7_micro.md for complete list
+
 // PlaylistView (View-local, not AppState)
 @AppStorage("playlistColumnCustomization")
 private var columnCustomization: TableColumnCustomization<Track>
@@ -451,6 +568,17 @@ private var columnCustomization: TableColumnCustomization<Track>
     .init(\.title, order: .forward)
 ]
 ```
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testTrack_DefaultGenre_IsEmpty` | `Track(url:)` | read `genre` | `""` |
+| `testTrack_DefaultYear_IsNil` | `Track(url:)` | read `year` | `nil` |
+| `testTrack_DefaultBitrate_IsNil` | `Track(url:)` | read `bitrate` | `nil` |
+| `testTrack_DefaultPlayCount_IsZero` | `Track(url:)` | read `playCount` | `0` |
+| `testTrack_DefaultRating_IsNil` | `Track(url:)` | read `rating` | `nil` |
+| `testTrack_AllNewFields_RoundTrip` | Track with all fields set | encode → decode | all fields match |
 
 ### Done criteria
 - Fixed columns (title, artist, duration) always visible, cannot be hidden
@@ -473,6 +601,7 @@ feat(slice 7-G): expand Track model and add column customization to PlaylistView
 - Migrate PlaylistView to Table with TableColumnCustomization
 - Fixed: title, artist, duration; optional: album + 13 columns
 - All columns sortable; column state persisted via AppStorage
+- Add TrackTests for new fields
 ```
 
 ---
@@ -492,8 +621,7 @@ user can clear or modify the value.
   - **General** (read-only): format, duration, bit rate, sample rate,
     channels, tag type
   - **Source** (editable): `kMDItemWhereFroms`; Edit / Clear buttons
-- Playback Statistics section (Played / First played / Last played / Added)
-  reserved for Slice 8-E — not implemented here
+- Playback Statistics section reserved for Slice 8-E — not implemented here
 
 > Display spec tables for all three sections: see
 > `HarmoniaPlayer_slice_7_micro.md` § Slice 7-H.
@@ -517,6 +645,16 @@ struct ExtendedAttributeService {
 }
 ```
 
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testReadWhereFroms_WhenPresent_ReturnsURLs` | File with source attribute | `readWhereFroms(url:)` | returns non-empty array |
+| `testReadWhereFroms_WhenAbsent_ReturnsEmpty` | Fresh temp file | `readWhereFroms(url:)` | returns `[]` |
+| `testWriteWhereFroms_PersistsValue` | Fresh temp file | `writeWhereFroms(["https://x.com"], url:)` then read | `["https://x.com"]` |
+| `testClearWhereFroms_RemovesAttribute` | File with source attribute | `clearWhereFroms(url:)` then read | `[]` |
+| `testClearWhereFroms_WhenAbsent_DoesNotThrow` | Fresh temp file | `clearWhereFroms(url:)` | no throw |
+
 ### Done criteria
 - File Info panel opens on right-click → "Get Info" or ⌘I
 - Location and General sections display correct values (read-only)
@@ -533,104 +671,37 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - Add FileInfoView: Location + General (read-only), Source (editable)
 - Add right-click "Get Info" in PlaylistView
 - Add ⌘I shortcut in HarmoniaPlayerCommands
-- Add ExtendedAttributeServiceTests
+- Add ExtendedAttributeServiceTests (5 cases)
 ```
-
----
-
-## Slice 7 TDD Matrix
-
-> Detailed test cases to be defined per sub-slice during implementation.
-> Each sub-slice follows the same TDD red → green → commit cycle.
-
-### Slice 7-E — Persistence (unit tests)
-
-| Test | Given | When | Then |
-|------|-------|------|------|
-| `testSaveAndRestore_Playlist_SurvivesRelaunch` | Playlist with 3 tracks | `saveState()` then `restoreState()` | `playlist.tracks.count == 3` |
-| `testSaveAndRestore_SortKey_Survives` | `sortKey == .title` | `saveState()` then `restoreState()` | `sortKey == .title` |
-| `testSaveAndRestore_AllowDuplicates_Survives` | `allowDuplicateTracks == true` | `saveState()` then `restoreState()` | `allowDuplicateTracks == true` |
-
-### Slice 7-A — Volume (unit tests)
-
-| Test | Given | When | Then |
-|------|-------|------|------|
-| `testSetVolume_ForwardsToService` | Playing state | `appState.setVolume(0.5)` | `fakeService.setVolumeCallCount == 1` |
-| `testSetVolume_Clamps_AboveOne` | Any state | `appState.setVolume(1.5)` | called with `1.0` |
-| `testSetVolume_Clamps_BelowZero` | Any state | `appState.setVolume(-0.1)` | called with `0.0` |
-
-### Slice 7-B — Multiple Playlists (unit tests)
-
-| Test | Given | When | Then |
-|------|-------|------|------|
-| `testNewPlaylist_IncreasesCount` | 1 playlist | `newPlaylist(name:)` | `playlists.count == 2` |
-| `testDeletePlaylist_DecreasesCount` | 2 playlists | `deletePlaylist(at: 1)` | `playlists.count == 1` |
-| `testActivePlaylist_SwitchesContext` | 2 playlists | `activePlaylistIndex = 1` | `playlist == playlists[1]` |
-
----
-
-### Slice 7-G — Column Customization (unit tests)
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTrack_DefaultGenre_IsEmpty` | `Track(url:)` | read `genre` | `""` |
-| `testTrack_DefaultYear_IsNil` | `Track(url:)` | read `year` | `nil` |
-| `testTrack_DefaultBitrate_IsNil` | `Track(url:)` | read `bitrate` | `nil` |
-| `testTrack_DefaultPlayCount_IsZero` | `Track(url:)` | read `playCount` | `0` |
-| `testTrack_DefaultRating_IsNil` | `Track(url:)` | read `rating` | `nil` |
-| `testTrack_AllNewFields_RoundTrip` | Track with all fields set | encode → decode | all fields match |
-
-### Slice 7-H — File Info Panel (unit tests)
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testReadWhereFroms_WhenPresent_ReturnsURLs` | File with source attribute | `readWhereFroms(url:)` | returns non-empty array |
-| `testReadWhereFroms_WhenAbsent_ReturnsEmpty` | Fresh temp file | `readWhereFroms(url:)` | returns `[]` |
-| `testWriteWhereFroms_PersistsValue` | Fresh temp file | `writeWhereFroms(["https://x.com"], url:)` then read | `["https://x.com"]` |
-| `testClearWhereFroms_RemovesAttribute` | File with source attribute | `clearWhereFroms(url:)` then read | `[]` |
-| `testClearWhereFroms_WhenAbsent_DoesNotThrow` | Fresh temp file | `clearWhereFroms(url:)` | no throw |
-
-| Test | Given | When | Then |
-|------|-------|------|------|
-| `testExport_ProducesValidM3U8` | Playlist with 2 tracks | `export(playlist:pathStyle:.absolute)` | starts with `#EXTM3U`, contains absolute paths |
-| `testExport_EXTINF_WithArtist` | title="Creep", artist="Radiohead", duration=237 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:237,Radiohead - Creep` |
-| `testExport_EXTINF_EmptyArtist` | title="Untitled", artist="", duration=180 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:180,Untitled` |
-| `testExport_EXTINF_UnknownDuration` | duration=0 | `export(playlist:pathStyle:.absolute)` | contains `#EXTINF:-1,` |
-| `testExport_RelativePaths` | track at `/music/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `a.mp3` |
-| `testExport_RelativePaths_SubDirectory` | track at `/music/rock/a.mp3`, m3u8 at `/music/export.m3u8` | `export(playlist:pathStyle:.relative(to:))` | path written as `rock/a.mp3` |
-| `testParse_AbsolutePaths_ReturnsURLs` | M3U8 with 2 absolute paths | `parse(m3u8:baseURL:nil)` | returns 2 `file://` URLs |
-| `testParse_RelativePaths_ResolvesAgainstBase` | M3U8 with `a.mp3`, baseURL=`/music/` | `parse(m3u8:baseURL:)` | returns `file:///music/a.mp3` |
-| `testParse_IgnoresCommentLines` | M3U8 with `#EXTM3U` and `#EXTINF` lines | `parse(m3u8:baseURL:nil)` | only returns path lines |
-| `testParse_EmptyString` | `""` | `parse(m3u8:baseURL:nil)` | returns `[]` |
 
 ---
 
 ## Slice 7 Completion Gate
 
-### Required
-
 - ✅ Volume slider visible and functional in PlayerView
 - ✅ Multiple playlists supported with tabs
+- ✅ Deleting playing playlist stops playback and clears currentTrack
 - ✅ Playlist export as M3U8 with absolute or relative paths (user choice)
 - ✅ Playlist import from M3U8, creates new playlist tab named after filename
 - ✅ Playlist import re-reads metadata via TagReaderService
-- ✅ Drag-to-reorder functional within a playlist (UI implemented in 7-G)
+- ✅ Drag-to-reorder: insertionOrder synced (drag UI in 7-G)
 - ✅ Playlist survives app quit and relaunch
 - ✅ Sort state survives app quit and relaunch
-- ✅ `allowDuplicateTracks` survives app quit and relaunch
+- ✅ `allowDuplicateTracks`, `volume`, `selectedLanguage` survive app quit and relaunch
 - ✅ All UI text localised in 24 languages
-- ✅ Language change in Settings takes effect immediately
-- ✅ Arabic RTL layout verified
-- ✅ `Track` model expanded with Groups A–E; all new fields `Codable`
-- ✅ Group E fields defined but no UI exposed in Slice 7
-- ✅ Fixed columns (title, artist, duration) always visible, cannot be hidden
-- ✅ Optional columns toggleable and reorderable via column header
-- ✅ All columns sortable by clicking header
-- ✅ Column state survives app relaunch
-- ✅ File Info Panel opens on right-click or ⌘I
-- ✅ Location and General sections show correct values (read-only)
-- ✅ Source field editable (Edit / Clear)
-- ✅ All Slice 7 unit tests green
+- ✅ First launch defaults to English regardless of system language
+- ✅ Language change restarts app; system menus update after restart
+- ✅ Language selection persists across launches
+- ⬜ `Track` model expanded with Groups A–E; all new fields `Codable`
+- ⬜ Group E fields defined but no UI exposed in Slice 7
+- ⬜ Fixed columns (title, artist, duration) always visible, cannot be hidden
+- ⬜ Optional columns toggleable and reorderable via column header
+- ⬜ All columns sortable by clicking header
+- ⬜ Column state survives app relaunch
+- ⬜ File Info Panel opens on right-click or ⌘I
+- ⬜ Location and General sections show correct values (read-only)
+- ⬜ Source field editable (Edit / Clear)
+- ✅ All Slice 7-A–F unit tests green
 - ✅ All Slice 1–6 tests still green
 
 ---

@@ -112,7 +112,7 @@ struct PlayerView: View {
     /// Track title and artist labels.
     private var metadataView: some View {
         VStack(spacing: 4) {
-            Text(appState.currentTrack?.title ?? L("no_track_loaded"))
+            Text(appState.currentTrack?.title ?? L("no_track_playing"))
                 .font(.title3)
                 .fontWeight(.semibold)
                 .lineLimit(1)
