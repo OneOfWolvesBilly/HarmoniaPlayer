@@ -4,8 +4,6 @@
 //
 //  Created on 2026-02-18.
 //
-//  Slice 2-A: Track Model
-//
 
 import XCTest
 @testable import HarmoniaPlayer
@@ -17,11 +15,8 @@ import XCTest
 /// - Conforms to Equatable by value
 /// - Stores all metadata fields correctly
 /// - Derives title from URL in convenience initializer
-///
-/// **Design constraints (Slice 2-A):**
-/// - No HarmoniaCore dependency
-/// - No UIKit / AppKit dependency
-/// - Pure value type tests
+/// - Exposes Groups A–E fields with correct defaults
+/// - Round-trips all fields through Codable
 @MainActor
 final class TrackTests: XCTestCase {
 
@@ -33,257 +28,286 @@ final class TrackTests: XCTestCase {
     // MARK: - Tests: Identifiable
 
     func testTrack_HasUniqueID() {
-        // Given: Two separate Track instances created from the same URL
         let track1 = Track(url: sampleURL)
         let track2 = Track(url: sampleURL)
-
-        // Then: Each instance receives its own UUID
-        XCTAssertNotEqual(track1.id, track2.id,
-                          "Two Track instances must have different IDs")
+        XCTAssertNotEqual(track1.id, track2.id)
     }
 
     func testTrack_IDIsStable() {
-        // Given: A track
         let track = Track(url: sampleURL)
         let capturedID = track.id
-
-        // Then: ID does not change across accesses
-        XCTAssertEqual(track.id, capturedID,
-                       "Track ID must be stable after creation")
+        XCTAssertEqual(track.id, capturedID)
     }
 
     // MARK: - Tests: Equatable
 
     func testTrack_Equatable_SameFields_AreEqual() {
-        // Given: Two tracks sharing the same explicit ID and fields
         let sharedID = UUID()
-        let track1 = Track(id: sharedID,
-                           url: sampleURL,
-                           title: "Song",
-                           artist: "Artist",
-                           album: "Album",
-                           duration: 180.0)
-        let track2 = Track(id: sharedID,
-                           url: sampleURL,
-                           title: "Song",
-                           artist: "Artist",
-                           album: "Album",
-                           duration: 180.0)
-
-        // Then: They are equal
-        XCTAssertEqual(track1, track2,
-                       "Tracks with identical fields must be equal")
+        let track1 = Track(id: sharedID, url: sampleURL, title: "Song",
+                           artist: "Artist", album: "Album", duration: 180.0)
+        let track2 = Track(id: sharedID, url: sampleURL, title: "Song",
+                           artist: "Artist", album: "Album", duration: 180.0)
+        XCTAssertEqual(track1, track2)
     }
 
     func testTrack_Equatable_DifferentID_AreNotEqual() {
-        // Given: Two tracks with same URL but different IDs (default UUID())
         let track1 = Track(url: sampleURL)
         let track2 = Track(url: sampleURL)
-
-        // Then: Different IDs → not equal
-        XCTAssertNotEqual(track1, track2,
-                          "Tracks with different IDs must not be equal")
+        XCTAssertNotEqual(track1, track2)
     }
 
     func testTrack_Equatable_DifferentURL_AreNotEqual() {
-        // Given: Same ID, different URLs
         let sharedID = UUID()
         let track1 = Track(id: sharedID, url: sampleURL, title: "Song")
         let track2 = Track(id: sharedID, url: otherURL,  title: "Song")
-
-        // Then: Not equal
-        XCTAssertNotEqual(track1, track2,
-                          "Tracks with different URLs must not be equal")
+        XCTAssertNotEqual(track1, track2)
     }
 
     func testTrack_Equatable_DifferentTitle_AreNotEqual() {
-        // Given: Same ID and URL, different title
         let sharedID = UUID()
         let track1 = Track(id: sharedID, url: sampleURL, title: "Title A")
         let track2 = Track(id: sharedID, url: sampleURL, title: "Title B")
-
-        // Then: Not equal
-        XCTAssertNotEqual(track1, track2,
-                          "Tracks with different titles must not be equal")
+        XCTAssertNotEqual(track1, track2)
     }
 
-    // MARK: - Tests: Convenience initializer (URL-derived title)
+    // MARK: - Tests: Convenience initializer
 
     func testTrack_InitWithURL_DerivesTitleFromFilename() {
-        // Given: URL with a filename
         let url = URL(fileURLWithPath: "/Music/My Favourite Song.mp3")
-
-        // When: Use convenience initializer
         let track = Track(url: url)
-
-        // Then: Title is the filename without extension
-        XCTAssertEqual(track.title, "My Favourite Song",
-                       "Convenience init should derive title from URL filename (no extension)")
+        XCTAssertEqual(track.title, "My Favourite Song")
     }
 
     func testTrack_InitWithURL_SetsURL() {
-        // Given / When
         let track = Track(url: sampleURL)
-
-        // Then
-        XCTAssertEqual(track.url, sampleURL,
-                       "URL should be stored as-is")
+        XCTAssertEqual(track.url, sampleURL)
     }
 
     func testTrack_InitWithURL_DefaultsMetadataToEmpty() {
-        // Given / When
         let track = Track(url: sampleURL)
-
-        // Then: Artist and album default to empty strings
-        XCTAssertEqual(track.artist, "",
-                       "Convenience init should default artist to empty string")
-        XCTAssertEqual(track.album, "",
-                       "Convenience init should default album to empty string")
+        XCTAssertEqual(track.artist, "")
+        XCTAssertEqual(track.album, "")
     }
 
     func testTrack_InitWithURL_DefaultsDurationToNil() {
-        // Given / When
         let track = Track(url: sampleURL)
-
-        // Then
-        XCTAssertEqual(track.duration, 0,
-                     "Convenience init should default duration to 0")
+        XCTAssertEqual(track.duration, 0)
     }
 
     func testTrack_InitWithURL_DefaultsArtworkToNil() {
-        // Given / When
         let track = Track(url: sampleURL)
-
-        // Then
-        XCTAssertNil(track.artworkData,
-                     "Convenience init should default artworkData to nil")
+        XCTAssertNil(track.artworkData)
     }
 
-    // MARK: - Tests: Primary initializer (all fields)
+    // MARK: - Tests: Primary initializer
 
     func testTrack_InitWithAllFields_StoresAllValues() {
-        // Given
         let id       = UUID()
         let duration = TimeInterval(213.5)
-        let artwork  = Data([0xFF, 0xD8, 0xFF]) // minimal JPEG header bytes
-
-        // When
-        let track = Track(id: id,
-                          url: sampleURL,
-                          title: "Full Song",
-                          artist: "Full Artist",
-                          album: "Full Album",
-                          duration: duration,
-                          artworkData: artwork)
-
-        // Then: Every field matches
-        XCTAssertEqual(track.id,         id)
-        XCTAssertEqual(track.url,        sampleURL)
-        XCTAssertEqual(track.title,      "Full Song")
-        XCTAssertEqual(track.artist,     "Full Artist")
-        XCTAssertEqual(track.album,      "Full Album")
-        XCTAssertEqual(track.duration,   duration)
+        let artwork  = Data([0xFF, 0xD8, 0xFF])
+        let track = Track(id: id, url: sampleURL, title: "Full Song",
+                          artist: "Full Artist", album: "Full Album",
+                          duration: duration, artworkData: artwork)
+        XCTAssertEqual(track.id,          id)
+        XCTAssertEqual(track.url,         sampleURL)
+        XCTAssertEqual(track.title,       "Full Song")
+        XCTAssertEqual(track.artist,      "Full Artist")
+        XCTAssertEqual(track.album,       "Full Album")
+        XCTAssertEqual(track.duration,    duration)
         XCTAssertEqual(track.artworkData, artwork)
-    }
-
-    func testTrack_InitWithAllFields_DefaultParameters() {
-        // Given: Only required parameters (url + title)
-        let track = Track(url: sampleURL, title: "Minimal")
-
-        // Then: Defaults applied
-        XCTAssertEqual(track.artist,  "",
-                       "artist should default to empty string")
-        XCTAssertEqual(track.album,   "",
-                       "album should default to empty string")
-        XCTAssertEqual(track.duration, 0,
-                     "duration should default to 0")
-        XCTAssertNil(track.artworkData,
-                     "artworkData should default to nil")
     }
 
     // MARK: - Tests: Mutability
 
     func testTrack_MutableFields_CanBeUpdated() {
-        // Given
         var track = Track(url: sampleURL, title: "Original")
-
-        // When: Simulate metadata update (as Slice 3 will do)
-        track.title    = "Updated Title"
-        track.artist   = "Updated Artist"
-        track.album    = "Updated Album"
+        track.title  = "Updated Title"
+        track.artist = "Updated Artist"
+        track.album  = "Updated Album"
         track.duration = 300.0
-
-        // Then: Mutable fields accept new values
         XCTAssertEqual(track.title,    "Updated Title")
         XCTAssertEqual(track.artist,   "Updated Artist")
         XCTAssertEqual(track.album,    "Updated Album")
         XCTAssertEqual(track.duration, 300.0)
     }
 
-    func testTrack_ImmutableFields_CannotChangeAfterInit() {
-        // Given: This test documents design intent via the type system.
-        // id and url are `let` constants — compile-time enforcement.
-        // Verified by reading the struct definition; no runtime assertion needed.
-        let track = Track(url: sampleURL, title: "Immutable Test")
-
-        // Then: These properties exist and are readable
-        XCTAssertNotNil(track.id,  "id must be accessible")
-        XCTAssertEqual(track.url, sampleURL, "url must be accessible")
-        // Attempting `track.id = UUID()` would be a compile error — enforced by `let`
-    }
-
     // MARK: - Tests: isAccessible
 
     func testTrack_IsAccessible_DefaultIsTrue() {
         let track = Track(url: sampleURL)
-        XCTAssertTrue(track.isAccessible,
-                      "isAccessible should default to true for newly created tracks")
+        XCTAssertTrue(track.isAccessible)
     }
 
     func testTrack_Equatable_ConsidersIsAccessible() {
-        // Given: Two tracks identical except for isAccessible
         let sharedID = UUID()
         var track1 = Track(id: sharedID, url: sampleURL, title: "Song")
         var track2 = Track(id: sharedID, url: sampleURL, title: "Song")
         track1.isAccessible = true
         track2.isAccessible = false
-
-        // Then: isAccessible is included in Equatable so SwiftUI Table re-renders
-        // when a track transitions from accessible to inaccessible.
-        XCTAssertNotEqual(track1, track2,
-                          "isAccessible must affect Equatable so SwiftUI detects the change")
+        XCTAssertNotEqual(track1, track2)
     }
 
     func testTrack_Codable_IsAccessible_FalseWhenFileNotFound() throws {
-        // Given: A track pointing to a path that does not exist on disk.
-        // No bookmark is generated for a non-existent file (bookmarkData throws).
         let missingURL = URL(fileURLWithPath: "/tmp/does-not-exist-\(UUID().uuidString).mp3")
         let original = Track(url: missingURL, title: "Missing")
-
-        // When: Encode then decode
         let data = try JSONEncoder().encode(original)
         let restored = try JSONDecoder().decode(Track.self, from: data)
-
-        // Then: No bookmark was stored (file didn't exist at encode time),
-        // so isAccessible defaults to true after decode.
-        // The Application Layer (restoreState) is responsible for the fileExists check.
-        XCTAssertTrue(restored.isAccessible,
-                      "isAccessible is true after decode when no bookmark present — fileExists check is AppState.restoreState responsibility")
+        XCTAssertTrue(restored.isAccessible)
     }
 
     func testTrack_Codable_IsAccessible_NotPersisted() throws {
-        // Given: A track with isAccessible manually set to false
         var original = Track(url: sampleURL, title: "Song")
         original.isAccessible = false
+        let data = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(Track.self, from: data)
+        XCTAssertTrue(restored.isAccessible)
+    }
 
-        // When: Encode then decode
+    // MARK: - Tests: Group A defaults (Slice 7-G TDD matrix)
+
+    func testTrack_DefaultGenre_IsEmpty() {
+        let track = Track(url: sampleURL)
+        XCTAssertEqual(track.genre, "",
+                       "genre must default to empty string")
+    }
+
+    func testTrack_DefaultYear_IsNil() {
+        let track = Track(url: sampleURL)
+        XCTAssertNil(track.year,
+                     "year must default to nil")
+    }
+
+    func testTrack_DefaultBitrate_IsNil() {
+        let track = Track(url: sampleURL)
+        XCTAssertNil(track.bitrate,
+                     "bitrate must default to nil")
+    }
+
+    func testTrack_DefaultPlayCount_IsZero() {
+        let track = Track(url: sampleURL)
+        XCTAssertEqual(track.playCount, 0,
+                       "playCount must default to 0")
+    }
+
+    func testTrack_DefaultRating_IsNil() {
+        let track = Track(url: sampleURL)
+        XCTAssertNil(track.rating,
+                     "rating must default to nil")
+    }
+
+    func testTrack_AllNewFields_RoundTrip() throws {
+        // Given: A track with all Groups A–E fields set
+        let original = Track(
+            id: UUID(),
+            url: sampleURL,
+            title: "Round Trip",
+            artist: "Artist",
+            album: "Album",
+            duration: 180.0,
+            albumArtist: "Various Artists",
+            composer: "John Williams",
+            genre: "Soundtrack",
+            year: 1977,
+            trackNumber: 3,
+            trackTotal: 12,
+            discNumber: 1,
+            discTotal: 2,
+            bpm: 120,
+            replayGainTrack: -6.5,
+            replayGainAlbum: -7.2,
+            comment: "Original pressing",
+            bitrate: 320,
+            sampleRate: 44100,
+            channels: 2,
+            fileSize: 1_048_576,
+            fileFormat: "MP3",
+            playCount: 7,
+            lastPlayedAt: Date(timeIntervalSinceReferenceDate: 0),
+            rating: 0.8
+        )
+
+        // When: Encode → Decode
         let data = try JSONEncoder().encode(original)
         let restored = try JSONDecoder().decode(Track.self, from: data)
 
-        // Then: isAccessible is not stored in the encoded data.
-        // After decode with no bookmark, isAccessible defaults to true.
-        // The Application Layer (restoreState) re-evaluates accessibility after decode.
-        XCTAssertTrue(restored.isAccessible,
-                      "isAccessible is not persisted — defaults to true on decode; re-evaluated by AppState.restoreState")
+        // Then: All fields survive round-trip
+        XCTAssertEqual(restored.title,       original.title)
+        XCTAssertEqual(restored.albumArtist, original.albumArtist)
+        XCTAssertEqual(restored.composer,    original.composer)
+        XCTAssertEqual(restored.genre,       original.genre)
+        XCTAssertEqual(restored.year,        original.year)
+        XCTAssertEqual(restored.trackNumber, original.trackNumber)
+        XCTAssertEqual(restored.trackTotal,  original.trackTotal)
+        XCTAssertEqual(restored.discNumber,  original.discNumber)
+        XCTAssertEqual(restored.discTotal,   original.discTotal)
+        XCTAssertEqual(restored.bpm,         original.bpm)
+        XCTAssertEqual(restored.replayGainTrack, original.replayGainTrack)
+        XCTAssertEqual(restored.replayGainAlbum, original.replayGainAlbum)
+        XCTAssertEqual(restored.comment,     original.comment)
+        XCTAssertEqual(restored.bitrate,     original.bitrate)
+        XCTAssertEqual(restored.sampleRate,  original.sampleRate)
+        XCTAssertEqual(restored.channels,    original.channels)
+        XCTAssertEqual(restored.fileSize,    original.fileSize)
+        XCTAssertEqual(restored.fileFormat,  original.fileFormat)
+        XCTAssertEqual(restored.playCount,   original.playCount)
+        XCTAssertEqual(restored.lastPlayedAt, original.lastPlayedAt)
+        XCTAssertEqual(restored.rating,      original.rating)
+    }
+
+    // MARK: - Tests: Sort helpers
+
+    func testTrack_SortHelpers_ReturnMinusOneForNil() {
+        let track = Track(url: sampleURL)
+        XCTAssertEqual(track.sortYear,        -1)
+        XCTAssertEqual(track.sortTrackNumber, -1)
+        XCTAssertEqual(track.sortDiscNumber,  -1)
+        XCTAssertEqual(track.sortBpm,         -1)
+        XCTAssertEqual(track.sortBitrate,     -1)
+        XCTAssertEqual(track.sortSampleRate,  -1)
+        XCTAssertEqual(track.sortChannels,    -1)
+        XCTAssertEqual(track.sortFileSize,    -1)
+    }
+
+    func testTrack_SortHelpers_ReturnActualValueWhenSet() {
+        let track = Track(url: sampleURL, title: "T",
+                          year: 2020, trackNumber: 5, discNumber: 1,
+                          bpm: 130, bitrate: 256, sampleRate: 48000,
+                          channels: 2, fileSize: 5_000_000)
+        XCTAssertEqual(track.sortYear,        2020)
+        XCTAssertEqual(track.sortTrackNumber, 5)
+        XCTAssertEqual(track.sortDiscNumber,  1)
+        XCTAssertEqual(track.sortBpm,         130)
+        XCTAssertEqual(track.sortBitrate,     256)
+        XCTAssertEqual(track.sortSampleRate,  48000)
+        XCTAssertEqual(track.sortChannels,    2)
+        XCTAssertEqual(track.sortFileSize,    5_000_000)
+    }
+
+    // MARK: - Tests: Backward compatibility
+
+    func testTrack_OldCodableData_DecodesWithDefaultsForNewFields() throws {
+        // Simulate data encoded by the old Track (no Group A–E keys)
+        let sharedID = UUID()
+        let oldJSON = """
+        {
+            "id": "\(sharedID.uuidString)",
+            "urlPath": "/Music/old.mp3",
+            "title": "Old Track",
+            "artist": "Old Artist",
+            "album": "Old Album",
+            "duration": 120.0
+        }
+        """.data(using: .utf8)!
+
+        let track = try JSONDecoder().decode(Track.self, from: oldJSON)
+
+        XCTAssertEqual(track.genre,       "")
+        XCTAssertNil(track.year)
+        XCTAssertNil(track.bitrate)
+        XCTAssertEqual(track.playCount,   0)
+        XCTAssertNil(track.rating)
+        XCTAssertEqual(track.albumArtist, "")
+        XCTAssertEqual(track.comment,     "")
+        XCTAssertEqual(track.fileFormat,  "")
     }
 }
