@@ -11,7 +11,7 @@
 
 /* MARK: - ContentView: Already in Playlist Alert */
 "alert_already_in_playlist_title" = "已在播放清單中";
-"alert_already_in_playlist_body" = "下列檔案已在播放清單中，未重複加入：\n%@";
+"alert_already_in_playlist_body" = "下列檔案已在播放清單中，因此未加入：\n%@";
 
 /* MARK: - ContentView: Playback Error Alert */
 "alert_playback_error_title" = "播放錯誤";
@@ -21,7 +21,7 @@
 "error_core_error" = "播放時發生錯誤。\n\n錯誤碼：%@";
 
 /* MARK: - PlayerView: Metadata */
-"no_track_playing" = "尚未載入曲目";
+"no_track_playing" = "沒有播放中的曲目";
 
 /* MARK: - PlayerView: Transport Button Help */
 "help_previous_track" = "上一首";
@@ -50,7 +50,7 @@
 
 /* MARK: - PlaylistView: Context Menu */
 "ctx_play" = "播放";
-"ctx_play_next" = "接下來播放";
+"ctx_play_next" = "下一首播放";
 "ctx_remove" = "從播放清單移除";
 "ctx_rename" = "重新命名";
 "ctx_delete" = "刪除";
@@ -106,3 +106,19 @@
 "alert_export_failed" = "匯出失敗";
 "alert_import_missing_title" = "部分檔案未找到";
 "alert_import_missing_body" = "下列檔案已略過：\n\n%@";
+
+/* MARK: - PlaylistView: Optional Column Headers (Slice 7-G) */
+"col_album" = "專輯";
+"col_albumArtist" = "專輯藝人";
+"col_year" = "年份";
+"col_trackNumber" = "曲目";
+"col_discNumber" = "碟號";
+"col_genre" = "類型";
+"col_composer" = "作曲者";
+"col_bpm" = "BPM";
+"col_bitrate" = "位元率";
+"col_sampleRate" = "取樣率";
+"col_channels" = "聲道";
+"col_fileSize" = "大小";
+"col_fileFormat" = "格式";
+"col_comment" = "備注";

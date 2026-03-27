@@ -106,3 +106,19 @@
 "alert_export_failed" = "書き出し失敗";
 "alert_import_missing_title" = "一部のファイルが見つかりません";
 "alert_import_missing_body" = "以下のファイルをスキップしました：\n\n%@";
+
+/* MARK: - PlaylistView: Optional Column Headers (Slice 7-G) */
+"col_album" = "アルバム";
+"col_albumArtist" = "アルバムアーティスト";
+"col_year" = "年";
+"col_trackNumber" = "トラック";
+"col_discNumber" = "ディスク";
+"col_genre" = "ジャンル";
+"col_composer" = "作曲者";
+"col_bpm" = "BPM";
+"col_bitrate" = "ビットレート";
+"col_sampleRate" = "サンプルレート";
+"col_channels" = "チャンネル";
+"col_fileSize" = "ファイルサイズ";
+"col_fileFormat" = "フォーマット";
+"col_comment" = "コメント";

@@ -106,3 +106,19 @@
 "alert_export_failed" = "Export Failed";
 "alert_import_missing_title" = "Some Files Were Not Found";
 "alert_import_missing_body" = "The following files were skipped:\n\n%@";
+
+/* MARK: - PlaylistView: Optional Column Headers (Slice 7-G) */
+"col_album" = "Album";
+"col_albumArtist" = "Album Artist";
+"col_year" = "Year";
+"col_trackNumber" = "Track";
+"col_discNumber" = "Disc";
+"col_genre" = "Genre";
+"col_composer" = "Composer";
+"col_bpm" = "BPM";
+"col_bitrate" = "Bitrate";
+"col_sampleRate" = "Sample Rate";
+"col_channels" = "Ch";
+"col_fileSize" = "Size";
+"col_fileFormat" = "Format";
+"col_comment" = "Comment";

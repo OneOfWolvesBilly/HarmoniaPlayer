@@ -16,11 +16,16 @@
 //    horizontal scrolling on macOS.
 //  - Sort state is stored in Playlist (Model layer), not in this View.
 //    This allows each playlist to have independent sort state.
+//  - Column visibility and order are persisted automatically via
+//    @AppStorage + TableColumnCustomization.
+//  - Fixed columns (cannot be hidden): status icon, title, artist, duration.
+//  - Optional columns (hidden by default except album): album, albumArtist,
+//    year, trackNumber, discNumber, genre, composer, bpm, bitrate,
+//    sampleRate, channels, fileSize, fileFormat, comment.
+//  - TableColumn definitions are split across multiple @TableColumnBuilder
+//    functions to stay within Swift type-checker complexity limits.
 //  - No import HarmoniaCore — all state access goes through AppState.
-//  - Playlist tabs bind directly to appState.activePlaylistIndex.
-//  - Inline rename triggered by Notification.Name.renameActivePlaylist
-//    (defined in HarmoniaPlayerCommands.swift).
-//  - All UI strings use `String(localized:bundle:appState.languageBundle)`
+//  - All UI strings use NSLocalizedString(bundle:appState.languageBundle)
 //    for runtime language switching support.
 //
 
@@ -34,12 +39,12 @@ struct PlaylistView: View {
     @State private var sortOrder: [KeyPathComparator<Track>] = []
     @State private var showShuffleQueue = false
 
-    /// Index of the tab currently being renamed. `nil` = not renaming.
     @State private var renamingIndex: Int? = nil
-    /// Temporary buffer while the user types a new name.
     @State private var renameText: String = ""
-    /// Focus state for the rename TextField.
     @FocusState private var isRenameFieldFocused: Bool
+
+    @AppStorage("playlistColumnCustomization")
+    private var columnCustomization: TableColumnCustomization<Track>
 
     // MARK: - Localization helper
 
@@ -114,14 +119,12 @@ struct PlaylistView: View {
 
     @ViewBuilder
     private func playlistTab(index: Int, playlist: Playlist) -> some View {
-        let isActive = index == appState.activePlaylistIndex
+        let isActive   = index == appState.activePlaylistIndex
         let isRenaming = renamingIndex == index
-        let isPlaying = playlist.id == appState.playingPlaylistID
+        let isPlaying  = playlist.id == appState.playingPlaylistID
 
         Button {
-            if renamingIndex != nil {
-                commitRename()
-            }
+            if renamingIndex != nil { commitRename() }
             appState.activePlaylistIndex = index
         } label: {
             HStack(spacing: 4) {
@@ -157,9 +160,7 @@ struct PlaylistView: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("playlist-tab-\(index)")
         .contextMenu {
-            Button(L("ctx_rename")) {
-                beginRename(at: index)
-            }
+            Button(L("ctx_rename")) { beginRename(at: index) }
             Divider()
             Button(L("ctx_delete"), role: .destructive) {
                 appState.deletePlaylist(at: index)
@@ -205,61 +206,26 @@ struct PlaylistView: View {
     }
 
     // MARK: - Table
+    //
+    // Split into multiple @TableColumnBuilder functions to avoid
+    // "unable to type-check expression in reasonable time" compiler error.
+    // Swift's result builder type inference degrades exponentially with
+    // column count; grouping into sub-functions restores linear inference.
 
     private var tableView: some View {
-        Table(appState.playlist.tracks, selection: $selectedTrackIDs, sortOrder: $sortOrder) {
-            TableColumn("") { track in
-                Image(systemName: appState.currentTrack?.id == track.id
-                      ? "speaker.wave.2.fill" : "music.note")
-                    .foregroundStyle(appState.currentTrack?.id == track.id
-                                     ? Color.accentColor : Color.secondary)
-                    .frame(width: 16)
-                    .opacity(track.isAccessible ? 1.0 : 0.6)
-            }
-            .width(24)
-
-            TableColumn(L("col_title"), value: \.title) { track in
-                Text(track.title)
-                    .lineLimit(1)
-                    .foregroundStyle(track.isAccessible ? Color.primary : Color(nsColor: .tertiaryLabelColor))
-                    .strikethrough(!track.isAccessible)
-            }
-            .width(min: 120)
-
-            TableColumn(L("col_artist"), value: \.artist) { track in
-                Text(track.artist.isEmpty ? "—" : track.artist)
-                    .lineLimit(1)
-                    .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
-                    .strikethrough(!track.isAccessible)
-            }
-            .width(min: 100)
-
-            TableColumn(L("col_duration"), value: \.duration) { track in
-                Text(formatDuration(track.duration))
-                    .monospacedDigit()
-                    .foregroundStyle(track.isAccessible ? Color.secondary : Color(nsColor: .tertiaryLabelColor))
-                    .strikethrough(!track.isAccessible)
-            }
-            .width(min: 52, ideal: 64)
+        Table(appState.playlist.tracks,
+              selection: $selectedTrackIDs,
+              sortOrder: $sortOrder,
+              columnCustomization: $columnCustomization) {
+            coreColumns
+            tagColumns
+            technicalColumns
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .scrollContentBackground(.hidden)
         .frame(maxHeight: .infinity)
         .onChange(of: sortOrder) {
-            guard let first = sortOrder.first else {
-                appState.restoreInsertionOrder()
-                return
-            }
-            let key: PlaylistSortKey
-            switch first.keyPath {
-            case \Track.title:    key = .title
-            case \Track.artist:   key = .artist
-            case \Track.duration: key = .duration
-            default:              key = .none
-            }
-            let ascending = first.order == .forward
-            let sorted = appState.playlist.tracks.sorted(using: sortOrder)
-            appState.applySort(sorted, key: key, ascending: ascending)
+            handleSortOrderChange()
         }
         .contextMenu(forSelectionType: Track.ID.self) { ids in
             if let id = ids.first {
@@ -281,6 +247,218 @@ struct PlaylistView: View {
             }
         }
         .accessibilityIdentifier("playlist-list")
+    }
+
+    // ── Group 1: Fixed columns (status icon, title, artist, duration) ─────
+    @TableColumnBuilder<Track, KeyPathComparator<Track>>
+    private var coreColumns: some TableColumnContent<Track, KeyPathComparator<Track>> {
+        TableColumn("") { track in
+            Image(systemName: appState.currentTrack?.id == track.id
+                  ? "speaker.wave.2.fill" : "music.note")
+                .foregroundStyle(appState.currentTrack?.id == track.id
+                                 ? Color.accentColor : Color.secondary)
+                .frame(width: 16)
+                .opacity(track.isAccessible ? 1.0 : 0.6)
+        }
+        .width(24)
+
+        TableColumn(L("col_title"), value: \.title) { track in
+            Text(track.title)
+                .lineLimit(1)
+                .foregroundStyle(track.isAccessible
+                                 ? Color.primary
+                                 : Color(nsColor: .tertiaryLabelColor))
+                .strikethrough(!track.isAccessible)
+        }
+        .width(min: 120)
+
+        TableColumn(L("col_artist"), value: \.artist) { track in
+            Text(track.artist.isEmpty ? "—" : track.artist)
+                .lineLimit(1)
+                .foregroundStyle(track.isAccessible
+                                 ? Color.secondary
+                                 : Color(nsColor: .tertiaryLabelColor))
+                .strikethrough(!track.isAccessible)
+        }
+        .width(min: 100)
+
+        TableColumn(L("col_duration"), value: \.duration) { track in
+            Text(formatDuration(track.duration))
+                .monospacedDigit()
+                .foregroundStyle(track.isAccessible
+                                 ? Color.secondary
+                                 : Color(nsColor: .tertiaryLabelColor))
+                .strikethrough(!track.isAccessible)
+        }
+        .width(min: 52, ideal: 64)
+    }
+
+    // ── Group 2: Tag columns (album, albumArtist, year, trackNumber, ──────
+    //                          discNumber, genre, composer, bpm, comment)
+    @TableColumnBuilder<Track, KeyPathComparator<Track>>
+    private var tagColumns: some TableColumnContent<Track, KeyPathComparator<Track>> {
+        TableColumn(L("col_album"), value: \.album) { track in
+            Text(track.album.isEmpty ? "—" : track.album)
+                .lineLimit(1)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 100)
+        .customizationID("col.album")
+
+        TableColumn(L("col_albumArtist"), value: \.albumArtist) { track in
+            Text(track.albumArtist.isEmpty ? "—" : track.albumArtist)
+                .lineLimit(1)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 100)
+        .customizationID("col.albumArtist")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_year"), value: \.sortYear) { track in
+            Text(track.year.map(String.init) ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 52, ideal: 60)
+        .customizationID("col.year")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_trackNumber"), value: \.sortTrackNumber) { track in
+            Text(track.trackNumber.map(String.init) ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 40, ideal: 48)
+        .customizationID("col.trackNumber")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_discNumber"), value: \.sortDiscNumber) { track in
+            Text(track.discNumber.map(String.init) ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 40, ideal: 48)
+        .customizationID("col.discNumber")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_genre"), value: \.genre) { track in
+            Text(track.genre.isEmpty ? "—" : track.genre)
+                .lineLimit(1)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 80)
+        .customizationID("col.genre")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_composer"), value: \.composer) { track in
+            Text(track.composer.isEmpty ? "—" : track.composer)
+                .lineLimit(1)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 100)
+        .customizationID("col.composer")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_bpm"), value: \.sortBpm) { track in
+            Text(track.bpm.map(String.init) ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 48, ideal: 56)
+        .customizationID("col.bpm")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_comment"), value: \.comment) { track in
+            Text(track.comment.isEmpty ? "—" : track.comment)
+                .lineLimit(1)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 100)
+        .customizationID("col.comment")
+        .defaultVisibility(.hidden)
+    }
+
+    // ── Group 3: Technical columns (bitrate, sampleRate, channels, ────────
+    //                                fileSize, fileFormat)
+    @TableColumnBuilder<Track, KeyPathComparator<Track>>
+    private var technicalColumns: some TableColumnContent<Track, KeyPathComparator<Track>> {
+        TableColumn(L("col_bitrate"), value: \.sortBitrate) { track in
+            Text(track.bitrate.map { "\($0)" } ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 56, ideal: 64)
+        .customizationID("col.bitrate")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_sampleRate"), value: \.sortSampleRate) { track in
+            Text(track.sampleRate.map { String(format: "%.0f", $0) } ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 64, ideal: 72)
+        .customizationID("col.sampleRate")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_channels"), value: \.sortChannels) { track in
+            Text(track.channels.map(String.init) ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 40, ideal: 52)
+        .customizationID("col.channels")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_fileSize"), value: \.sortFileSize) { track in
+            Text(track.fileSize.map {
+                ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file)
+            } ?? "—")
+                .monospacedDigit()
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 72, ideal: 84)
+        .customizationID("col.fileSize")
+        .defaultVisibility(.hidden)
+
+        TableColumn(L("col_fileFormat"), value: \.fileFormat) { track in
+            Text(track.fileFormat.isEmpty ? "—" : track.fileFormat)
+                .foregroundStyle(Color.secondary)
+        }
+        .width(min: 52, ideal: 64)
+        .customizationID("col.fileFormat")
+        .defaultVisibility(.hidden)
+    }
+
+    // MARK: - Sort Order Handler
+
+    private func handleSortOrderChange() {
+        guard let first = sortOrder.first else {
+            appState.restoreInsertionOrder()
+            return
+        }
+        let key: PlaylistSortKey
+        switch first.keyPath {
+        case \Track.title:           key = .title
+        case \Track.artist:          key = .artist
+        case \Track.album:           key = .album
+        case \Track.duration:        key = .duration
+        case \Track.albumArtist:     key = .albumArtist
+        case \Track.composer:        key = .composer
+        case \Track.genre:           key = .genre
+        case \Track.sortYear:        key = .year
+        case \Track.sortTrackNumber: key = .trackNumber
+        case \Track.sortDiscNumber:  key = .discNumber
+        case \Track.sortBpm:         key = .bpm
+        case \Track.sortBitrate:     key = .bitrate
+        case \Track.sortSampleRate:  key = .sampleRate
+        case \Track.sortChannels:    key = .channels
+        case \Track.sortFileSize:    key = .fileSize
+        case \Track.fileFormat:      key = .fileFormat
+        default:                     key = .none
+        }
+        let ascending = first.order == .forward
+        let sorted = appState.playlist.tracks.sorted(using: sortOrder)
+        appState.applySort(sorted, key: key, ascending: ascending)
     }
 
     // MARK: - Empty State
@@ -385,10 +563,7 @@ struct PlaylistView: View {
         guard appState.playlists.indices.contains(index) else { return }
         renameText = appState.playlists[index].name
         renamingIndex = index
-        // Delay one run loop so the TextField has time to appear before focusing
-        DispatchQueue.main.async {
-            isRenameFieldFocused = true
-        }
+        DispatchQueue.main.async { isRenameFieldFocused = true }
     }
 
     private func commitRename() {
