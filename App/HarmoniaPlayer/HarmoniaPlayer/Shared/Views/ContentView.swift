@@ -55,6 +55,10 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // File Info panel — presented when appState.fileInfoTrack is set
+        .sheet(item: $appState.fileInfoTrack) { track in
+            FileInfoView(track: track)
+        }
         // Auto-dismiss alert for failedToOpenFile (3 seconds)
         .onChange(of: appState.showFileNotFoundAlert) {
             guard appState.showFileNotFoundAlert else { return }

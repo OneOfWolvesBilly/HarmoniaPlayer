@@ -65,6 +65,15 @@ struct HarmoniaPlayerCommands: Commands {
 
             Divider()
 
+            Button(L("menu_get_info")) {
+                guard let state = appState,
+                      let trackID = state.currentTrack?.id else { return }
+                state.showFileInfo(trackID: trackID)
+            }
+            .keyboardShortcut("i", modifiers: .command)
+
+            Divider()
+
             Button(L("menu_new_playlist")) {
                 appState?.newPlaylist(name: "")
                 NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)

@@ -191,6 +191,15 @@ final class AppState: ObservableObject {
     /// the files were not found on disk. Non-empty triggers a warning alert.
     @Published var skippedImportURLs: [URL] = []
 
+    // MARK: - File Info Panel
+
+    /// Track currently shown in the File Info panel sheet.
+    ///
+    /// Set via `showFileInfo(trackID:)`; cleared automatically when the sheet
+    /// is dismissed (the sheet binding sets this back to nil).
+    /// Not `private(set)` so the sheet's `item` binding can dismiss it.
+    @Published var fileInfoTrack: Track? = nil
+
     // MARK: - Settings
 
     /// Whether duplicate URLs are allowed in the playlist.
@@ -356,6 +365,14 @@ final class AppState: ObservableObject {
         if case .error = playbackState {
             playbackState = .stopped
         }
+    }
+
+    /// Presents the File Info panel for the track with the given ID.
+    ///
+    /// Sets `fileInfoTrack` to the matching track, which triggers the sheet
+    /// in `ContentView`. If no matching track is found, the call is a no-op.
+    func showFileInfo(trackID: Track.ID) {
+        fileInfoTrack = playlist.tracks.first { $0.id == trackID }
     }
 
     /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.

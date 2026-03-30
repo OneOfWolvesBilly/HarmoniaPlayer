@@ -236,6 +236,10 @@ struct PlaylistView: View {
                     appState.playNext(id)
                 }
                 Divider()
+                Button(L("ctx_get_info")) {
+                    appState.showFileInfo(trackID: id)
+                }
+                Divider()
                 Button(L("ctx_remove"), role: .destructive) {
                     appState.removeTrack(id)
                     selectedTrackIDs.remove(id)

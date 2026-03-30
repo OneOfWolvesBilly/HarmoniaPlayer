@@ -30,10 +30,17 @@
 //  artist               → artist            ""
 //  album                → album             ""
 //  albumArtist          → albumArtist       ""
+//  composer             → composer          ""
 //  genre                → genre             ""
 //  year                 → year              nil
 //  trackNumber          → trackNumber       nil
+//  trackTotal           → trackTotal        nil
 //  discNumber           → discNumber        nil
+//  discTotal            → discTotal         nil
+//  bpm                  → bpm               nil
+//  comment              → comment           ""
+//  replayGainTrack      → replayGainTrack   nil
+//  replayGainAlbum      → replayGainAlbum   nil
 //  artworkData          → artworkData       nil
 //  AVURLAsset.duration  → duration          0
 //  AVURLAsset tracks    → bitrate           kbps; nil if unavailable
@@ -117,23 +124,30 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
 
         // ── Assemble Track (TagBundle → Track) ────────────────────────────
         return Track(
-            url:             url,
-            title:           bundle.title       ?? url.deletingPathExtension().lastPathComponent,
-            artist:          bundle.artist      ?? "",
-            album:           bundle.album       ?? "",
-            duration:        duration,
-            artworkData:     bundle.artworkData,
-            albumArtist:     bundle.albumArtist ?? "",
-            genre:           bundle.genre       ?? "",
-            year:            bundle.year,
-            trackNumber:     bundle.trackNumber,
-            discNumber:      bundle.discNumber,
-            bitrate:         bitrate,
-            sampleRate:      sampleRate,
-            channels:        channels,
-            fileSize:        fileSize,
-            fileFormat:      fileFormat,
-            metadataVersion: Self.metadataVersion
+            url:              url,
+            title:            bundle.title       ?? url.deletingPathExtension().lastPathComponent,
+            artist:           bundle.artist      ?? "",
+            album:            bundle.album       ?? "",
+            duration:         duration,
+            artworkData:      bundle.artworkData,
+            albumArtist:      bundle.albumArtist ?? "",
+            composer:         bundle.composer    ?? "",
+            genre:            bundle.genre       ?? "",
+            year:             bundle.year,
+            trackNumber:      bundle.trackNumber,
+            trackTotal:       bundle.trackTotal,
+            discNumber:       bundle.discNumber,
+            discTotal:        bundle.discTotal,
+            bpm:              bundle.bpm,
+            replayGainTrack:  bundle.replayGainTrack,
+            replayGainAlbum:  bundle.replayGainAlbum,
+            comment:          bundle.comment     ?? "",
+            bitrate:          bitrate,
+            sampleRate:       sampleRate,
+            channels:         channels,
+            fileSize:         fileSize,
+            fileFormat:       fileFormat,
+            metadataVersion:  Self.metadataVersion
         )
     }
 }

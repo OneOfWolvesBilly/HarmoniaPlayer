@@ -51,6 +51,7 @@
 /* MARK: - PlaylistView: Context Menu */
 "ctx_play" = "再生";
 "ctx_play_next" = "次に再生";
+"ctx_get_info" = "情報を見る";
 "ctx_remove" = "プレイリストから削除";
 "ctx_rename" = "名前を変更";
 "ctx_delete" = "削除";
@@ -81,6 +82,7 @@
 
 /* MARK: - HarmoniaPlayerCommands: File Menu */
 "menu_add_files" = "ファイルを追加…";
+"menu_get_info" = "情報を見る";
 "menu_new_playlist" = "新規プレイリスト";
 "menu_rename_playlist" = "プレイリスト名を変更";
 "menu_delete_playlist" = "プレイリストを削除";

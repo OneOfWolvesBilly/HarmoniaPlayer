@@ -51,6 +51,7 @@
 /* MARK: - PlaylistView: Context Menu */
 "ctx_play" = "Play";
 "ctx_play_next" = "Play Next";
+"ctx_get_info" = "Get Info";
 "ctx_remove" = "Remove from Playlist";
 "ctx_rename" = "Rename";
 "ctx_delete" = "Delete";
@@ -81,6 +82,7 @@
 
 /* MARK: - HarmoniaPlayerCommands: File Menu */
 "menu_add_files" = "Add Files…";
+"menu_get_info" = "Get Info";
 "menu_new_playlist" = "New Playlist";
 "menu_rename_playlist" = "Rename Playlist";
 "menu_delete_playlist" = "Delete Playlist";
