@@ -79,6 +79,9 @@ final class AppState: ObservableObject {
     /// Tag reader service
     let tagReaderService: TagReaderService
 
+    /// File drop service — validates URLs received from drag-and-drop.
+    private let fileDropService: FileDropService
+
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
@@ -304,6 +307,7 @@ final class AppState: ObservableObject {
         // Step 4: Create services via factory
         self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
+        self.fileDropService = FileDropService()
 
         // Step 5: Expose Pro unlock state
         self.isProUnlocked = iapManager.isProUnlocked
@@ -505,6 +509,17 @@ final class AppState: ObservableObject {
     /// to `.failedToOpenFile`.
     ///
     /// - Parameter urls: Audio file URLs to add.
+    /// Handles URLs received from a drag-and-drop operation.
+    ///
+    /// Delegates URL validation to `FileDropService`, then forwards
+    /// valid audio file URLs to `load(urls:)`.
+    /// Invalid or non-audio URLs are silently ignored.
+    func handleFileDrop(urls: [URL]) async {
+        let valid = fileDropService.validate(urls)
+        guard !valid.isEmpty else { return }
+        await load(urls: valid)
+    }
+
     func load(urls: [URL]) async {
         // Reset skipped list before each load so the alert re-triggers
         // even if the same files are dropped again.

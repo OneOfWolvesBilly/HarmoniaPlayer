@@ -91,8 +91,10 @@ struct PlaylistView: View {
                 footerView
             }
         }
-        .onDrop(of: [UTType.audio, UTType.fileURL], isTargeted: nil) { providers in
-            handleDrop(providers)
+        .dropDestination(for: AudioFileItem.self) { items, _ in
+            let urls = items.map(\.url)
+            Task { await appState.handleFileDrop(urls: urls) }
+            return true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
             openFilePicker()
@@ -251,6 +253,11 @@ struct PlaylistView: View {
             }
         }
         .accessibilityIdentifier("playlist-list")
+        .dropDestination(for: AudioFileItem.self) { items, _ in
+            let urls = items.map(\.url)
+            Task { await appState.handleFileDrop(urls: urls) }
+            return true
+        }
     }
 
     // ── Group 1: Fixed columns (status icon, title, artist, duration) ─────
@@ -603,26 +610,4 @@ struct PlaylistView: View {
         }
     }
 
-    // MARK: - Drag and Drop
-
-    private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        var urls: [URL] = []
-        let group = DispatchGroup()
-        for provider in providers {
-            group.enter()
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
-                if let data = item as? Data,
-                   let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    urls.append(url)
-                }
-                group.leave()
-            }
-        }
-        group.notify(queue: .main) {
-            if !urls.isEmpty {
-                Task { await appState.load(urls: urls) }
-            }
-        }
-        return true
-    }
 }
