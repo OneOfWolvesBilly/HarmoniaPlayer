@@ -29,6 +29,19 @@ private enum PersistenceKey {
     static let isShuffled          = "hp.isShuffled"
 }
 
+/// Current version of the metadata reading logic.
+///
+/// Increment this value whenever new fields are added to `Track` that require
+/// re-reading from disk. `AppState.refreshMetadataIfNeeded()` uses this to
+/// detect tracks populated by older versions and re-reads them in the background.
+///
+/// Must match `HarmoniaTagReaderAdapter.metadataVersion`.
+///
+/// History:
+/// - 0: legacy (Slices 1–6; no Groups A–E)
+/// - 1: Groups A–D added (Slice 7-G)
+private let currentMetadataVersion = 1
+
 /// Central application state container.
 ///
 /// Wires all dependencies (IAP → FeatureFlags → CoreFactory → Services)
@@ -410,6 +423,59 @@ final class AppState: ObservableObject {
         if userDefaults.object(forKey: PersistenceKey.isShuffled) != nil {
             isShuffled = userDefaults.bool(forKey: PersistenceKey.isShuffled)
         }
+
+        // Background metadata refresh: re-reads fields for tracks that were
+        // saved by an older version of the metadata reading logic.
+        Task { await refreshMetadataIfNeeded() }
+    }
+
+    /// Re-reads metadata for any track whose `metadataVersion` is lower than
+    /// `currentMetadataVersion`.
+    ///
+    /// Runs in the background after `restoreState()`. Only tracks restored from
+    /// older saves (version 0) are affected. New fields are written back and
+    /// `saveState()` is called so the refresh only happens once per track.
+    private func refreshMetadataIfNeeded() async {
+        var didRefreshAny = false
+
+        for i in playlists.indices {
+            for j in playlists[i].tracks.indices {
+                let track = playlists[i].tracks[j]
+
+                guard track.isAccessible,
+                      track.metadataVersion < currentMetadataVersion
+                else { continue }
+
+                guard let refreshed = try? await tagReaderService.readMetadata(for: track.url)
+                else { continue }
+
+                // Merge: update only new-field groups; preserve core fields
+                // (title, artist, album, duration) from the stored version
+                // so user-visible data is not unexpectedly replaced.
+                playlists[i].tracks[j].albumArtist     = refreshed.albumArtist
+                playlists[i].tracks[j].composer        = refreshed.composer
+                playlists[i].tracks[j].genre           = refreshed.genre
+                playlists[i].tracks[j].year            = refreshed.year
+                playlists[i].tracks[j].trackNumber     = refreshed.trackNumber
+                playlists[i].tracks[j].trackTotal      = refreshed.trackTotal
+                playlists[i].tracks[j].discNumber      = refreshed.discNumber
+                playlists[i].tracks[j].discTotal       = refreshed.discTotal
+                playlists[i].tracks[j].bpm             = refreshed.bpm
+                playlists[i].tracks[j].replayGainTrack = refreshed.replayGainTrack
+                playlists[i].tracks[j].replayGainAlbum = refreshed.replayGainAlbum
+                playlists[i].tracks[j].comment         = refreshed.comment
+                playlists[i].tracks[j].bitrate         = refreshed.bitrate
+                playlists[i].tracks[j].sampleRate      = refreshed.sampleRate
+                playlists[i].tracks[j].channels        = refreshed.channels
+                playlists[i].tracks[j].fileSize        = refreshed.fileSize
+                playlists[i].tracks[j].fileFormat      = refreshed.fileFormat
+                playlists[i].tracks[j].metadataVersion = currentMetadataVersion
+
+                didRefreshAny = true
+            }
+        }
+
+        if didRefreshAny { saveState() }
     }
 
     // MARK: - Playlist Operations
@@ -417,7 +483,7 @@ final class AppState: ObservableObject {
     /// Appends enriched tracks to the playlist by reading metadata for each URL.
     ///
     /// Calls `TagReaderService.readMetadata(for:)` per URL and appends the
-    /// returned `Track` (title, artist, album, duration) in order.
+    /// returned `Track` (title, artist, album, duration) in order.\
     /// On failure, falls back to a URL-derived `Track` and sets `lastError`
     /// to `.failedToOpenFile`.
     ///
