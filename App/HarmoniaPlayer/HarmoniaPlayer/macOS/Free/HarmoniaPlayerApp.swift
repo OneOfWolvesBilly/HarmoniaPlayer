@@ -58,5 +58,6 @@ struct HarmoniaPlayerApp: App {
             SettingsView()
                 .environmentObject(appState)
         }
+        .windowResizability(.contentMinSize)
     }
 }

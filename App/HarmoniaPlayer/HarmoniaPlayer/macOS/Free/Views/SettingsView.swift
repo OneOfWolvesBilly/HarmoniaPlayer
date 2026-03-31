@@ -75,7 +75,7 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 380, height: 200)
+        .frame(minWidth: 420, minHeight: 320)
         .navigationTitle(L("nav_title_settings"))
     }
     
