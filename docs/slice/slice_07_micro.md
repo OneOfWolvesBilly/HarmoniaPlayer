@@ -545,10 +545,24 @@ later slices (ReplayGain in 8-D, Tag Editor in Slice 9).
 > `HarmoniaPlayer_slice_7_micro.md` § Slice 7-G.
 
 ### Files
+
+#### HarmoniaCore-Swift (TagBundle expansion)
+- `Sources/HarmoniaCore/Models/TagBundle.swift`
+  (modify — add composer, trackTotal, discTotal, bpm, comment, replayGainTrack,
+  replayGainAlbum; update isEmpty and init)
+- `Sources/HarmoniaCore/Adapters/AVMetadataTagReaderAdapter.swift`
+  (modify — read new fields: TCOM/composer, TRCK+TPOS totals,
+  iTunesMetadataKeyBeatsPerMin/TBPM, COMM/comment, TXXX ReplayGain)
+- `Tests/HarmoniaCoreTests/Models/TagBundleTests.swift`
+  (modify — add tests for new fields)
+- `Tests/HarmoniaCoreTests/Adapters/AVMetadataTagReaderAdapterTests.swift`
+  (modify — update nil-check test for all new fields)
+
+#### HarmoniaPlayer
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Track.swift`
   (modify — add Groups A–E)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagReaderAdapter.swift`
-  (modify — map Groups A–D)
+  (modify — map Groups A–D including new TagBundle fields)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
   (modify — migrate to Table + TableColumnCustomization)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/TrackTests.swift`
@@ -593,11 +607,18 @@ private var columnCustomization: TableColumnCustomization<Track>
 ```
 feat(slice 7-G): expand Track model and add column customization to PlaylistView
 
+HarmoniaCore:
+- Extend TagBundle with composer, trackTotal, discTotal, bpm, comment,
+  replayGainTrack, replayGainAlbum; update isEmpty and init
+- AVMetadataTagReaderAdapter: read TCOM, TRCK/TPOS totals,
+  iTunesMetadataKeyBeatsPerMin/TBPM, COMM, TXXX ReplayGain
+
+HarmoniaPlayer:
 - Add Groups A–E fields to Track (albumArtist, composer, genre, year,
   trackNumber, trackTotal, discNumber, discTotal, bpm, replayGainTrack,
   replayGainAlbum, comment, bitrate, sampleRate, channels, fileSize,
   fileFormat, playCount, lastPlayedAt, rating, artworkData)
-- Map Groups A–D in HarmoniaTagReaderAdapter
+- Map all Groups A–D in HarmoniaTagReaderAdapter
 - Migrate PlaylistView to Table with TableColumnCustomization
 - Fixed: title, artist, duration; optional: album + 13 columns
 - All columns sortable; column state persisted via AppStorage
@@ -614,12 +635,15 @@ Show technical file information for the selected track via right-click →
 user can clear or modify the value.
 
 ### Scope
-- New `FileInfoView` sheet with four sections:
+- New `ExtendedAttributeService`: reads / writes `kMDItemWhereFroms` via
+  Darwin `getxattr` / `setxattr` / `removexattr`
+- New `FileInfoView` sheet with **four** sections:
   - **Location** (read-only): fileName, folder, path, fileSize, modified, created
   - **Tags** (read-only): title, artist, album, albumArtist, composer, genre,
-    year, track (N/total), disc (N/total), bpm, comment, replayGainTrack, replayGainAlbum
+    year, track (N/total), disc (N/total), bpm, comment, replayGainTrack,
+    replayGainAlbum
   - **Technical** (read-only): format, duration, bitrate, sampleRate, channels
-  - **Source** (editable): kMDItemWhereFroms; Edit / Clear buttons
+  - **Source** (editable): `kMDItemWhereFroms`; Edit / Clear buttons
 - Playback Statistics section reserved for Slice 8-E — not implemented here
 
 > Display spec tables for all three sections: see
@@ -656,7 +680,9 @@ struct ExtendedAttributeService {
 
 ### Done criteria
 - File Info panel opens on right-click → "Get Info" or ⌘I
-- Location and General sections display correct values (read-only)
+- Location section displays correct values (read-only)
+- Tags section displays all tag fields (read-only); empty fields show "—"
+- Technical section displays format, duration, bitrate, sampleRate, channels (read-only)
 - Source field shows `kMDItemWhereFroms` when present; `(none)` when absent
 - Clear removes attribute; Edit + save updates attribute
 - No crash when attribute is absent
@@ -667,9 +693,15 @@ struct ExtendedAttributeService {
 feat(slice 7-H): add File Info Panel with editable source URL
 
 - Add ExtendedAttributeService: read/write/clear kMDItemWhereFroms
-- Add FileInfoView: Location + General (read-only), Source (editable)
+- Add FileInfoView: four sections
+  - LOCATION: fileName, folder, path, fileSize, modified, created (read-only)
+  - TAGS: title, artist, album, albumArtist, composer, genre, year,
+    track/disc (N/total), bpm, comment, replayGainTrack, replayGainAlbum (read-only)
+  - TECHNICAL: format, duration, bitrate, sampleRate, channels (read-only)
+  - SOURCE: kMDItemWhereFroms with Edit, Save, Cancel, Clear (editable)
+- Add AppState.fileInfoTrack (@Published) and showFileInfo(trackID:)
 - Add right-click "Get Info" in PlaylistView
-- Add ⌘I shortcut in HarmoniaPlayerCommands
+- Add cmd+I shortcut in HarmoniaPlayerCommands
 - Add ExtendedAttributeServiceTests (5 cases)
 ```
 
@@ -698,9 +730,9 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - ✅ All columns sortable by clicking header
 - ✅ Column state survives app relaunch
 - ✅ File Info Panel opens on right-click or ⌘I
-- ✅ Location and General sections show correct values (read-only)
+- ✅ Location, Tags, Technical sections show correct values (read-only)
 - ✅ Source field editable (Edit / Clear)
-- ✅ All Slice 7-A–F unit tests green
+- ✅ All Slice 7-A–H unit tests green
 - ✅ All Slice 1–6 tests still green
 
 ---
@@ -712,3 +744,61 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - **Slice 5 (Integration)** — `HarmoniaTagReaderAdapter` extended by 7-G with full tag mapping
 - **Slice 6 (UI + Menu Bar)** — `AppState`, `PlayerView`, `PlaylistView`,
   `HarmoniaPlayerCommands`, `SettingsView` all extended by Slice 7 sub-slices
+
+---
+
+## Slice 7 Post-Release Fix: Finder Drag-and-Drop
+
+> Discovered and fixed after Slice 7-H completion.
+> `onDrop` + `NSItemProvider` was unreliable on macOS 14+; replaced with
+> a Transferable-based service architecture.
+
+### Problem
+`PlaylistView.onDrop` used `NSItemProvider.loadItem(forTypeIdentifier:)` which
+is deprecated on macOS 14+ and does not reliably call its completion handler
+for Finder file drags, resulting in files silently not being added.
+
+### Solution: Transferable Service Architecture
+
+```
+Finder drag
+    → PlaylistView.dropDestination(for: AudioFileItem.self)
+        → AppState.handleFileDrop(urls:)
+            → FileDropService.validate(urls:)
+                → AppState.load(urls:)
+```
+
+### New files
+
+| File | Layer | Purpose |
+|---|---|---|
+| `Shared/Models/AudioFileItem.swift` | Application | `Transferable` wrapper for audio file URLs |
+| `Shared/Services/FileDropService.swift` | Application | Validates dropped URLs |
+
+### Key design decisions
+
+- `AudioFileItem` uses `ProxyRepresentation(exporting:importing:)` only.
+  `FileRepresentation` was intentionally **not** used for importing because
+  `received.file` is a temporary copy that is deleted after the callback,
+  causing playback to fail with file-not-found. (Apple FB13454434)
+- `FileDropService.validate(_:)` filters by `isFileURL` and
+  `UTType.conforms(to: .audio)` — no explicit format allowlist needed.
+- `AppState.handleFileDrop(urls:)` is the single entry point for all
+  drag-and-drop additions; the View never calls `load(urls:)` directly.
+- `dropDestination(for: AudioFileItem.self)` is applied to both the outer
+  `VStack` and the `Table` inside `tableView` to prevent the Table from
+  intercepting drop events before they reach the VStack.
+
+### Suggested commit message
+```
+feat(drag-drop): implement Finder drag-and-drop for playlist via Transferable
+
+- Add AudioFileItem: Transferable conformance using ProxyRepresentation
+  for both import and export, preserving original file URL from Finder.
+  FileRepresentation avoided for import: received.file is a temp copy
+  deleted after callback (Apple FB13454434)
+- Add FileDropService: validates URLs via isFileURL + UTType.audio conformance
+- Add AppState.handleFileDrop(urls:): delegates to FileDropService then load
+- Update PlaylistView: dropDestination(for: AudioFileItem.self) on both
+  outer VStack and Table; View only calls appState.handleFileDrop(urls:)
+```
