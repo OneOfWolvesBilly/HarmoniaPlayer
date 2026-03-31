@@ -37,7 +37,9 @@ At a high level, the codebase is divided into the following logical modules.
 2. **Application Layer (State & ViewModels)**
    - `AppState` (central observable state)
    - ViewModels (e.g. `PlaybackViewModel`)
-   - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, etc.).
+   - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`, etc.)
+   - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`
+     (pure Swift utilities with no HarmoniaCore dependency).
 3. **Integration Layer**
    - `CoreFactory` for constructing HarmoniaCore-Swift services.
    - `IAPManager` (macOS-only Pro unlock handling).
@@ -243,6 +245,15 @@ architecture clean.
    - ❌ `AppState` must not use `DecoderPort`, `AudioOutputPort`, `ClockPort`, or `LoggerPort`.
    - ✅ Exception: `TagReaderPort` is allowed for metadata reading only.
 
+7. **Views containing drag-and-drop business logic**
+   - ❌ `PlaylistView` must not validate URLs or call `load(urls:)` directly from a drop closure.
+   - ✅ It should call `appState.handleFileDrop(urls:)` which delegates to `FileDropService`.
+
+8. **AudioFileItem using FileRepresentation for import**
+   - ❌ `FileRepresentation(importedContentType:)` gives a temporary file copy that is
+     deleted after the callback, causing playback failures.
+   - ✅ Use `ProxyRepresentation(exporting:importing:)` to receive the original file URL.
+
 ---
 
 ## 6. Boundary Examples
@@ -384,6 +395,8 @@ When reviewing code, check these rules:
 - [ ] No direct use of HarmoniaCore Ports
 - [ ] No AVFoundation, StoreKit, or OSLog imports
 - [ ] Errors are mapped to UI-friendly types
+- [ ] Drag-and-drop URL validation goes through `FileDropService`
+- [ ] `AudioFileItem.transferRepresentation` uses `ProxyRepresentation`, not `FileRepresentation` for import
 
 **Integration Layer:**
 - [ ] No SwiftUI imports

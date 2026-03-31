@@ -614,13 +614,12 @@ Show technical file information for the selected track via right-click →
 user can clear or modify the value.
 
 ### Scope
-- New `ExtendedAttributeService`: reads / writes `kMDItemWhereFroms` via
-  Darwin `getxattr` / `setxattr` / `removexattr`
-- New `FileInfoView` sheet with three sections:
-  - **Location** (read-only): file name, folder, path, size, dates
-  - **General** (read-only): format, duration, bit rate, sample rate,
-    channels, tag type
-  - **Source** (editable): `kMDItemWhereFroms`; Edit / Clear buttons
+- New `FileInfoView` sheet with four sections:
+  - **Location** (read-only): fileName, folder, path, fileSize, modified, created
+  - **Tags** (read-only): title, artist, album, albumArtist, composer, genre,
+    year, track (N/total), disc (N/total), bpm, comment, replayGainTrack, replayGainAlbum
+  - **Technical** (read-only): format, duration, bitrate, sampleRate, channels
+  - **Source** (editable): kMDItemWhereFroms; Edit / Clear buttons
 - Playback Statistics section reserved for Slice 8-E — not implemented here
 
 > Display spec tables for all three sections: see
@@ -692,15 +691,15 @@ feat(slice 7-H): add File Info Panel with editable source URL
 - ✅ First launch defaults to English regardless of system language
 - ✅ Language change restarts app; system menus update after restart
 - ✅ Language selection persists across launches
-- ⬜ `Track` model expanded with Groups A–E; all new fields `Codable`
-- ⬜ Group E fields defined but no UI exposed in Slice 7
-- ⬜ Fixed columns (title, artist, duration) always visible, cannot be hidden
-- ⬜ Optional columns toggleable and reorderable via column header
-- ⬜ All columns sortable by clicking header
-- ⬜ Column state survives app relaunch
-- ⬜ File Info Panel opens on right-click or ⌘I
-- ⬜ Location and General sections show correct values (read-only)
-- ⬜ Source field editable (Edit / Clear)
+- ✅ `Track` model expanded with Groups A–E; all new fields `Codable`
+- ✅ Group E fields defined but no UI exposed in Slice 7
+- ✅ Fixed columns (title, artist, duration) always visible, cannot be hidden
+- ✅ Optional columns toggleable and reorderable via column header
+- ✅ All columns sortable by clicking header
+- ✅ Column state survives app relaunch
+- ✅ File Info Panel opens on right-click or ⌘I
+- ✅ Location and General sections show correct values (read-only)
+- ✅ Source field editable (Edit / Clear)
 - ✅ All Slice 7-A–F unit tests green
 - ✅ All Slice 1–6 tests still green
 
