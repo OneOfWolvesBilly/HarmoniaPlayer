@@ -98,6 +98,8 @@
 "menu_previous_track" = "上一首";
 "menu_seek_forward" = "快轉 5 秒";
 "menu_seek_backward" = "倒退 5 秒";
+"menu_undo" = "復原";
+"menu_redo" = "重做";
 "menu_repeat_mode" = "重複模式";
 "menu_shuffle_mode" = "隨機模式";
 

@@ -25,13 +25,22 @@ extension Notification.Name {
 
 /// macOS menu bar commands for HarmoniaPlayer.
 ///
-/// Exposes a File "Add Files…" item and a full Playback menu.
+/// Exposes a File "Add Files…" item, Undo/Redo, and a full Playback menu.
 /// Requires `.focusedSceneObject(appState)` on the window's root view.
 /// All UI strings use `String(localized:bundle:)` via `bundle` helper
 /// for runtime language switching support.
+///
+/// `@FocusedObject` provides playlist/track state for `.disabled()` conditions.
+/// `@FocusedValue(\.playbackState)` carries live PlaybackState as a scalar value,
+/// which re-evaluates Commands reliably on every change — unlike `@FocusedObject`
+/// property observation, which can miss updates inside Commands.
 struct HarmoniaPlayerCommands: Commands {
 
     @FocusedObject private var appState: AppState?
+
+    /// Live playback state propagated from ContentView via FocusedValues.
+    /// Used for the Play/Pause label and Playback menu disabled conditions.
+    @FocusedValue(\.playbackState) private var focusedPlaybackState: PlaybackState?
 
     // MARK: - Localization helper
 
@@ -45,8 +54,21 @@ struct HarmoniaPlayerCommands: Commands {
         // Remove default "New" item — not applicable for a music player.
         CommandGroup(replacing: .newItem) {}
 
-        // Remove system menus that cannot be localized by the app.
-        CommandGroup(replacing: .undoRedo) {}
+        // Replace default Undo/Redo with versions wired to AppState.undoManager.
+        // Disabled when the manager has nothing to undo/redo.
+        CommandGroup(replacing: .undoRedo) {
+            Button(L("menu_undo")) {
+                appState?.undoManager.undo()
+            }
+            .keyboardShortcut("z", modifiers: .command)
+            .disabled(appState?.undoManager.canUndo != true)
+
+            Button(L("menu_redo")) {
+                appState?.undoManager.redo()
+            }
+            .keyboardShortcut("z", modifiers: [.command, .shift])
+            .disabled(appState?.undoManager.canRedo != true)
+        }
         CommandGroup(replacing: .pasteboard) {}
         CommandGroup(replacing: .systemServices) {}
         CommandGroup(replacing: .textEditing) {}
@@ -104,9 +126,11 @@ struct HarmoniaPlayerCommands: Commands {
         // Playback menu
         CommandMenu(L("menu_playback")) {
 
+            // Play / Pause
+            // Disabled when playlist is empty (nothing to play).
             Button(playPauseLabel) {
                 Task {
-                    if appState?.playbackState == .playing {
+                    if focusedPlaybackState == .playing {
                         await appState?.pause()
                     } else {
                         await appState?.play()
@@ -114,23 +138,33 @@ struct HarmoniaPlayerCommands: Commands {
                 }
             }
             .keyboardShortcut(.space, modifiers: [])
+            .disabled(playlistIsEmpty)
 
+            // Stop / Seek — disabled when playlist is empty OR no track is loaded.
+            // Requires an active track because these operations act on the current position.
             Button(L("menu_stop")) {
                 Task { await appState?.stop() }
             }
             .keyboardShortcut(".", modifiers: .command)
+            .disabled(needsActiveTrack)
 
             Divider()
 
+            // Next / Previous — disabled when playlist is empty only.
+            // Matches PlayerView button logic: playNextTrack() / playPreviousTrack()
+            // start from the first track when currentTrack is nil, so no active
+            // track is required.
             Button(L("menu_next_track")) {
                 Task { await appState?.playNextTrack() }
             }
             .keyboardShortcut(.rightArrow, modifiers: .command)
+            .disabled(playlistIsEmpty)
 
             Button(L("menu_previous_track")) {
                 Task { await appState?.playPreviousTrack() }
             }
             .keyboardShortcut(.leftArrow, modifiers: .command)
+            .disabled(playlistIsEmpty)
 
             Divider()
 
@@ -141,6 +175,7 @@ struct HarmoniaPlayerCommands: Commands {
                 }
             }
             .keyboardShortcut(.rightArrow, modifiers: [])
+            .disabled(needsActiveTrack)
 
             Button(L("menu_seek_backward")) {
                 Task {
@@ -149,6 +184,7 @@ struct HarmoniaPlayerCommands: Commands {
                 }
             }
             .keyboardShortcut(.leftArrow, modifiers: [])
+            .disabled(needsActiveTrack)
 
             Divider()
 
@@ -166,8 +202,24 @@ struct HarmoniaPlayerCommands: Commands {
 
     // MARK: - Dynamic Labels
 
+    /// Play/Pause label — driven by focusedPlaybackState (scalar FocusedValue)
+    /// rather than appState?.playbackState so Commands re-evaluates reliably
+    /// on every state change.
     private var playPauseLabel: String {
-        appState?.playbackState == .playing ? L("menu_pause") : L("menu_play")
+        focusedPlaybackState == .playing ? L("menu_pause") : L("menu_play")
+    }
+
+    /// True when the playlist has no tracks.
+    /// Used for: Play/Pause, Next Track, Previous Track.
+    private var playlistIsEmpty: Bool {
+        appState?.playlist.tracks.isEmpty != false
+    }
+
+    /// True when there is no currently loaded track.
+    /// Used for: Stop, Seek Forward, Seek Backward.
+    /// These operations require an active playback position to be meaningful.
+    private var needsActiveTrack: Bool {
+        playlistIsEmpty || appState?.currentTrack == nil
     }
 
     private var repeatModeLabel: String {

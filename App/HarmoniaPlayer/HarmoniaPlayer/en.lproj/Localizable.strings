@@ -98,6 +98,8 @@
 "menu_previous_track" = "Previous Track";
 "menu_seek_forward" = "Seek Forward 5 Seconds";
 "menu_seek_backward" = "Seek Backward 5 Seconds";
+"menu_undo" = "Undo";
+"menu_redo" = "Redo";
 "menu_repeat_mode" = "Repeat Mode";
 "menu_shuffle_mode" = "Shuffle Mode";
 

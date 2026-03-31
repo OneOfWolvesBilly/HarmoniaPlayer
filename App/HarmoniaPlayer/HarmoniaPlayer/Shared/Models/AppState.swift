@@ -71,6 +71,13 @@ final class AppState: ObservableObject {
     /// Exposes tier-specific capabilities used by format gating and UI.
     let featureFlags: CoreFeatureFlags
 
+    /// UndoManager for playlist operations (load, removeTrack, moveTrack).
+    ///
+    /// Injected at init for testability; production code passes a fresh
+    /// `UndoManager()` by default. `HarmoniaPlayerCommands` wires ⌘Z / ⌘⇧Z
+    /// to `undoManager.undo()` / `undoManager.redo()`.
+    let undoManager: UndoManager
+
     // MARK: - Services
 
     /// Playback service
@@ -290,7 +297,8 @@ final class AppState: ObservableObject {
     init(
         iapManager: IAPManager,
         provider: CoreServiceProviding,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        undoManager: UndoManager = UndoManager()
     ) {
         // Step 1: Store IAP manager
         self.iapManager = iapManager
@@ -309,17 +317,20 @@ final class AppState: ObservableObject {
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService = FileDropService()
 
-        // Step 5: Expose Pro unlock state
+        // Step 5: Store UndoManager
+        self.undoManager = undoManager
+
+        // Step 6: Expose Pro unlock state
         self.isProUnlocked = iapManager.isProUnlocked
 
-        // Step 6: Initialise playlist state
+        // Step 7: Initialise playlist state
         self.playlists = [Playlist(name: "Playlist 1")]
         self.currentTrack = nil
 
-        // Step 7: Store UserDefaults instance
+        // Step 8: Store UserDefaults instance
         self.userDefaults = userDefaults
 
-        // Step 8: Resolve languageBundle from persisted setting.
+        // Step 9: Resolve languageBundle from persisted setting.
         // Fixed at launch so UI strings and system menus change together after restart.
         let persistedLang = userDefaults.string(forKey: "hp.selectedLanguage") ?? "en"
         if persistedLang != "system",
@@ -330,7 +341,7 @@ final class AppState: ObservableObject {
             self.languageBundle = .main
         }
 
-        // Step 9: Restore persisted state (overrides Step 6 defaults if data exists)
+        // Step 10: Restore persisted state (overrides Step 7 defaults if data exists)
         restoreState()
     }
 
@@ -569,10 +580,36 @@ final class AppState: ObservableObject {
             }
         }
 
+        // Register undo: remove the tracks that were just added.
+        // Only register when at least one track was actually added.
+        if !addedIDs.isEmpty {
+            // Capture the full Track values so redo can re-append them in order.
+            let addedTracks = playlists[activePlaylistIndex].tracks.filter {
+                addedIDs.contains($0.id)
+            }
+            let targetPlaylistIndex = activePlaylistIndex
+            let capturedIDs = addedIDs
+
+            undoManager.registerUndo(withTarget: self) { [addedTracks] state in
+                // Undo: remove the added tracks
+                let idSet = Set(capturedIDs)
+                state.playlists[targetPlaylistIndex].tracks.removeAll { idSet.contains($0.id) }
+                state.playlists[targetPlaylistIndex].insertionOrder.removeAll { idSet.contains($0) }
+
+                // Register redo: re-append the same tracks
+                state.undoManager.registerUndo(withTarget: state) { inner in
+                    inner.playlists[targetPlaylistIndex].tracks.append(contentsOf: addedTracks)
+                    inner.playlists[targetPlaylistIndex].insertionOrder
+                        .append(contentsOf: addedTracks.map(\.id))
+                    inner.saveState()
+                }
+
+                state.saveState()
+            }
+        }
+
         saveState()
     }
-
-    /// Resets the playlist to empty and clears `currentTrack`.
     func clearPlaylist() {
         playlists[activePlaylistIndex].tracks = []
         currentTrack = nil
@@ -661,6 +698,12 @@ final class AppState: ObservableObject {
         let wasPlaying = currentTrack?.id == trackID && playbackState == .playing
         let wasCurrentTrack = currentTrack?.id == trackID
 
+        // Capture position and value BEFORE mutation so undo can restore them.
+        let removalIndex = playlists[activePlaylistIndex].tracks
+            .firstIndex(where: { $0.id == trackID })
+        let removedTrack = removalIndex.map { playlists[activePlaylistIndex].tracks[$0] }
+        let targetPlaylistIndex = activePlaylistIndex
+
         playlists[activePlaylistIndex].tracks.removeAll { $0.id == trackID }
         playlists[activePlaylistIndex].insertionOrder.removeAll { $0 == trackID }
 
@@ -678,12 +721,12 @@ final class AppState: ObservableObject {
                     // After removal, that index now points to the next track.
                     // If removed track was the last one, there is no next track
                     // (unless repeatMode == .all wraps to first).
-                    guard let removedIndex = playlists[activePlaylistIndex].insertionOrder.firstIndex(of: trackID)
+                    guard let removedIdx = playlists[activePlaylistIndex].insertionOrder.firstIndex(of: trackID)
                     else { return playlists[activePlaylistIndex].tracks.first?.id }
 
-                    if removedIndex < playlists[activePlaylistIndex].tracks.count {
+                    if removedIdx < playlists[activePlaylistIndex].tracks.count {
                         // There is a track at this index (the one that shifted up)
-                        return playlists[activePlaylistIndex].tracks[removedIndex].id
+                        return playlists[activePlaylistIndex].tracks[removedIdx].id
                     } else if repeatMode == .all {
                         // Removed track was last — wrap to first if repeat all
                         return playlists[activePlaylistIndex].tracks.first?.id
@@ -718,6 +761,24 @@ final class AppState: ObservableObject {
             }
             // If removed track was the current position, index stays the same
             // (now pointing to the next track in queue).
+        }
+
+        // Register undo: re-insert the track at its original index.
+        if let track = removedTrack, let idx = removalIndex {
+            undoManager.registerUndo(withTarget: self) { [track, idx] state in
+                let insertAt = min(idx, state.playlists[targetPlaylistIndex].tracks.count)
+                state.playlists[targetPlaylistIndex].tracks.insert(track, at: insertAt)
+                state.playlists[targetPlaylistIndex].insertionOrder.insert(track.id, at: insertAt)
+
+                // Register redo: remove it again
+                state.undoManager.registerUndo(withTarget: state) { inner in
+                    inner.playlists[targetPlaylistIndex].tracks.removeAll { $0.id == track.id }
+                    inner.playlists[targetPlaylistIndex].insertionOrder.removeAll { $0 == track.id }
+                    inner.saveState()
+                }
+
+                state.saveState()
+            }
         }
 
         saveState()
@@ -796,6 +857,10 @@ final class AppState: ObservableObject {
     ///   - fromOffsets: Source indices
     ///   - toOffset: Destination offset
     func moveTrack(fromOffsets: IndexSet, toOffset: Int) {
+        // Capture snapshot before mutation so undo can restore previous order.
+        let beforeTracks = playlists[activePlaylistIndex].tracks
+        let targetPlaylistIndex = activePlaylistIndex
+
         let itemsToMove = fromOffsets.map { playlists[activePlaylistIndex].tracks[$0] }
         var result = playlists[activePlaylistIndex].tracks.enumerated()
             .filter { !fromOffsets.contains($0.offset) }
@@ -806,6 +871,25 @@ final class AppState: ObservableObject {
         // Keep insertionOrder in sync with the new track order so that
         // restoreInsertionOrder() reflects the user's manual reorder.
         playlists[activePlaylistIndex].insertionOrder = result.map { $0.id }
+
+        // Capture snapshot after mutation for redo.
+        let afterTracks = playlists[activePlaylistIndex].tracks
+
+        // Register undo: restore previous order.
+        undoManager.registerUndo(withTarget: self) { [beforeTracks, afterTracks] state in
+            state.playlists[targetPlaylistIndex].tracks = beforeTracks
+            state.playlists[targetPlaylistIndex].insertionOrder = beforeTracks.map(\.id)
+
+            // Register redo: re-apply the move.
+            state.undoManager.registerUndo(withTarget: state) { inner in
+                inner.playlists[targetPlaylistIndex].tracks = afterTracks
+                inner.playlists[targetPlaylistIndex].insertionOrder = afterTracks.map(\.id)
+                inner.saveState()
+            }
+
+            state.saveState()
+        }
+
         saveState()
     }
 

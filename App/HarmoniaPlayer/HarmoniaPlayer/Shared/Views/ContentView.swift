@@ -55,6 +55,11 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Propagate live playbackState into the focus system so
+        // HarmoniaPlayerCommands can observe it via @FocusedValue.
+        // @FocusedObject does not reliably re-evaluate Commands body on
+        // property changes; @FocusedValue with a scalar value does.
+        .focusedValue(\.playbackState, appState.playbackState)
         // File Info panel — presented when appState.fileInfoTrack is set
         .sheet(item: $appState.fileInfoTrack) { track in
             FileInfoView(track: track)

@@ -98,6 +98,8 @@
 "menu_previous_track" = "前のトラック";
 "menu_seek_forward" = "5秒進む";
 "menu_seek_backward" = "5秒戻る";
+"menu_undo" = "元に戻す";
+"menu_redo" = "やり直す";
 "menu_repeat_mode" = "リピートモード";
 "menu_shuffle_mode" = "シャッフルモード";
 
