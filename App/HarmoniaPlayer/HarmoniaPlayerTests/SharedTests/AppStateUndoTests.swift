@@ -22,15 +22,16 @@ final class AppStateUndoTests: XCTestCase {
 
     /// Builds a testable AppState with an injected UndoManager.
     private func makeSUT(
-        undoManager: UndoManager = UndoManager()
+        undoManager: UndoManager? = nil
     ) -> (sut: AppState, undoManager: UndoManager) {
+        let resolvedUndoManager = undoManager ?? UndoManager()
         let provider = FakeCoreProvider()
         let sut = AppState(
             iapManager: MockIAPManager(),
             provider: provider,
-            undoManager: undoManager          // ← requires new init parameter
+            undoManager: resolvedUndoManager
         )
-        return (sut, undoManager)
+        return (sut, resolvedUndoManager)
     }
 
     /// Convenience: a file URL under /tmp.
