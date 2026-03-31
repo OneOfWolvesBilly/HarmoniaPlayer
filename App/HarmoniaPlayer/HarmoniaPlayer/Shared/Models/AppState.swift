@@ -298,7 +298,7 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
-        undoManager: UndoManager = UndoManager()
+        undoManager: UndoManager? = nil
     ) {
         // Step 1: Store IAP manager
         self.iapManager = iapManager
@@ -317,8 +317,10 @@ final class AppState: ObservableObject {
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService = FileDropService()
 
-        // Step 5: Store UndoManager
-        self.undoManager = undoManager
+        // Step 5: Store UndoManager.
+        // Default parameter uses nil instead of UndoManager() to avoid
+        // calling a @MainActor initializer from a nonisolated context (Swift 6).
+        self.undoManager = undoManager ?? UndoManager()
 
         // Step 6: Expose Pro unlock state
         self.isProUnlocked = iapManager.isProUnlocked
