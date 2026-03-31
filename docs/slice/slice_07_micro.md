@@ -222,7 +222,7 @@ feat(slice 7-B): add multiple playlist tabs with create/rename/delete
 
 ### Goal
 Allow users to export playlists as M3U8 files and import M3U8 files from
-other apps (VLC, foobar2000, Apple Music).
+other audio player apps.
 
 ### Scope
 
@@ -294,7 +294,7 @@ func importPlaylist(from url: URL) async
 | `testParse_EmptyString` | `""` | `parse(m3u8:baseURL:nil)` | returns `[]` |
 
 ### Done criteria
-- Export produces valid M3U8 readable by VLC / foobar2000
+- Export produces valid M3U8 readable by standard-compliant audio players
 - Absolute path export: paths are fully qualified `file://` or POSIX paths
 - Relative path export: paths are relative to the `.m3u8` file location
 - Import reads M3U8, creates new playlist tab named after filename

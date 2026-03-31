@@ -17,13 +17,9 @@ mini player window, and implements ReplayGain volume normalisation.
 | Sub-slice | Content | Status |
 |---|---|---|
 | 8-A | Menu bar UX fixes + UndoManager | ✅ |
-| 8-C | Mini Player floating window | |
-| 8-D | ReplayGain volume normalisation | |
+| 8-B | Mini Player floating window | |
+| 8-C | ReplayGain volume normalisation | |
 
-> **8-B (Music Library / folder scanning)** — removed. Conflicts with the
-> foobar2000 design philosophy: the app does not manage a library; users
-> manage files themselves.
->
 > **8-E (Play statistics + track rating)** — deferred to backlog. Fields
 > (`playCount`, `lastPlayedAt`, `rating`) are already defined in `Track`
 > model Group E (Slice 7-G). Can be added independently when needed.
@@ -35,7 +31,7 @@ mini player window, and implements ReplayGain volume normalisation.
 - Read ReplayGain tags and apply gain adjustment during playback
 
 ### Non-goals
-- Music library / folder scanning (violates foobar2000 design philosophy)
+- Music library / folder scanning (the app is file-system oriented; users manage files directly)
 - Play statistics and track rating (deferred to backlog)
 - Tag editor (Pro feature — Slice 9)
 - Equalizer / DSP plugins (requires HarmoniaCore DSP layer, future)
@@ -188,7 +184,7 @@ feat(slice 8-A): fix menu disabled states, Play/Pause label, and add UndoManager
 
 ---
 
-## Slice 8-C: Mini Player
+## Slice 8-B: Mini Player
 
 ### Goal
 Add a compact floating mini player window showing now-playing info and
@@ -218,7 +214,7 @@ basic transport controls. Users can switch between full and mini player.
 
 ### Suggested commit message
 ```
-feat(slice 8-C): add mini player floating window
+feat(slice 8-B): add mini player floating window
 
 - Add MiniPlayerView: title, artist, play/pause, previous, next
 - Add Window menu with ⌘M toggle
@@ -227,7 +223,7 @@ feat(slice 8-C): add mini player floating window
 
 ---
 
-## Slice 8-D: ReplayGain
+## Slice 8-C: ReplayGain
 
 ### Goal
 Read ReplayGain tags from audio file metadata and apply gain adjustment
@@ -295,7 +291,7 @@ enum ReplayGainMode: Equatable, Sendable, Codable {
 
 ### Suggested commit message
 ```
-feat(slice 8-D): add ReplayGain volume normalisation
+feat(slice 8-C): add ReplayGain volume normalisation
 
 - Add ReplayGainMode enum: off / track / album
 - Add AppState.replayGainMode (persisted)
@@ -318,7 +314,7 @@ feat(slice 8-D): add ReplayGain volume normalisation
 | `testUndoMoveTrack_RestoresOrder` | 3 tracks A,B,C | `moveTrack` B to end then `undo` | order restored to A,B,C |
 | `testRedoLoad_ReAddsTrack` | After undone load | `redo` | `playlist.tracks.count == 1` |
 
-### Slice 8-D — ReplayGain (unit tests)
+### Slice 8-C — ReplayGain (unit tests)
 
 | Test | Given | When | Then |
 |---|---|---|---|
@@ -353,8 +349,8 @@ feat(slice 8-D): add ReplayGain volume normalisation
 ## Related Slices
 
 - **Slice 6 (UI + Menu Bar)** — `HarmoniaPlayerCommands` and `PlayerView`
-  extended by 8-A and 8-C
-- **Slice 7-A (Volume)** — `setVolume()` used by 8-D to apply ReplayGain
+  extended by 8-A and 8-B
+- **Slice 7-A (Volume)** — `setVolume()` used by 8-C to apply ReplayGain
 - **Slice 7-E (Persistence)** — `replayGainMode` persisted via UserDefaults
 - **Slice 7-G (Track model)** — `replayGainTrack` / `replayGainAlbum` in
-  Group C, consumed by 8-D
+  Group C, consumed by 8-C
