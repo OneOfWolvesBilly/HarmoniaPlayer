@@ -126,3 +126,5 @@
 "col_fileSize" = "大小";
 "col_fileFormat" = "格式";
 "col_comment" = "備注";
+
+"help_reset_columns" = "重置欄位配置";

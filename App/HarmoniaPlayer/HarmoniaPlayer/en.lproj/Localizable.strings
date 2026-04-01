@@ -126,3 +126,5 @@
 "col_fileSize" = "Size";
 "col_fileFormat" = "Format";
 "col_comment" = "Comment";
+
+"help_reset_columns" = "Reset column layout";

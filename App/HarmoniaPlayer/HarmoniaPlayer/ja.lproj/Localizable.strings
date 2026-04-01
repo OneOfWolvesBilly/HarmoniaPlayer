@@ -126,3 +126,5 @@
 "col_fileSize" = "ファイルサイズ";
 "col_fileFormat" = "フォーマット";
 "col_comment" = "コメント";
+
+"help_reset_columns" = "列レイアウトをリセット";

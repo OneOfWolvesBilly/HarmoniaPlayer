@@ -43,8 +43,46 @@ struct PlaylistView: View {
     @State private var renameText: String = ""
     @FocusState private var isRenameFieldFocused: Bool
 
-    @AppStorage("playlistColumnCustomization")
-    private var columnCustomization: TableColumnCustomization<Track>
+    // Column customization: visibility persisted separately; order never persisted.
+    //
+    // Root cause of prior crash: @AppStorage bound to $columnCustomization caused
+    // SwiftUI Table to write corrupted intermediate drag states on every animation
+    // frame directly into UserDefaults, including undefined positions for fixed
+    // columns (those without customizationID). On next launch SwiftUI crashed
+    // trying to apply the corrupted TableColumnCustomization raw value.
+    //
+    // Fix: @State (no persistence) for the full customization object, so drag
+    // reordering is never written to disk. A separate @AppStorage string stores
+    // only column visibility (comma-separated hidden column IDs), which is read
+    // back on onAppear and written back on onChange via the [visibility:] subscript.
+    @State private var columnCustomization = TableColumnCustomization<Track>()
+
+    /// True when the user has dragged at least one column since last reset/launch.
+    /// Controls visibility of the Reset Column Layout toolbar button.
+    @State private var isColumnOrderModified = false
+
+    /// Comma-separated list of hidden column customizationIDs.
+    /// Empty string means "use defaults" (all except col.album visible).
+    @AppStorage("hp.hiddenColumns") private var hiddenColumnsData: String = ""
+
+    /// Column IDs for fixed-visible columns (Title, Artist, Duration).
+    /// These have customizationID so they can be drag-reordered, but are
+    /// always forced to .visible in applyStoredVisibility().
+    private let fixedVisibleColumnIDs = ["col.title", "col.artist", "col.duration"]
+
+    /// All column customizationIDs that support show/hide.
+    private let allCustomizableColumnIDs = [
+        "col.album", "col.albumArtist", "col.year", "col.trackNumber",
+        "col.discNumber", "col.genre", "col.composer", "col.bpm", "col.comment",
+        "col.bitrate", "col.sampleRate", "col.channels", "col.fileSize", "col.fileFormat"
+    ]
+
+    /// Column IDs hidden by default (all optional columns except album).
+    private static let defaultHiddenColumns: Set<String> = [
+        "col.albumArtist", "col.year", "col.trackNumber", "col.discNumber",
+        "col.genre", "col.composer", "col.bpm", "col.comment",
+        "col.bitrate", "col.sampleRate", "col.channels", "col.fileSize", "col.fileFormat"
+    ]
 
     // MARK: - Localization helper
 
@@ -183,6 +221,14 @@ struct PlaylistView: View {
                 }
                 .help(L("help_restore_order"))
             }
+            if isColumnOrderModified {
+                Button {
+                    resetColumnCustomization()
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                }
+                .help(L("help_reset_columns"))
+            }
             if appState.isShuffled {
                 Button {
                     showShuffleQueue.toggle()
@@ -258,6 +304,13 @@ struct PlaylistView: View {
             Task { await appState.handleFileDrop(urls: urls) }
             return true
         }
+        .onAppear {
+            applyStoredVisibility()
+        }
+        .onChange(of: columnCustomization) {
+            isColumnOrderModified = true
+            saveColumnVisibility()
+        }
     }
 
     // ── Group 1: Fixed columns (status icon, title, artist, duration) ─────
@@ -281,7 +334,8 @@ struct PlaylistView: View {
                                  : Color(nsColor: .tertiaryLabelColor))
                 .strikethrough(!track.isAccessible)
         }
-        .width(min: 120)
+        .width(min: 120, ideal: 180)
+        .customizationID("col.title")
 
         TableColumn(L("col_artist"), value: \.artist) { track in
             Text(track.artist.isEmpty ? "—" : track.artist)
@@ -291,7 +345,8 @@ struct PlaylistView: View {
                                  : Color(nsColor: .tertiaryLabelColor))
                 .strikethrough(!track.isAccessible)
         }
-        .width(min: 100)
+        .width(min: 100, ideal: 140)
+        .customizationID("col.artist")
 
         TableColumn(L("col_duration"), value: \.duration) { track in
             Text(formatDuration(track.duration))
@@ -302,6 +357,7 @@ struct PlaylistView: View {
                 .strikethrough(!track.isAccessible)
         }
         .width(min: 52, ideal: 64)
+        .customizationID("col.duration")
     }
 
     // ── Group 2: Tag columns (album, albumArtist, year, trackNumber, ──────
@@ -566,6 +622,65 @@ struct PlaylistView: View {
             }
             .frame(width: 280, height: min(CGFloat(tracks.count) * 44 + 16, 320))
         }
+    }
+
+    // MARK: - Column Visibility Persistence
+
+    /// Rebuilds columnCustomization from stored hidden column IDs.
+    ///
+    /// Called on onAppear. Creates a fresh TableColumnCustomization (default
+    /// column order) and applies only the stored visibility state, ensuring
+    /// drag-induced order corruption can never survive a view lifecycle.
+    private func applyStoredVisibility() {
+        let hiddenIDs: Set<String> = hiddenColumnsData.isEmpty
+            ? Self.defaultHiddenColumns
+            : Set(hiddenColumnsData.split(separator: ",").map(String.init))
+
+        var fresh = TableColumnCustomization<Track>()
+
+        // Fixed-visible columns: always shown, but have customizationID so
+        // they can be drag-reordered. Force .visible regardless of stored data.
+        for id in fixedVisibleColumnIDs {
+            fresh[visibility: id] = .visible
+        }
+
+        // Show/hide columns: apply stored or default visibility.
+        for id in allCustomizableColumnIDs {
+            fresh[visibility: id] = hiddenIDs.contains(id) ? .hidden : .visible
+        }
+
+        columnCustomization = fresh
+        isColumnOrderModified = false
+    }
+
+    /// Persists only column visibility (not order) to @AppStorage.
+    ///
+    /// Called on onChange(of: columnCustomization). Reads the [visibility:]
+    /// subscript for each known column ID and writes hidden IDs as a
+    /// comma-separated string. Column order is intentionally not saved.
+    private func saveColumnVisibility() {
+        let hiddenIDs = allCustomizableColumnIDs.filter {
+            columnCustomization[visibility: $0] == .hidden
+        }
+        hiddenColumnsData = hiddenIDs.joined(separator: ",")
+    }
+
+    /// Resets column order to default while preserving current visibility.
+    ///
+    /// Called by the Reset Column Layout toolbar button.
+    /// Creates a fresh TableColumnCustomization (default order) and copies
+    /// current visibility state into it, so the user's show/hide preferences
+    /// are not affected. hiddenColumnsData is not modified.
+    private func resetColumnCustomization() {
+        var fresh = TableColumnCustomization<Track>()
+        for id in fixedVisibleColumnIDs {
+            fresh[visibility: id] = .visible
+        }
+        for id in allCustomizableColumnIDs {
+            fresh[visibility: id] = columnCustomization[visibility: id]
+        }
+        columnCustomization = fresh
+        isColumnOrderModified = false
     }
 
     // MARK: - Inline Rename
