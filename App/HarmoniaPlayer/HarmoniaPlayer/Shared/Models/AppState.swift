@@ -320,7 +320,10 @@ final class AppState: ObservableObject {
         // Step 5: Store UndoManager.
         // Default parameter uses nil instead of UndoManager() to avoid
         // calling a @MainActor initializer from a nonisolated context (Swift 6).
+        // levelsOfUndo = 10: retain the 10 most recent track operations only;
+        // NSUndoManager automatically discards the oldest when the limit is exceeded.
         self.undoManager = undoManager ?? UndoManager()
+        self.undoManager.levelsOfUndo = 10
 
         // Step 6: Expose Pro unlock state
         self.isProUnlocked = iapManager.isProUnlocked
@@ -615,6 +618,8 @@ final class AppState: ObservableObject {
     func clearPlaylist() {
         playlists[activePlaylistIndex].tracks = []
         currentTrack = nil
+        // Clear undo stack: no meaningful undo target after playlist is wiped.
+        undoManager.removeAllActions()
         saveState()
     }
 
@@ -630,6 +635,8 @@ final class AppState: ObservableObject {
         let resolvedName = name.isEmpty ? nextAvailablePlaylistName() : name
         playlists.append(Playlist(name: resolvedName))
         activePlaylistIndex = playlists.count - 1
+        // Clear undo stack: switched to a new playlist context.
+        undoManager.removeAllActions()
         saveState()
     }
 
@@ -687,6 +694,9 @@ final class AppState: ObservableObject {
         } else {
             activePlaylistIndex = min(activePlaylistIndex, playlists.count - 1)
         }
+        // Clear undo stack: playlist context changed, prior track operations
+        // no longer have a valid target.
+        undoManager.removeAllActions()
         saveState()
     }
 
@@ -1469,6 +1479,24 @@ final class AppState: ObservableObject {
                 // Only break out of polling when truly stopped (not buffering/draining).
                 if case .stopped = serviceState { break }
             }
+        }
+    }
+
+    /// Switches the active playlist from Mini Player and starts playing from the first track.
+    ///
+    /// Called by MiniPlayerView when the user selects a different playlist.
+    /// Stops current playback, switches activePlaylistIndex, then plays the
+    /// first track in the new playlist. No-op if index is out of range.
+    ///
+    /// - Parameter index: Index of the playlist to switch to.
+    func switchMiniPlayerPlaylist(to index: Int) async {
+        guard playlists.indices.contains(index) else { return }
+        await stop()
+        activePlaylistIndex = index
+        // Clear undo stack: switched playlist context.
+        undoManager.removeAllActions()
+        if let first = playlists[index].tracks.first {
+            await play(trackID: first.id)
         }
     }
 

@@ -102,41 +102,84 @@ Central application state observable by SwiftUI views.
 
 ```swift
 @MainActor
-protocol AppStateProtocol: ObservableObject {
+final class AppState: ObservableObject {
     // MARK: - Observable State
-    var playbackState: PlaybackState { get }
-    var currentTrack: Track? { get }
-    var currentTime: TimeInterval { get }
-    var duration: TimeInterval { get }
-    var playlist: Playlist { get }
-    var viewPreferences: ViewPreferences { get set }
-    var lastError: PlaybackError? { get }
-    var isProUser: Bool { get }
-    
+    @Published private(set) var playbackState: PlaybackState
+    @Published private(set) var currentTrack: Track?
+    @Published private(set) var currentTime: TimeInterval
+    @Published private(set) var duration: TimeInterval
+    @Published private(set) var playlists: [Playlist]
+    @Published var activePlaylistIndex: Int
+    var playlist: Playlist { playlists[activePlaylistIndex] }
+    @Published var viewPreferences: ViewPreferences
+    @Published private(set) var lastError: PlaybackError?
+    @Published private(set) var isProUnlocked: Bool
+    @Published private(set) var repeatMode: RepeatMode
+    @Published private(set) var isShuffled: ShuffleMode
+    @Published var volume: Float
+    @Published var allowDuplicateTracks: Bool
+
+    // MARK: - UndoManager
+    /// Injected at init for testability. Production uses UndoManager().
+    /// levelsOfUndo = 10: retains 10 most recent track operations.
+    /// Scope: load / removeTrack / moveTrack only.
+    /// Cleared automatically on playlist context change.
+    let undoManager: UndoManager
+
+    // MARK: - Init
+    init(
+        iapManager: IAPManager,
+        provider: CoreServiceProviding,
+        userDefaults: UserDefaults = .standard,
+        undoManager: UndoManager? = nil   // nil → creates UndoManager() inside @MainActor body
+    )
+
     // MARK: - Playlist Management
-    func load(urls: [URL])
+    func load(urls: [URL]) async
     func clearPlaylist()
     func removeTrack(_ trackID: Track.ID)
     func moveTrack(fromOffsets: IndexSet, toOffset: Int)
-    
+    func newPlaylist(name: String)
+    func renamePlaylist(at index: Int, name: String)
+    func deletePlaylist(at index: Int)
+    func playNext(_ trackID: Track.ID)
+
+    // MARK: - Mini Player
+    /// Stops playback, switches activePlaylistIndex, clears undo stack,
+    /// then plays the first track in the new playlist.
+    func switchMiniPlayerPlaylist(to index: Int) async
+
     // MARK: - Playback Control
-    func play() throws
-    func play(trackID: Track.ID) throws
-    func pause()
-    func stop()
-    func seek(to seconds: TimeInterval) throws
-    
-    // MARK: - UI Helpers
-    func toggleWaveformVisibility()
-    func togglePlaylistVisibility()
-    func setLayoutPreset(_ preset: LayoutPreset)
+    func play() async
+    func play(trackID: Track.ID) async
+    func pause() async
+    func stop() async
+    func seek(to seconds: TimeInterval) async
+    func setVolume(_ volume: Float) async
+    func playNextTrack() async
+    func playPreviousTrack() async
+    func cycleRepeatMode()
+    func toggleShuffle()
+
+    // MARK: - Persistence
+    func saveState()
+    func restoreState()
+
+    // MARK: - File Info
+    func showFileInfo(trackID: Track.ID)
 }
 ```
 
+**UndoManager scope:**
+- ✅ `load(urls:)`, `removeTrack(_:)`, `moveTrack(fromOffsets:toOffset:)`
+- ❌ All playback controls, volume, shuffle, repeat, playlist create/delete
+- Stack is cleared (`removeAllActions()`) when: `clearPlaylist()`, `newPlaylist()`,
+  `deletePlaylist()`, `switchMiniPlayerPlaylist()`, playlist tab switch
+
 **Key Behaviors:**
-- All playback methods execute synchronously
-- Errors are thrown, not returned in state
-- State updates are published for SwiftUI observation
+- All async methods dispatch onto `@MainActor`
+- Errors mapped to `PlaybackError` and published via `lastError`
+- State updates trigger SwiftUI re-render automatically
 
 **See:** [Implementation Guide (Swift)](implementation_guide_swift.md) for concrete implementation.
 
@@ -230,7 +273,7 @@ protocol TagReaderPort {
 
 ---
 
-## 6. Usage Patterns
+## 7. Usage Patterns
 
 ### 6.1 View Integration
 
@@ -271,7 +314,7 @@ do {
 
 ---
 
-## 7. Module Boundaries
+## 8. Module Boundaries
 
 **Allowed Dependencies:**
 
@@ -294,7 +337,7 @@ HarmoniaCore-Swift
 
 ---
 
-## 8. Cross-References
+## 9. Cross-References
 
 **HarmoniaCore Specifications:**
 - [Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md) - Ports & Adapters pattern
@@ -310,7 +353,7 @@ HarmoniaCore-Swift
 
 ---
 
-## 9. Version Compatibility
+## 10. Version Compatibility
 
 | HarmoniaCore | HarmoniaPlayer | API Version | Status |
 |--------------|----------------|-------------|--------|

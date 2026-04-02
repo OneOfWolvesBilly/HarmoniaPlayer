@@ -128,3 +128,16 @@
 "col_comment" = "備注";
 
 "help_reset_columns" = "重置欄位配置";
+
+// Slice 8-B: Mini Player
+"menu_mini_player" = "迷你播放器";
+"mini_player_no_track" = "沒有正在播放";
+"menu_marquee_settings" = "跑馬燈設定...";
+"settings_section_mini_player" = "迷你播放器";
+"settings_marquee_speed" = "捲動速度";
+"settings_marquee_pause" = "停頓時間";
+"settings_marquee_reset" = "恢復預設值";
+"marquee_settings_title" = "跑馬燈設定";
+"settings_mini_player_always_on_top" = "永遠在最上層";
+"settings_mini_player_always_on_top_desc" = "永遠將迷你播放器顯示在所有視窗上方";
+"mini_player_expand" = "回到完整播放器";

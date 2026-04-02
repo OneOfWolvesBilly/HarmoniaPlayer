@@ -6,10 +6,18 @@
 //
 //  Slice 8-A — UndoManager support for playlist operations.
 //
-//  Tests cover:
-//    - load(urls:)       undo removes added tracks; redo re-adds them
-//    - removeTrack(_:)   undo re-inserts the track at original index
-//    - moveTrack(...)    undo restores previous order
+//  UNIT TEST DESIGN
+//  ----------------
+//  Each test covers exactly ONE undo-registering operation:
+//    - testUndoLoad:        load(urls:)
+//    - testUndoRemoveTrack: removeTrack(_:)
+//    - testUndoMoveTrack:   moveTrack(fromOffsets:toOffset:)
+//    - testRedoLoad:        redo after undo of load
+//
+//  Test data setup uses seedTracks() which loads tracks then clears the
+//  undo stack, ensuring only the operation under test is in the stack.
+//  This avoids NSUndoManager groupsByEvent contamination between setup
+//  and the operation being tested.
 //
 
 import XCTest
@@ -18,34 +26,59 @@ import XCTest
 @MainActor
 final class AppStateUndoTests: XCTestCase {
 
-    // MARK: - Helpers
+    // MARK: - Lifecycle
 
-    /// Builds a testable AppState with an injected UndoManager.
-    private func makeSUT(
-        undoManager: UndoManager? = nil
-    ) -> (sut: AppState, undoManager: UndoManager) {
-        let resolvedUndoManager = undoManager ?? UndoManager()
-        let provider = FakeCoreProvider()
-        let sut = AppState(
-            iapManager: MockIAPManager(),
-            provider: provider,
-            undoManager: resolvedUndoManager
-        )
-        return (sut, resolvedUndoManager)
+    private var createdSuiteNames: [String] = []
+
+    override func tearDown() {
+        for name in createdSuiteNames {
+            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        }
+        createdSuiteNames.removeAll()
+        super.tearDown()
     }
 
-    /// Convenience: a file URL under /tmp.
+    // MARK: - Helpers
+
+    private func makeIsolatedDefaults() -> UserDefaults {
+        let name = "hp-undo-test-\(UUID().uuidString)"
+        createdSuiteNames.append(name)
+        return UserDefaults(suiteName: name)!
+    }
+
+    private func makeSUT() -> (sut: AppState, undoManager: UndoManager) {
+        let um = UndoManager()
+        let sut = AppState(
+            iapManager: MockIAPManager(),
+            provider: FakeCoreProvider(),
+            userDefaults: makeIsolatedDefaults(),
+            undoManager: um
+        )
+        return (sut, um)
+    }
+
     private func url(_ name: String) -> URL {
         URL(fileURLWithPath: "/tmp/\(name).mp3")
     }
 
-    // MARK: - load(urls:) — undo / redo
+    /// Loads tracks into the playlist and clears the undo stack.
+    ///
+    /// Use this for test data setup so only the operation under test
+    /// is registered in the undo stack. This prevents NSUndoManager
+    /// groupsByEvent from grouping setup and the tested operation together.
+    private func seedTracks(_ urls: [URL], into sut: AppState) async {
+        await sut.load(urls: urls)
+        sut.undoManager.removeAllActions()
+    }
+
+    // MARK: - load(urls:) — undo
 
     /// Given: empty playlist
-    /// When:  load(urls: [1 track]) then undo
-    /// Then:  playlist.tracks is empty again
+    /// When:  load([track]) → undo
+    /// Then:  playlist is empty
     func testUndoLoad_RemovesAddedTracks() async {
         let (sut, um) = makeSUT()
+
         await sut.load(urls: [url("track1")])
         XCTAssertEqual(sut.playlist.tracks.count, 1)
 
@@ -55,10 +88,11 @@ final class AppStateUndoTests: XCTestCase {
     }
 
     /// Given: empty playlist
-    /// When:  load(urls: [3 tracks]) then undo
-    /// Then:  playlist.tracks is empty again
+    /// When:  load([3 tracks]) → undo
+    /// Then:  playlist is empty
     func testUndoLoad_WithMultipleTracks() async {
         let (sut, um) = makeSUT()
+
         await sut.load(urls: [url("a"), url("b"), url("c")])
         XCTAssertEqual(sut.playlist.tracks.count, 3)
 
@@ -69,16 +103,16 @@ final class AppStateUndoTests: XCTestCase {
 
     // MARK: - removeTrack(_:) — undo
 
-    /// Given: playlist with 2 tracks
-    /// When:  removeTrack(first) then undo
-    /// Then:  tracks.count == 2 (track re-inserted)
+    /// Given: playlist seeded with 2 tracks (undo stack clear)
+    /// When:  removeTrack(first) → undo
+    /// Then:  tracks.count == 2
     func testUndoRemoveTrack_ReInsertsTrack() async {
         let (sut, um) = makeSUT()
-        await sut.load(urls: [url("x"), url("y")])
+        await seedTracks([url("x"), url("y")], into: sut)
         let idToRemove = sut.playlist.tracks[0].id
 
         sut.removeTrack(idToRemove)
-        XCTAssertEqual(sut.playlist.tracks.count, 1)
+        XCTAssertEqual(sut.playlist.tracks.count, 1, "Precondition: track should be removed")
 
         um.undo()
 
@@ -87,18 +121,17 @@ final class AppStateUndoTests: XCTestCase {
 
     // MARK: - moveTrack(fromOffsets:toOffset:) — undo
 
-    /// Given: playlist [A, B, C]
-    /// When:  move B (index 1) to end (offset 3) then undo
+    /// Given: playlist seeded with [A, B, C] (undo stack clear)
+    /// When:  move B to end → undo
     /// Then:  order restored to [A, B, C]
     func testUndoMoveTrack_RestoresOrder() async {
         let (sut, um) = makeSUT()
-        await sut.load(urls: [url("A"), url("B"), url("C")])
+        await seedTracks([url("A"), url("B"), url("C")], into: sut)
         let originalIDs = sut.playlist.tracks.map(\.id)
 
-        // Move B (index 1) to after C (offset 3)
         sut.moveTrack(fromOffsets: IndexSet(integer: 1), toOffset: 3)
         XCTAssertNotEqual(sut.playlist.tracks.map(\.id), originalIDs,
-                          "Order should have changed after move")
+                          "Precondition: order should have changed")
 
         um.undo()
 
@@ -107,15 +140,17 @@ final class AppStateUndoTests: XCTestCase {
 
     // MARK: - redo after undo
 
-    /// Given: undo of load
+    /// Given: load([track]) → undo
     /// When:  redo
-    /// Then:  tracks.count == 1 (re-added)
+    /// Then:  tracks.count == 1
     func testRedoLoad_ReAddsTrack() async {
         let (sut, um) = makeSUT()
+
         await sut.load(urls: [url("solo")])
+        XCTAssertEqual(sut.playlist.tracks.count, 1)
 
         um.undo()
-        XCTAssertTrue(sut.playlist.tracks.isEmpty, "Precondition: undo should have removed track")
+        XCTAssertTrue(sut.playlist.tracks.isEmpty, "Precondition: undo should remove track")
 
         um.redo()
 

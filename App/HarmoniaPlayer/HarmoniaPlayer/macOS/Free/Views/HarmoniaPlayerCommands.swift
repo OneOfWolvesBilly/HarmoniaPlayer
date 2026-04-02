@@ -42,6 +42,8 @@ struct HarmoniaPlayerCommands: Commands {
     /// Used for the Play/Pause label and Playback menu disabled conditions.
     @FocusedValue(\.playbackState) private var focusedPlaybackState: PlaybackState?
 
+    @Environment(\.openWindow) private var openWindow
+
     // MARK: - Localization helper
 
     private var bundle: Bundle { appState?.languageBundle ?? .main }
@@ -75,8 +77,19 @@ struct HarmoniaPlayerCommands: Commands {
         CommandGroup(replacing: .textFormatting) {}
         CommandGroup(replacing: .help) {}
 
-        // Remove "Close" from File menu (system-provided, shows in system language)
-        CommandGroup(replacing: .windowArrangement) {}
+        // Window menu — Mini Player toggle (⌘M).
+        CommandGroup(replacing: .windowArrangement) {
+            Button(L("menu_mini_player")) {
+                openWindow(id: "mini-player")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    NSApp.windows
+                        .filter { $0.title == "HarmoniaPlayer" }
+                        .first?
+                        .orderOut(nil)
+                }
+            }
+            .keyboardShortcut("m", modifiers: .command)
+        }
 
         // Add "Add Files…" and playlist management to the File menu.
         CommandGroup(after: .newItem) {

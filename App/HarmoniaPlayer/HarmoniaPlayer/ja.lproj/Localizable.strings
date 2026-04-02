@@ -128,3 +128,16 @@
 "col_comment" = "コメント";
 
 "help_reset_columns" = "列レイアウトをリセット";
+
+// Slice 8-B: Mini Player
+"menu_mini_player" = "ミニプレーヤー";
+"mini_player_no_track" = "再生中の曲なし";
+"menu_marquee_settings" = "マーキー設定...";
+"settings_section_mini_player" = "ミニプレーヤー";
+"settings_marquee_speed" = "スクロール速度";
+"settings_marquee_pause" = "一時停止時間";
+"settings_marquee_reset" = "デフォルトに戻す";
+"marquee_settings_title" = "マーキー設定";
+"settings_mini_player_always_on_top" = "常に最前面に表示";
+"settings_mini_player_always_on_top_desc" = "ミニプレーヤーを常に他のウィンドウの前面に表示する";
+"mini_player_expand" = "フルプレーヤーに戻る";

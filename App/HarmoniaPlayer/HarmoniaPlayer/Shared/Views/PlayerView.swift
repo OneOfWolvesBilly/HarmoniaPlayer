@@ -44,6 +44,7 @@ import AppKit
 struct PlayerView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     /// `true` while the user is dragging the seek slider.
     /// Freezes slider position to prevent mid-drag jumps from polling updates.
@@ -65,16 +66,40 @@ struct PlayerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 16) {
-            albumArtView
-            metadataView
-            seekSliderView
-            transportControlsView
-            modeControlsView
-            volumeSliderView
-            statusLabelView
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 16) {
+                albumArtView
+                metadataView
+                seekSliderView
+                transportControlsView
+                modeControlsView
+                volumeSliderView
+                statusLabelView
+            }
+            .padding(20)
+
+            // Top-trailing menu button
+            Menu {
+                Button {
+                    openWindow(id: "mini-player")
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        NSApp.windows
+                            .filter { $0.title == "HarmoniaPlayer" }
+                            .first?
+                            .orderOut(nil)
+                    }
+                } label: {
+                    Label(L("menu_mini_player"), systemImage: "rectangle.compress.vertical")
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .padding(12)
         }
-        .padding(20)
     }
 
     // MARK: - Album Art

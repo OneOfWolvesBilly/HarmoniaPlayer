@@ -54,6 +54,16 @@ struct HarmoniaPlayerApp: App {
             HarmoniaPlayerCommands()
         }
 
+        // Mini Player — compact floating window (always on top).
+        // Opened via Window → Mini Player (⌘M).
+        Window("Mini Player", id: "mini-player") {
+            MiniPlayerView()
+                .environmentObject(appState)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.topTrailing)
+        .windowStyle(.plain)
+
         Settings {
             SettingsView()
                 .environmentObject(appState)

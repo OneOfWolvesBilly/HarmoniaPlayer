@@ -165,7 +165,10 @@ struct PlaylistView: View {
 
         Button {
             if renamingIndex != nil { commitRename() }
-            appState.activePlaylistIndex = index
+            if index != appState.activePlaylistIndex {
+                appState.activePlaylistIndex = index
+                appState.undoManager.removeAllActions()
+            }
         } label: {
             HStack(spacing: 4) {
                 if isPlaying {

@@ -17,6 +17,10 @@ import AppKit
 struct SettingsView: View {
     
     @EnvironmentObject private var appState: AppState
+
+    @AppStorage("hp.marqueeSpeed") private var marqueeSpeed: Double = 40.0
+    @AppStorage("hp.marqueePause") private var marqueePause: Double = 1.0
+    @AppStorage("hp.miniPlayerAlwaysOnTop") private var alwaysOnTop: Bool = true
     
     // MARK: - Localization helper
     
@@ -50,7 +54,54 @@ struct SettingsView: View {
             } header: {
                 Text(L("settings_section_playlist"))
             }
-            
+
+            Section {
+                Toggle(isOn: $alwaysOnTop) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("settings_mini_player_always_on_top"))
+                        Text(L("settings_mini_player_always_on_top_desc"))
+                            .font(.caption)
+                            .foregroundStyle(Color.secondary)
+                    }
+                }
+                .accessibilityIdentifier("always-on-top-toggle")
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("settings_marquee_speed"))
+                        Spacer()
+                        Text("\(Int(marqueeSpeed)) pt/s")
+                            .monospacedDigit()
+                            .foregroundStyle(Color.secondary)
+                    }
+                    Slider(value: $marqueeSpeed, in: 10...120, step: 5)
+                        .accessibilityIdentifier("marquee-speed-slider")
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L("settings_marquee_pause"))
+                        Spacer()
+                        Text(String(format: "%.1f s", marqueePause))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.secondary)
+                    }
+                    Slider(value: $marqueePause, in: 0...5, step: 0.5)
+                        .accessibilityIdentifier("marquee-pause-slider")
+                }
+
+                HStack {
+                    Spacer()
+                    Button(L("settings_marquee_reset")) {
+                        marqueeSpeed = 40.0
+                        marqueePause = 1.0
+                    }
+                    .accessibilityIdentifier("marquee-reset-button")
+                }
+            } header: {
+                Text(L("settings_section_mini_player"))
+            }
+
             Section {
                 Picker(L("settings_section_language"), selection: $appState.selectedLanguage) {
                     ForEach(languageOptions, id: \.id) { option in
