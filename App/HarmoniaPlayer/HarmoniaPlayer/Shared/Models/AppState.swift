@@ -27,6 +27,7 @@ private enum PersistenceKey {
     static let sortAscending       = "hp.sortAscending"
     static let repeatMode          = "hp.repeatMode"
     static let isShuffled          = "hp.isShuffled"
+    static let replayGainMode      = "hp.replayGainMode"
 }
 
 /// Current version of the metadata reading logic.
@@ -256,6 +257,15 @@ final class AppState: ObservableObject {
     /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
     @Published private(set) var isShuffled: ShuffleMode = .off
 
+    // MARK: - ReplayGain State
+
+    /// Current ReplayGain application mode.
+    ///
+    /// Defaults to `.off`. Updated by `SettingsView` picker.
+    /// Persisted across launches via `UserDefaults`.
+    /// Applied in `play(trackID:)` to adjust the effective playback volume.
+    @Published var replayGainMode: ReplayGainMode = .off
+
     /// Pre-shuffled track ID order used when shuffle is enabled.
     ///
     /// Contains a permutation of all track IDs in `playlists[activePlaylistIndex].tracks`.
@@ -275,6 +285,9 @@ final class AppState: ObservableObject {
 
     /// Task that polls playback state and currentTime while playing.
     private var pollingTask: Task<Void, Never>?
+
+    /// Combine subscriptions retained for the lifetime of AppState.
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
@@ -348,6 +361,18 @@ final class AppState: ObservableObject {
 
         // Step 10: Restore persisted state (overrides Step 7 defaults if data exists)
         restoreState()
+
+        // Step 11: React to replayGainMode changes during active playback.
+        // When the user switches mode in Settings, immediately re-apply the
+        // effective volume so the change is audible without restarting the track.
+        $replayGainMode
+            .dropFirst()            // skip the initial emission at subscription time
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                Task { @MainActor in await self.applyReplayGainVolume(requiresActivePlayback: true) }
+            }
+            .store(in: &cancellables)
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
@@ -410,6 +435,7 @@ final class AppState: ObservableObject {
             userDefaults.set(repeatData, forKey: PersistenceKey.repeatMode)
         }
         userDefaults.set(isShuffled, forKey: PersistenceKey.isShuffled)
+        userDefaults.set(replayGainMode.rawValue, forKey: PersistenceKey.replayGainMode)
     }
 
     /// Restores previously saved state from UserDefaults.
@@ -459,6 +485,10 @@ final class AppState: ObservableObject {
         }
         if userDefaults.object(forKey: PersistenceKey.isShuffled) != nil {
             isShuffled = userDefaults.bool(forKey: PersistenceKey.isShuffled)
+        }
+        if let raw = userDefaults.string(forKey: PersistenceKey.replayGainMode),
+           let mode = ReplayGainMode(rawValue: raw) {
+            replayGainMode = mode
         }
 
         // Background metadata refresh: re-reads fields for tracks that were
@@ -1096,6 +1126,9 @@ final class AppState: ObservableObject {
         do {
             try await playbackService.load(url: track.url)
             duration = await playbackService.duration()
+
+            await applyReplayGainVolume(for: track)
+
             try await playbackService.play()
             currentTrack = track
             lastPlayedTrackID = track.id
@@ -1498,6 +1531,41 @@ final class AppState: ObservableObject {
         if let first = playlists[index].tracks.first {
             await play(trackID: first.id)
         }
+    }
+
+    /// Calculates and applies the effective playback volume for the current track.
+    ///
+    /// Called in two places:
+    /// 1. `play(trackID:)` — once when a new track starts.
+    /// 2. The `$replayGainMode` Combine sink — whenever the user changes mode in Settings.
+    ///
+    /// Gain logic:
+    /// - `.off`  → use `volume` unchanged
+    /// - `.track` → `replayGainTrack` dB; fallback to `replayGainAlbum` if absent
+    /// - `.album` → `replayGainAlbum` dB; fallback to `replayGainTrack` if absent
+    /// - Both nil → use `volume` unchanged
+    /// - Result is clamped to [0, 1].
+    private func applyReplayGainVolume(for explicitTrack: Track? = nil, requiresActivePlayback: Bool = false) async {
+        if requiresActivePlayback {
+            guard playbackState == .playing || playbackState == .paused else { return }
+        }
+        // explicitTrack is passed from play(trackID:) before currentTrack is set.
+        // Combine sink passes nil and falls back to currentTrack instead.
+        let track = explicitTrack ?? currentTrack
+
+        let gainDB: Double? = {
+            switch replayGainMode {
+            case .off:   return nil
+            case .track: return track?.replayGainTrack ?? track?.replayGainAlbum
+            case .album: return track?.replayGainAlbum ?? track?.replayGainTrack
+            }
+        }()
+        let effectiveVolume: Float = {
+            guard let db = gainDB else { return volume }
+            let linear = pow(10.0, db / 20.0)
+            return Float(min(1.0, Double(volume) * linear))
+        }()
+        await playbackService.setVolume(effectiveVolume)
     }
 
     /// Cancels the polling loop.

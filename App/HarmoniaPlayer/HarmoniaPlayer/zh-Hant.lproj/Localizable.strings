@@ -141,3 +141,6 @@
 "settings_mini_player_always_on_top" = "永遠在最上層";
 "settings_mini_player_always_on_top_desc" = "永遠將迷你播放器顯示在所有視窗上方";
 "mini_player_expand" = "回到完整播放器";
+
+// Slice 8-C: ReplayGain
+"settings_replay_gain_mode" = "Replay Gain 模式";

@@ -141,3 +141,6 @@
 "settings_mini_player_always_on_top" = "Always on Top";
 "settings_mini_player_always_on_top_desc" = "Keep Mini Player above all other windows";
 "mini_player_expand" = "Back to Full Player";
+
+// Slice 8-C: ReplayGain
+"settings_replay_gain_mode" = "Replay Gain Mode";

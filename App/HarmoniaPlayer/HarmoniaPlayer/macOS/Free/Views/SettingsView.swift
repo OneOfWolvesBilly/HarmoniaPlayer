@@ -103,6 +103,21 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker(L("settings_replay_gain_mode"), selection: $appState.replayGainMode) {
+                    Text("Off").tag(ReplayGainMode.off)
+                    Text("Track").tag(ReplayGainMode.track)
+                    Text("Album").tag(ReplayGainMode.album)
+                }
+                .pickerStyle(.segmented)
+                .accessibilityIdentifier("replay-gain-picker")
+                .onChange(of: appState.replayGainMode) {
+                    appState.saveState()
+                }
+            } header: {
+                Text("ReplayGain")
+            }
+
+            Section {
                 Picker(L("settings_section_language"), selection: $appState.selectedLanguage) {
                     ForEach(languageOptions, id: \.id) { option in
                         // "System Default" label is intentionally not localized —
