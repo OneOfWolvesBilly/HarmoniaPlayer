@@ -27,4 +27,12 @@ final class FreeTierIAPManager: IAPManager {
 
     /// Always `false`; Pro features are not available in the Free tier.
     var isProUnlocked: Bool { false }
+
+    /// No-op: entitlements never change in the Free tier.
+    func refreshEntitlements() async { }
+
+    /// Always throws `IAPError.notAvailable`; purchase is not supported in the Free tier.
+    func purchasePro() async throws {
+        throw IAPError.notAvailable
+    }
 }

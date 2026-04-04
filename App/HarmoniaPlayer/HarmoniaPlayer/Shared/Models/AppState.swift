@@ -211,6 +211,15 @@ final class AppState: ObservableObject {
     /// Not `private(set)` so the sheet's `item` binding can dismiss it.
     @Published var fileInfoTrack: Track? = nil
 
+    // MARK: - Paywall
+
+    /// Whether the Pro paywall sheet is currently presented.
+    ///
+    /// Set to `true` by `showPaywallIfNeeded()` when a Free-tier user
+    /// triggers a Pro-only action. The sheet binding resets it to `false`
+    /// on dismissal.
+    @Published var showPaywall: Bool = false
+
     // MARK: - Settings
 
     /// Whether duplicate URLs are allowed in the playlist.
@@ -418,6 +427,45 @@ final class AppState: ObservableObject {
     /// in `ContentView`. If no matching track is found, the call is a no-op.
     func showFileInfo(trackID: Track.ID) {
         fileInfoTrack = playlist.tracks.first { $0.id == trackID }
+    }
+
+    // MARK: - Paywall
+
+    /// Shows the Pro paywall sheet if the user is on the Free tier.
+    ///
+    /// Sets `showPaywall = true` and returns `true` when `isProUnlocked == false`.
+    /// Returns `false` (and does not show the paywall) when Pro is already unlocked.
+    ///
+    /// Call this guard before any Pro-only action:
+    /// ```swift
+    /// guard !showPaywallIfNeeded() else { return }
+    /// // proceed with Pro action
+    /// ```
+    @discardableResult
+    func showPaywallIfNeeded() -> Bool {
+        guard !isProUnlocked else { return false }
+        showPaywall = true
+        return true
+    }
+
+    // MARK: - IAP
+
+    /// Initiates the Pro purchase flow via `IAPManager`.
+    ///
+    /// On success, `isProUnlocked` is refreshed from `iapManager.isProUnlocked`.
+    /// Throws `IAPError` on failure or user cancellation.
+    func purchasePro() async throws {
+        try await iapManager.purchasePro()
+        isProUnlocked = iapManager.isProUnlocked
+    }
+
+    /// Refreshes Pro entitlements from the App Store via `IAPManager`.
+    ///
+    /// Updates `isProUnlocked` from `iapManager.isProUnlocked` after completion.
+    /// Call at app launch to verify cached purchase state.
+    func refreshEntitlements() async {
+        await iapManager.refreshEntitlements()
+        isProUnlocked = iapManager.isProUnlocked
     }
 
     /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.
@@ -1112,6 +1160,7 @@ final class AppState: ObservableObject {
         // Step 2b: Format gate — reject Pro-only formats on the Free tier.
         let ext = track.url.pathExtension.lowercased()
         if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
+            showPaywallIfNeeded()
             currentTrack = nil
             lastError = .unsupportedFormat
             playbackState = .error(.unsupportedFormat)

@@ -31,7 +31,7 @@ struct HarmoniaPlayerApp: App {
     }
 
     @StateObject private var appState = AppState(
-        iapManager: FreeTierIAPManager(),
+        iapManager: StoreKitIAPManager(),
         provider: HarmoniaCoreProvider()
     )
 
@@ -42,6 +42,10 @@ struct HarmoniaPlayerApp: App {
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
+                .task {
+                    // Refresh Pro entitlements at launch to sync with App Store.
+                    await appState.refreshEntitlements()
+                }
                 .onReceive(
                     NotificationCenter.default.publisher(
                         for: NSApplication.willTerminateNotification

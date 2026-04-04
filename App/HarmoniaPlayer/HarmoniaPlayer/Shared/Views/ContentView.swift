@@ -64,6 +64,11 @@ struct ContentView: View {
         .sheet(item: $appState.fileInfoTrack) { track in
             FileInfoView(track: track)
         }
+        // Paywall sheet — presented when a Free user triggers a Pro-only action
+        .sheet(isPresented: $appState.showPaywall) {
+            PaywallView()
+                .environmentObject(appState)
+        }
         // Auto-dismiss alert for failedToOpenFile (3 seconds)
         .onChange(of: appState.showFileNotFoundAlert) {
             guard appState.showFileNotFoundAlert else { return }

@@ -10,9 +10,9 @@
 //
 //  COVERAGE
 //  --------
-//  9 test cases covering:
-//  - Free tier: FLAC / DSF / DFF → gate fires (lastError, playbackState, loadCallCount, currentTrack)
-//  - Pro tier:  FLAC → gate bypassed (loadCallCount == 1)
+//  11 test cases covering:
+//  - Free tier: FLAC / DSF / DFF → gate fires (lastError, playbackState, loadCallCount, currentTrack, showPaywall)
+//  - Pro tier:  FLAC → gate bypassed (loadCallCount == 1, showPaywall == false)
 //  - Free tier: MP3 / M4A → gate bypassed (loadCallCount == 1)
 //
 //  All tests use FakePlaybackService — no real audio I/O occurs in this file.
@@ -144,6 +144,18 @@ final class AppStateFormatGatingTests: XCTestCase {
         XCTAssertNil(sut.currentTrack)
     }
 
+    /// Verifies that `showPaywall` is set to `true` when a Free-tier user attempts
+    /// to play a `.flac` file. The Paywall sheet must be triggered by the format gate.
+    func testFormatGating_FLAC_FreeTier_ShowsPaywall() async {
+        makeSUT(isProUnlocked: false)
+        let track = await addTrack(extension: "flac")
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertTrue(sut.showPaywall,
+                      "showPaywall must be true when Free user plays FLAC")
+    }
+
     // MARK: - DSF / Free Tier (1 case)
 
     /// Verifies that `.dsf` (DSD Stream File) is gated on the Free tier.
@@ -168,7 +180,7 @@ final class AppStateFormatGatingTests: XCTestCase {
         XCTAssertEqual(sut.lastError, .unsupportedFormat)
     }
 
-    // MARK: - FLAC / Pro Tier (1 case)
+    // MARK: - FLAC / Pro Tier (2 cases)
 
     /// Verifies that the format gate is NOT triggered for a `.flac` file on the Pro tier.
     ///
@@ -182,6 +194,17 @@ final class AppStateFormatGatingTests: XCTestCase {
 
         // Gate must NOT fire for Pro users — load must be called exactly once.
         XCTAssertEqual(fakePlaybackService.loadCallCount, 1)
+    }
+
+    /// Verifies that `showPaywall` remains `false` when a Pro user plays a `.flac` file.
+    func testFormatGating_FLAC_ProTier_NoPaywall() async {
+        makeSUT(isProUnlocked: true)
+        let track = await addTrack(extension: "flac")
+
+        await sut.play(trackID: track.id)
+
+        XCTAssertFalse(sut.showPaywall,
+                       "showPaywall must remain false when Pro user plays FLAC")
     }
 
     // MARK: - Free-Tier Allowed Formats (2 cases)
