@@ -60,16 +60,16 @@ struct HarmoniaPlayerCommands: Commands {
         // Disabled when the manager has nothing to undo/redo.
         CommandGroup(replacing: .undoRedo) {
             Button(L("menu_undo")) {
-                appState?.undoManager.undo()
+                appState?.undo()
             }
             .keyboardShortcut("z", modifiers: .command)
-            .disabled(appState?.undoManager.canUndo != true)
+            .disabled(appState?.canUndo != true)
 
             Button(L("menu_redo")) {
-                appState?.undoManager.redo()
+                appState?.redo()
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
-            .disabled(appState?.undoManager.canRedo != true)
+            .disabled(appState?.canRedo != true)
         }
         CommandGroup(replacing: .pasteboard) {}
         CommandGroup(replacing: .systemServices) {}

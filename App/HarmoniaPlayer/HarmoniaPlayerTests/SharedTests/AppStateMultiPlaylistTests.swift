@@ -139,4 +139,65 @@ final class AppStateMultiPlaylistTests: XCTestCase {
 
         XCTAssertEqual(sut.playbackState, .playing)
     }
+
+    // MARK: - switchPlaylist(to:)
+
+    /// Switching to a valid different index updates activePlaylistIndex.
+    func testSwitchPlaylist_ValidIndex_ChangesActiveIndex() {
+        sut.newPlaylist(name: "Rock")
+
+        sut.switchPlaylist(to: 1)
+
+        XCTAssertEqual(sut.activePlaylistIndex, 1)
+    }
+
+    /// Switching to the current index is a no-op: activePlaylistIndex unchanged.
+    func testSwitchPlaylist_SameIndex_IsNoOp() {
+        sut.newPlaylist(name: "Rock")
+        sut.switchPlaylist(to: 1)
+        XCTAssertEqual(sut.activePlaylistIndex, 1, "Pre-condition")
+
+        sut.switchPlaylist(to: 1)
+
+        XCTAssertEqual(sut.activePlaylistIndex, 1)
+    }
+
+    /// Switching to the same index must NOT clear the undo stack.
+    func testSwitchPlaylist_SameIndex_PreservesUndoStack() async {
+        // Seed a track so load() registers an undo action.
+        await sut.load(urls: [URL(fileURLWithPath: "/tmp/a.mp3")])
+        XCTAssertTrue(sut.canUndo, "Pre-condition: undo stack should be populated")
+
+        sut.switchPlaylist(to: 0)   // same index
+
+        XCTAssertTrue(sut.canUndo, "Undo stack must survive a same-index switch")
+    }
+
+    /// Switching to an out-of-range index is a no-op.
+    func testSwitchPlaylist_OutOfRangeIndex_IsNoOp() {
+        sut.switchPlaylist(to: 99)
+
+        XCTAssertEqual(sut.activePlaylistIndex, 0)
+    }
+
+    /// Switching to a different index clears the undo stack.
+    func testSwitchPlaylist_DifferentIndex_ClearsUndoStack() async {
+        // Setup: create a second playlist, then switch back to playlist 0.
+        // newPlaylist() itself clears the undo stack and lands on index 1,
+        // so all setup must complete BEFORE the operation under test.
+        sut.newPlaylist(name: "Rock")       // lands on index 1, clears undo stack
+        sut.switchPlaylist(to: 0)           // back to index 0, clears undo stack
+
+        // Seed a track in playlist 0 so load() registers an undo action.
+        await sut.load(urls: [URL(fileURLWithPath: "/tmp/a.mp3")])
+        XCTAssertTrue(sut.canUndo, "Pre-condition: undo stack should be populated")
+        XCTAssertEqual(sut.activePlaylistIndex, 0, "Pre-condition: should be on playlist 0")
+
+        // When: switch to a different playlist
+        sut.switchPlaylist(to: 1)
+
+        // Then: undo stack is cleared
+        XCTAssertFalse(sut.canUndo,
+                       "Undo stack must be cleared after switching to a different playlist")
+    }
 }

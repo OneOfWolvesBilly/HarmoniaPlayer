@@ -398,6 +398,21 @@ final class AppState: ObservableObject {
                 Task { @MainActor in await self.applyReplayGainVolume(requiresActivePlayback: true) }
             }
             .store(in: &cancellables)
+
+        // Step 12: Persist replayGainMode and selectedLanguage whenever they
+        // change. SettingsView must not call saveState() directly — persistence
+        // is AppState's responsibility.
+        $replayGainMode
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.saveState() }
+            .store(in: &cancellables)
+
+        $selectedLanguage
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.saveState() }
+            .store(in: &cancellables)
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
@@ -743,6 +758,37 @@ final class AppState: ObservableObject {
     }
 
     // MARK: - Playlist Management
+
+    /// Switches the active playlist tab without affecting playback.
+    ///
+    /// Encapsulates tab-switching logic so Views do not need to mutate
+    /// `activePlaylistIndex` directly or manage the undo stack themselves.
+    ///
+    /// - Clears the undo stack so prior operations on a different playlist
+    ///   cannot be accidentally applied to the new context.
+    /// - No-op if `index` is out of range or already active.
+    ///
+    /// - Parameter index: Target playlist index.
+    func switchPlaylist(to index: Int) {
+        guard playlists.indices.contains(index) else { return }
+        guard index != activePlaylistIndex else { return }
+        activePlaylistIndex = index
+        undoManager.removeAllActions()
+    }
+
+    // MARK: - Undo / Redo
+
+    /// Whether the undo stack has an available undo action.
+    var canUndo: Bool { undoManager.canUndo }
+
+    /// Whether the undo stack has an available redo action.
+    var canRedo: Bool { undoManager.canRedo }
+
+    /// Performs the most recent undoable playlist operation.
+    func undo() { undoManager.undo() }
+
+    /// Re-applies the most recently undone playlist operation.
+    func redo() { undoManager.redo() }
 
     /// Appends a new empty playlist and switches to it.
     ///

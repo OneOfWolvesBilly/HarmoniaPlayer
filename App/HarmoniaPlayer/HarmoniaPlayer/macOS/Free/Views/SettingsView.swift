@@ -110,9 +110,6 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("replay-gain-picker")
-                .onChange(of: appState.replayGainMode) {
-                    appState.saveState()
-                }
             } header: {
                 Text("ReplayGain")
             }
@@ -133,7 +130,6 @@ struct SettingsView: View {
                 .pickerStyle(.menu)
                 .accessibilityIdentifier("language-picker")
                 .onChange(of: appState.selectedLanguage) {
-                    appState.saveState()
                     applyLanguageAndRestart(appState.selectedLanguage)
                 }
             } header: {

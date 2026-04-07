@@ -219,4 +219,36 @@ final class AppStatePersistenceTests: XCTestCase {
         let restored = makeRestoredAppState()
         XCTAssertEqual(restored.playlist.sortKey, .none)
     }
+
+    // MARK: - Combine sink auto-save (no explicit saveState() call)
+
+    /// Changing `replayGainMode` must trigger automatic persistence via its
+    /// Combine sink — SettingsView must NOT need to call saveState() directly.
+    func testReplayGainMode_AutoSaves_ViaCombineSink() async throws {
+        // When: change replayGainMode without calling saveState()
+        sut.replayGainMode = .album
+
+        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Then: a fresh AppState backed by the same UserDefaults reads back the value
+        let restored = makeRestoredAppState()
+        XCTAssertEqual(restored.replayGainMode, .album,
+                       "replayGainMode must be persisted automatically via Combine sink")
+    }
+
+    /// Changing `selectedLanguage` must trigger automatic persistence via its
+    /// Combine sink — SettingsView must NOT need to call saveState() directly.
+    func testSelectedLanguage_AutoSaves_ViaCombineSink() async throws {
+        // When: change selectedLanguage without calling saveState()
+        sut.selectedLanguage = "zh-Hant"
+
+        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Then: a fresh AppState backed by the same UserDefaults reads back the value
+        let restored = makeRestoredAppState()
+        XCTAssertEqual(restored.selectedLanguage, "zh-Hant",
+                       "selectedLanguage must be persisted automatically via Combine sink")
+    }
 }

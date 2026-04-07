@@ -189,13 +189,3 @@ private struct PaywallFeatureRow: View {
         }
     }
 }
-
-// MARK: - Preview
-
-#Preview {
-    PaywallView()
-        .environmentObject(AppState(
-            iapManager: FreeTierIAPManager(),
-            provider: HarmoniaCoreProvider()
-        ))
-}
