@@ -144,3 +144,7 @@
 
 // Slice 8-C: ReplayGain
 "settings_replay_gain_mode" = "Replay Gain 模式";
+
+// Slice 9-A: Load-time format gate
+"alert_unsupported_format_title" = "不支援的格式";
+"alert_unsupported_format_body" = "下列檔案的格式不受 HarmoniaPlayer 支援，因此未加入：\n%@";

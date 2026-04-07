@@ -144,3 +144,7 @@
 
 // Slice 8-C: ReplayGain
 "settings_replay_gain_mode" = "Replay Gain Mode";
+
+// Slice 9-A: Load-time format gate
+"alert_unsupported_format_title" = "Unsupported Format";
+"alert_unsupported_format_body" = "The following files use a format not supported by HarmoniaPlayer and were not added:\n%@";
