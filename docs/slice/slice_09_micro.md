@@ -75,7 +75,7 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
   `purchasePro() async throws`
 - Implement `StoreKitIAPManager` conforming to `IAPManager`:
   - `refreshEntitlements()` — verify existing purchases on launch via
-    `Transaction.currentEntitlement(for:)`
+    `Transaction.currentEntitlements(for:)`
   - `purchasePro()` — StoreKit 2 `Product.purchase()` flow
   - `isProUnlocked: Bool` — `true` after verified purchase; persisted in
     `UserDefaults` as a fast-read cache
@@ -89,24 +89,51 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
 - Add `AppState.showPaywall: Bool` — set `true` when any Pro action is blocked
 - `AppState.showPaywallIfNeeded() -> Bool` — returns `true` and sets
   `showPaywall = true` when `!isProUnlocked`; returns `false` otherwise
+- `AppState.featureFlags` changed to `private(set) var` — rebuilt after
+  `purchasePro()` and `refreshEntitlements()` so load gate reflects updated tier
+- Load-time format gate in `load(urls:)`:
+  - Free tier: FLAC/DSF/DFF blocked, `skippedProFormatURLs` set, Paywall shown
+  - All tiers: unrecognised formats blocked, `skippedUnsupportedURLs` set, alert shown
+  - `AppState.freeFormats` / `proOnlyFormats` static sets for classification
+- `PlaylistView.openFilePicker()`: FLAC/DSF/DFF always visible in Open panel
+  regardless of tier; load gate handles Paywall for Free users
+- `ContentView`: unsupported format alert binding
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/IAPManager.swift`
-  (modify — add `refreshEntitlements()`, `purchasePro()`)
+  (modify — add `IAPError`, `refreshEntitlements()`, `purchasePro()`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/FreeTierIAPManager.swift`
+  (modify — add stub `refreshEntitlements()`, `purchasePro()`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/StoreKitIAPManager.swift`
   (new)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PaywallView.swift`
   (new)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift`
+  (modify — Paywall sheet, unsupported format alert)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
+  (modify — Open panel always includes FLAC/DSF/DFF)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `showPaywall`, `showPaywallIfNeeded()`)
+  (modify — `showPaywall`, `showPaywallIfNeeded()`, `featureFlags` var,
+  `freeFormats`/`proOnlyFormats`, `skippedProFormatURLs`, `skippedUnsupportedURLs`,
+  load gate in `load(urls:)`, `purchasePro()`, `refreshEntitlements()`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
   (modify — use `StoreKitIAPManager` in production)
+- `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings`
+  (modify — add `alert_unsupported_format_title/body`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/zh-Hant.lproj/Localizable.strings`
+  (modify — add `alert_unsupported_format_title/body`)
+- `App/HarmoniaPlayer/HarmoniaPlayer/ja.lproj/Localizable.strings`
+  (modify — add `alert_unsupported_format_title/body`)
 
 Test target only:
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/MockIAPManager.swift`
   (modify — add stub `refreshEntitlements()`, `purchasePro()`)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/IAPManagerTests.swift`
-  (modify — add Pro unlock flow tests)
+  (modify — add `@MainActor`, `bundleURL` helper, Pro unlock flow tests)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateFormatGatingTests.swift`
+  (modify — replace play-gate FLAC+Free tests with load-gate tests)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/IntegrationTests.swift`
+  (modify — update `testIntegration_UnsupportedFormat_Free` for load gate)
 
 ### Public API shape
 
@@ -127,9 +154,16 @@ final class StoreKitIAPManager: IAPManager {
 
 // AppState additions
 @Published var showPaywall: Bool = false
+@Published var skippedProFormatURLs: [URL] = []
+@Published var skippedUnsupportedURLs: [URL] = []
+
+static let freeFormats: Set<String>    = ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
+static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
 
 @discardableResult
 func showPaywallIfNeeded() -> Bool
+func purchasePro() async throws
+func refreshEntitlements() async
 ```
 
 ### TDD matrix
@@ -139,27 +173,43 @@ func showPaywallIfNeeded() -> Bool
 | `testIsProUnlocked_DefaultIsFalse` | Fresh `MockIAPManager` | read `isProUnlocked` | `false` |
 | `testShowPaywallIfNeeded_ReturnsTrueForFreeUser` | `isProUnlocked == false` | `showPaywallIfNeeded()` | returns `true`, `showPaywall == true` |
 | `testShowPaywallIfNeeded_ReturnsFalseForProUser` | `isProUnlocked == true` | `showPaywallIfNeeded()` | returns `false`, `showPaywall == false` |
-| `testShowPaywall_WhenFreeUserPlaysFlac` | `isProUnlocked == false`, `.flac` track | `play(trackID:)` | `showPaywall == true` |
-| `testShowPaywall_NotSet_WhenProUserPlaysFlac` | `isProUnlocked == true`, `.flac` track | `play(trackID:)` | `showPaywall == false` |
+| `testShowPaywall_WhenFreeUserLoadsFlac` | `isProUnlocked == false`, `.flac` file | `load(urls:)` | `showPaywall == true`, playlist empty |
+| `testShowPaywall_NotSet_WhenProUserLoadsFlac` | `isProUnlocked == true`, `.flac` file | `load(urls:)` | `showPaywall == false`, track added |
+| `testLoadGate_FLAC_FreeTier_BlockedAndShowsPaywall` | Free, `.flac` URL | `load(urls:)` | playlist empty, `showPaywall == true` |
+| `testLoadGate_FLAC_ProTier_AddedToPlaylist` | Pro, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
+| `testLoadGate_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
 
 ### Done criteria
 - ✅ `StoreKitIAPManager` fetches product and completes purchase via StoreKit 2
 - ✅ `isProUnlocked` persists across launches after purchase
-- ✅ Paywall sheet appears when Free user attempts FLAC/DSD playback
+- ✅ `featureFlags` rebuilt after purchase/restore so load gate reflects updated tier
+- ✅ FLAC/DSF/DFF visible in Open panel for all tiers
+- ✅ Free user selects or drops FLAC/DSF/DFF → Paywall shown, track not added
+- ✅ Pro user selects or drops FLAC/DSF/DFF → track added normally
+- ✅ Unrecognised format → unsupported format alert, track not added
 - ✅ "Restore Purchases" correctly restores prior purchase
 - ✅ All IAPManagerTests green
 - ✅ All Slice 1–8 tests still green
 
 ### Commit message
 ```
-feat(slice 9-A): implement StoreKit 2 IAP and Paywall UI
+feat(slice 9-A): implement StoreKit 2 IAP, Paywall UI, and load-time format gate
 
-- Extend IAPManager protocol: refreshEntitlements(), purchasePro()
-- Add StoreKitIAPManager: real StoreKit 2 purchase and restore flow
-- Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases
-- Add AppState.showPaywall and showPaywallIfNeeded()
-- Wire StoreKitIAPManager in HarmoniaPlayerApp production build
-- Update MockIAPManager with stub refreshEntitlements / purchasePro
+- Add IAPError enum and extend IAPManager protocol: refreshEntitlements(), purchasePro()
+- Add StoreKitIAPManager: StoreKit 2 purchase and restore, UserDefaults cache
+- Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases, Maybe Later
+- AppState.showPaywall and showPaywallIfNeeded()
+- AppState.featureFlags: private(set) var, rebuilt after purchasePro/refreshEntitlements
+- AppState.load(urls:): block Pro-only formats for Free users, block unsupported formats
+- AppState.freeFormats / proOnlyFormats static format classification sets
+- PlaylistView.openFilePicker(): always show FLAC/DSF/DFF; load gate handles Paywall
+- ContentView: Paywall sheet, unsupported format alert
+- Localizable (en/zh-Hant/ja): alert_unsupported_format_title/body
+- HarmoniaPlayerApp: switch to StoreKitIAPManager, refresh entitlements on launch
+- MockIAPManager: PurchaseResult enum, mutable isProUnlocked, call tracking
+- IAPManagerTests: @MainActor, bundleURL helper, 5 new test cases
+- AppStateFormatGatingTests: replace play-gate FLAC+Free with load-gate tests (10 cases)
+- IntegrationTests: update UnsupportedFormat_Free for load-gate behaviour
 ```
 
 ---
