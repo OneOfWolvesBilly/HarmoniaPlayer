@@ -79,6 +79,10 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
   - `purchasePro()` — StoreKit 2 `Product.purchase()` flow
   - `isProUnlocked: Bool` — `true` after verified purchase; persisted in
     `UserDefaults` as a fast-read cache
+  - `Transaction.updates` listener Task started in `init()` — handles
+    Ask to Buy approvals, Family Sharing grants, and purchases completed
+    while the app was in the background; required by Apple for App Store
+    approval; `updatesTask` cancelled in `deinit`
 - `HarmoniaPlayerApp` uses `StoreKitIAPManager` in production;
   `MockIAPManager` remains for tests
 - New `PaywallView` sheet:
@@ -148,6 +152,7 @@ protocol IAPManager: AnyObject {
 // StoreKitIAPManager
 final class StoreKitIAPManager: IAPManager {
     private(set) var isProUnlocked: Bool = false
+    private var updatesTask: Task<Void, Never>?   // started in init(), cancelled in deinit
     func refreshEntitlements() async
     func purchasePro() async throws
 }
@@ -181,6 +186,7 @@ func refreshEntitlements() async
 
 ### Done criteria
 - ✅ `StoreKitIAPManager` fetches product and completes purchase via StoreKit 2
+- ✅ `Transaction.updates` listener running throughout app lifecycle; handles Ask to Buy and background purchases
 - ✅ `isProUnlocked` persists across launches after purchase
 - ✅ `featureFlags` rebuilt after purchase/restore so load gate reflects updated tier
 - ✅ FLAC/DSF/DFF visible in Open panel for all tiers
@@ -197,6 +203,8 @@ feat(slice 9-A): implement StoreKit 2 IAP, Paywall UI, and load-time format gate
 
 - Add IAPError enum and extend IAPManager protocol: refreshEntitlements(), purchasePro()
 - Add StoreKitIAPManager: StoreKit 2 purchase and restore, UserDefaults cache
+- Add StoreKitIAPManager.updatesTask: observe Transaction.updates for Ask to Buy,
+  Family Sharing, and background purchase completion (required for App Store approval)
 - Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases, Maybe Later
 - AppState.showPaywall and showPaywallIfNeeded()
 - AppState.featureFlags: private(set) var, rebuilt after purchasePro/refreshEntitlements
@@ -221,25 +229,29 @@ Allow Pro users to edit core audio file tags and write them back to the file.
 
 ### Scope
 - New `TagWriterService` protocol (Application Layer)
+  - Accepts `Track` (Application Layer type), NOT `TagBundle` (HarmoniaCore type)
+  - `HarmoniaTagWriterAdapter` (Integration Layer) is responsible for converting
+    `Track` fields into `TagBundle` before calling `AVMutableTagWriterAdapter`
 - New `HarmoniaTagWriterAdapter` (Integration Layer — wraps `AVMutableTagWriterAdapter`)
-- New `TagEditorView` sheet:
+- New `TagEditorView` sheet (Pro-only, lives in `macOS/Pro/Views/`):
   - Triggered via right-click context menu → "Edit Tags" or ⌘E
   - Pro gate: calls `showPaywallIfNeeded()` before opening sheet
   - Editable fields: title, artist, album, albumArtist, composer, genre,
     year, trackNumber, trackTotal, discNumber, discTotal, bpm, comment
-- On save: writes `TagBundle` to file via `TagWriterService`,
-  then updates `Track` in `AppState.playlists` immediately
-- `AppState.saveTagEdits(trackID:bundle:)` — coordinates write + model update
+- On save: `TagEditorView` calls `AppState.saveTagEdits(trackID:editedTrack:)`,
+  which passes the updated `Track` to `TagWriterService`, then updates
+  `AppState.playlists` immediately — HarmoniaCore types never reach AppState
+- `AppState.saveTagEdits(trackID:editedTrack:)` — coordinates write + model update
 
 ### Files
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/TagWriterService.swift`
   (new — protocol)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagWriterAdapter.swift`
-  (new — Integration Layer, wraps `AVMutableTagWriterAdapter`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/TagEditorView.swift`
-  (new)
+  (new — Integration Layer, wraps `AVMutableTagWriterAdapter`; converts `Track` → `TagBundle` internally)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
+  (new — Pro-only view)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `showTagEditor`, `tagEditorTrack`, `saveTagEdits(trackID:bundle:)`,
+  (modify — add `showTagEditor`, `tagEditorTrack`, `saveTagEdits(trackID:editedTrack:)`,
   `showTagEditorIfAllowed(trackID:)`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
   (modify — add right-click "Edit Tags" context menu item)
@@ -253,9 +265,11 @@ Test target only:
 ### Public API shape
 
 ```swift
-// TagWriterService protocol
+// TagWriterService protocol — Application Layer only; no HarmoniaCore types
 protocol TagWriterService: AnyObject {
-    func writeTags(_ bundle: TagBundle, to url: URL) async throws
+    // Accepts Track (Application Layer type).
+    // HarmoniaTagWriterAdapter converts Track → TagBundle internally.
+    func writeTags(from track: Track, to url: URL) async throws
 }
 
 // AppState additions
@@ -263,7 +277,9 @@ protocol TagWriterService: AnyObject {
 @Published var tagEditorTrack: Track? = nil
 
 func showTagEditorIfAllowed(trackID: Track.ID)
-func saveTagEdits(trackID: Track.ID, bundle: TagBundle) async
+// editedTrack carries the user's edits; AppState passes it to TagWriterService
+// and then overwrites the matching entry in playlists[]
+func saveTagEdits(trackID: Track.ID, editedTrack: Track) async
 ```
 
 ### TDD matrix
@@ -272,8 +288,8 @@ func saveTagEdits(trackID: Track.ID, bundle: TagBundle) async
 |---|---|---|---|
 | `testShowTagEditor_Free_ShowsPaywall` | `isProUnlocked == false` | `showTagEditorIfAllowed(trackID:)` | `showPaywall == true`, `showTagEditor == false` |
 | `testShowTagEditor_Pro_OpensEditor` | `isProUnlocked == true`, track in playlist | `showTagEditorIfAllowed(trackID:)` | `showTagEditor == true`, `tagEditorTrack != nil` |
-| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" in playlist | `saveTagEdits(trackID:bundle:)` with title "New" | `playlist.tracks[0].title == "New"` |
-| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:bundle:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
+| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" in playlist | `saveTagEdits(trackID:editedTrack:)` with title "New" | `playlist.tracks[0].title == "New"` |
+| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:editedTrack:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
 
 ### Done criteria
 - ✅ Tag Editor sheet opens on right-click or ⌘E for Pro users
@@ -287,9 +303,10 @@ func saveTagEdits(trackID: Track.ID, bundle: TagBundle) async
 ```
 feat(slice 9-B): add Tag Editor for basic fields (Pro)
 
-- Add TagWriterService protocol and HarmoniaTagWriterAdapter
-- Add TagEditorView: basic fields (Groups A+C from Track model)
-- Add AppState.showTagEditor, tagEditorTrack, saveTagEdits(trackID:bundle:)
+- Add TagWriterService protocol (accepts Track, not TagBundle — module boundary safe)
+- Add HarmoniaTagWriterAdapter: Integration Layer, converts Track → TagBundle internally
+- Add TagEditorView (macOS/Pro/Views/): basic fields (Groups A+C from Track model)
+- Add AppState.showTagEditor, tagEditorTrack, saveTagEdits(trackID:editedTrack:)
 - Add right-click "Edit Tags" in PlaylistView context menu
 - Add ⌘E shortcut in HarmoniaPlayerCommands (Pro-gated)
 - Pro-gate: showPaywallIfNeeded() before opening editor
@@ -317,7 +334,7 @@ Add sort fields to the Tag Editor.
   (modify — add sort fields)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagReaderAdapter.swift`
   (modify — map sort fields from `TagBundle`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/TagEditorView.swift`
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
   (modify — add Sorting tab)
 
 Test target only:
@@ -379,7 +396,7 @@ Allow Pro users to view and replace embedded album artwork in the Tag Editor.
   changes needed
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/TagEditorView.swift`
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
   (modify — add Artwork tab)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagWriterAdapter.swift`
   (modify — write `artworkData` via `AVMutableMetadataItem`)
@@ -431,7 +448,7 @@ Allow Pro users to edit lyrics via the Tag Editor.
   (modify — map `USLT` from `TagBundle`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/LyricsView.swift`
   (new — read-only static display, all tiers)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/TagEditorView.swift`
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
   (modify — add Lyrics tab)
 
 Test target only:
@@ -735,8 +752,8 @@ feat(slice 9-H): implement gapless playback (Pro)
 |---|---|---|---|
 | `testShowTagEditor_Free_ShowsPaywall` | `isProUnlocked == false` | `showTagEditorIfAllowed(trackID:)` | `showPaywall == true`, `showTagEditor == false` |
 | `testShowTagEditor_Pro_OpensEditor` | `isProUnlocked == true`, track in playlist | `showTagEditorIfAllowed(trackID:)` | `showTagEditor == true`, `tagEditorTrack != nil` |
-| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" | `saveTagEdits(trackID:bundle:)` with title "New" | `playlist.tracks[0].title == "New"` |
-| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:bundle:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
+| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" | `saveTagEdits(trackID:editedTrack:)` with title "New" | `playlist.tracks[0].title == "New"` |
+| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:editedTrack:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
 
 ---
 
