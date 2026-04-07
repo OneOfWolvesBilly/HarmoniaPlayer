@@ -720,8 +720,11 @@ struct PlaylistView: View {
             UTType.mp3,
             UTType.aiff,
             UTType.wav,
-            UTType(filenameExtension: "m4a") ?? .audio,
-            UTType(filenameExtension: "alac") ?? .audio
+            UTType(filenameExtension: "m4a")  ?? .audio,
+            UTType(filenameExtension: "alac") ?? .audio,
+            UTType(filenameExtension: "flac") ?? .audio,
+            UTType(filenameExtension: "dsf")  ?? .audio,
+            UTType(filenameExtension: "dff")  ?? .audio
         ]
         if panel.runModal() == .OK {
             Task { await appState.load(urls: panel.urls) }

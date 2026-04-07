@@ -15,7 +15,7 @@
 //  - testIntegration_CompletePlaybackFlow   : valid MP3 → .playing
 //  - testIntegration_MetadataEnrichment     : tagged MP3 → title enriched
 //  - testIntegration_CorruptFile_SetsError  : zero-byte file → lastError != nil
-//  - testIntegration_UnsupportedFormat_Free : .flac, Free → lastError == .unsupportedFormat
+//  - testIntegration_UnsupportedFormat_Free : .flac, Free → blocked at load, showPaywall == true
 //  - testIntegration_TrackSwitching         : 2 MP3s → currentTrack == track2, .playing
 //  - testIntegration_StopResetsState        : playing → stop() → .stopped, currentTime == 0
 //  - testIntegration_PauseSetsPausedState   : playing → pause() → .paused
@@ -148,20 +148,19 @@ final class IntegrationTests: XCTestCase {
         XCTAssertNotNil(sut.lastError)
     }
 
-    /// Verifies that playing a `.flac` file on the Free tier is rejected by the
-    /// format gate in `AppState.play(trackID:)` and sets `lastError`
-    /// to `.unsupportedFormat`.
+    /// Verifies that loading a `.flac` file on the Free tier is blocked at
+    /// load time: the track is not added to the playlist and the Paywall is shown.
     ///
-    /// This test exercises `AppState`'s format gating logic with a real provider
-    /// and a real file. The format gate fires before any HarmoniaCore call.
+    /// With load-time format gating, FLAC never enters the playlist so
+    /// `play()` is never reached. The observable outcome is `showPaywall == true`.
     func testIntegration_UnsupportedFormat_Free() async throws {
         let url = try bundleURL(forResource: "test_format", withExtension: "flac")
         await sut.load(urls: [url])
-        let track = sut.playlist.tracks[0]
 
-        await sut.play(trackID: track.id)
-
-        XCTAssertEqual(sut.lastError, .unsupportedFormat)
+        XCTAssertTrue(sut.playlist.tracks.isEmpty,
+                      "FLAC must not be added to playlist for Free user")
+        XCTAssertTrue(sut.showPaywall,
+                      "Paywall must be shown when Free user loads FLAC")
     }
 
     /// Verifies that switching from one track to another sets `currentTrack`

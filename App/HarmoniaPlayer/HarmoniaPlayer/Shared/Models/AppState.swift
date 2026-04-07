@@ -70,7 +70,7 @@ final class AppState: ObservableObject {
 
     /// Feature flags (derived from IAP).
     /// Exposes tier-specific capabilities used by format gating and UI.
-    let featureFlags: CoreFeatureFlags
+    private(set) var featureFlags: CoreFeatureFlags
 
     /// UndoManager for playlist operations (load, removeTrack, moveTrack).
     ///
@@ -202,6 +202,14 @@ final class AppState: ObservableObject {
     /// the files were not found on disk. Non-empty triggers a warning alert.
     @Published var skippedImportURLs: [URL] = []
 
+    /// URLs skipped during load() because they use a Pro-only format (FLAC/DSF/DFF)
+    /// and the user is on the Free tier. Non-empty triggers the Paywall sheet.
+    @Published var skippedProFormatURLs: [URL] = []
+
+    /// URLs skipped during load() because their format is not supported by
+    /// HarmoniaPlayer at any tier. Non-empty triggers an unsupported-format alert.
+    @Published var skippedUnsupportedURLs: [URL] = []
+
     // MARK: - File Info Panel
 
     /// Track currently shown in the File Info panel sheet.
@@ -289,6 +297,14 @@ final class AppState: ObservableObject {
     /// Used by `trackDidFinishPlaying()` to find the current position in the playlist
     /// when `currentTrack` has been cleared (e.g. after a failed play attempt).
     private var lastPlayedTrackID: Track.ID?
+
+    // MARK: - Format Classification
+
+    /// File extensions supported on the Free tier (and Pro tier).
+    static let freeFormats: Set<String>    = ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
+
+    /// File extensions that require the Pro tier (FLAC / DSD).
+    static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
 
     // MARK: - Polling
 
@@ -457,6 +473,7 @@ final class AppState: ObservableObject {
     func purchasePro() async throws {
         try await iapManager.purchasePro()
         isProUnlocked = iapManager.isProUnlocked
+        featureFlags = CoreFeatureFlags(iapManager: iapManager)
     }
 
     /// Refreshes Pro entitlements from the App Store via `IAPManager`.
@@ -466,6 +483,7 @@ final class AppState: ObservableObject {
     func refreshEntitlements() async {
         await iapManager.refreshEntitlements()
         isProUnlocked = iapManager.isProUnlocked
+        featureFlags = CoreFeatureFlags(iapManager: iapManager)
     }
 
     /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.
@@ -615,9 +633,11 @@ final class AppState: ObservableObject {
     }
 
     func load(urls: [URL]) async {
-        // Reset skipped list before each load so the alert re-triggers
+        // Reset skipped lists before each load so alerts re-trigger
         // even if the same files are dropped again.
-        skippedDuplicateURLs = []
+        skippedDuplicateURLs   = []
+        skippedProFormatURLs   = []
+        skippedUnsupportedURLs = []
         // Collect existing URLs to prevent duplicates within the same playlist.
         let existingURLs = Set(playlists[activePlaylistIndex].tracks.map { $0.url })
         var skipped: [URL] = []
@@ -627,6 +647,23 @@ final class AppState: ObservableObject {
                 skipped.append(url)
                 continue
             }
+
+            // Format gate: classify before any file I/O.
+            let ext          = url.pathExtension.lowercased()
+            let isProFormat  = Self.proOnlyFormats.contains(ext)
+            let isFreeFormat = Self.freeFormats.contains(ext)
+
+            if isProFormat && !featureFlags.supportsFLAC {
+                // Free user — block Pro-only format and queue Paywall.
+                skippedProFormatURLs.append(url)
+                continue
+            }
+            if !isProFormat && !isFreeFormat {
+                // Format not recognised at any tier.
+                skippedUnsupportedURLs.append(url)
+                continue
+            }
+
             do {
                 let track = try await tagReaderService.readMetadata(for: url)
                 playlists[activePlaylistIndex].tracks.append(track)
@@ -640,6 +677,10 @@ final class AppState: ObservableObject {
         }
         if !skipped.isEmpty {
             skippedDuplicateURLs = skipped
+        }
+        // Trigger Paywall if any Pro-only formats were blocked on the Free tier.
+        if !skippedProFormatURLs.isEmpty {
+            showPaywallIfNeeded()
         }
 
         // Update insertionOrder with newly added track IDs.

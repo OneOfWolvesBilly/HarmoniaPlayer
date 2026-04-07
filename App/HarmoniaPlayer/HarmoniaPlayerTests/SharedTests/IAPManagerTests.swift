@@ -119,8 +119,8 @@ final class IAPManagerTests: XCTestCase {
         XCTAssertFalse(appState.showPaywall,"showPaywall should remain false")
     }
 
-    /// testShowPaywall_WhenFreeUserPlaysFlac
-    func testShowPaywall_WhenFreeUserPlaysFlac() async throws {
+    /// testShowPaywall_WhenFreeUserLoadsFlac
+    func testShowPaywall_WhenFreeUserLoadsFlac() async throws {
         let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
         let appState = AppState(
             iapManager: MockIAPManager(isProUnlocked: false),
@@ -129,15 +129,16 @@ final class IAPManagerTests: XCTestCase {
         )
         let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
         await appState.load(urls: [flacURL])
-        guard let trackID = appState.playlist.tracks.first(where: { $0.url == flacURL })?.id else {
-            XCTFail("FLAC track not loaded"); return
-        }
-        await appState.play(trackID: trackID)
-        XCTAssertTrue(appState.showPaywall, "showPaywall should be true when Free user plays FLAC")
+
+        // Load gate blocks FLAC for Free users — track must not be in playlist.
+        XCTAssertTrue(appState.playlist.tracks.isEmpty,
+                      "FLAC must not be added to playlist for Free user")
+        XCTAssertTrue(appState.showPaywall,
+                      "showPaywall should be true when Free user loads FLAC")
     }
 
-    /// testShowPaywall_NotSet_WhenProUserPlaysFlac
-    func testShowPaywall_NotSet_WhenProUserPlaysFlac() async throws {
+    /// testShowPaywall_NotSet_WhenProUserLoadsFlac
+    func testShowPaywall_NotSet_WhenProUserLoadsFlac() async throws {
         let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
         let appState = AppState(
             iapManager: MockIAPManager(isProUnlocked: true),
@@ -146,10 +147,11 @@ final class IAPManagerTests: XCTestCase {
         )
         let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
         await appState.load(urls: [flacURL])
-        guard let trackID = appState.playlist.tracks.first(where: { $0.url == flacURL })?.id else {
-            XCTFail("FLAC track not loaded"); return
-        }
-        await appState.play(trackID: trackID)
-        XCTAssertFalse(appState.showPaywall, "showPaywall should remain false for Pro user")
+
+        // Pro user — FLAC must be added to playlist, no Paywall.
+        XCTAssertFalse(appState.playlist.tracks.isEmpty,
+                       "FLAC must be added to playlist for Pro user")
+        XCTAssertFalse(appState.showPaywall,
+                       "showPaywall should remain false for Pro user")
     }
 }

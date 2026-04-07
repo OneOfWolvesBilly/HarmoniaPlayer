@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C0819FEF2F1D539C005ABA46 /* HarmoniaCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0819FEE2F1D539C005ABA46 /* HarmoniaCore */; };
+		C0B472CF2F81FA4400F46865 /* HarmoniaPlayer.storekit in Resources */ = {isa = PBXBuildFile; fileRef = C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,6 +31,7 @@
 /* Begin PBXFileReference section */
 		C07D74D72F3DA2B5007782C0 /* HarmoniaPlayerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarmoniaPlayerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A47A2C2F6981E400022CC3 /* HarmoniaPlayerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarmoniaPlayerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HarmoniaPlayer.storekit; sourceTree = "<group>"; };
 		C0FCFCF62EF669DA006DE114 /* HarmoniaPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HarmoniaPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -80,6 +82,7 @@
 		C0FCFCED2EF669DA006DE114 = {
 			isa = PBXGroup;
 			children = (
+				C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */,
 				C07D74D82F3DA2B5007782C0 /* HarmoniaPlayerTests */,
 				C0A47A2D2F6981E400022CC3 /* HarmoniaPlayerUITests */,
 				C0FCFCF72EF669DA006DE114 /* Products */,
@@ -258,6 +261,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C0B472CF2F81FA4400F46865 /* HarmoniaPlayer.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

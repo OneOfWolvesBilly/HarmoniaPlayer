@@ -69,6 +69,21 @@ struct ContentView: View {
             PaywallView()
                 .environmentObject(appState)
         }
+        // Unsupported format alert — shown when dropped files use an unrecognised format
+        .alert(
+            Text(L("alert_unsupported_format_title")),
+            isPresented: Binding(
+                get: { !appState.skippedUnsupportedURLs.isEmpty },
+                set: { if !$0 { appState.skippedUnsupportedURLs = [] } }
+            )
+        ) {
+            Button("OK") { appState.skippedUnsupportedURLs = [] }
+        } message: {
+            let names = appState.skippedUnsupportedURLs
+                .map { $0.lastPathComponent }
+                .joined(separator: "\n")
+            Text(String(format: L("alert_unsupported_format_body"), names))
+        }
         // Auto-dismiss alert for failedToOpenFile (3 seconds)
         .onChange(of: appState.showFileNotFoundAlert) {
             guard appState.showFileNotFoundAlert else { return }
