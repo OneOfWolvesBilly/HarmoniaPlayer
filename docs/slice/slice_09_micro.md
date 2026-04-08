@@ -94,13 +94,21 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
 - `AppState.showPaywallIfNeeded() -> Bool` — returns `true` and sets
   `showPaywall = true` when `!isProUnlocked`; returns `false` otherwise
 - `AppState.featureFlags` changed to `private(set) var` — rebuilt after
-  `purchasePro()` and `refreshEntitlements()` so load gate reflects updated tier
-- Load-time format gate in `load(urls:)`:
-  - Free tier: FLAC/DSF/DFF blocked, `skippedProFormatURLs` set, Paywall shown
+  `purchasePro()` and `refreshEntitlements()` so play gate reflects updated tier
+- Format handling in `load(urls:)`:
+  - All tiers: FLAC/DSF/DFF added to playlist; PlaylistView shows strikethrough
+    for Free users; `play(trackID:)` presents Paywall when user attempts playback
   - All tiers: unrecognised formats blocked, `skippedUnsupportedURLs` set, alert shown
   - `AppState.freeFormats` / `proOnlyFormats` static sets for classification
+- `AppState.paywallDismissedThisSession: Bool` — session-only flag; when `true`,
+  `trackDidFinishPlaying()` silently skips Pro-format tracks during auto-play;
+  manual selection always shows Paywall regardless
+- `PlaylistView`: Pro-format tracks show strikethrough + tertiary colour for Free users
 - `PlaylistView.openFilePicker()`: FLAC/DSF/DFF always visible in Open panel
-  regardless of tier; load gate handles Paywall for Free users
+- `PaywallView`: checkbox "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒"
+  (default checked); sets `paywallDismissedThisSession` on Maybe Later
+- `MiniPlayerView`: Paywall sheet + track list popover with lock icon for
+  format-gated tracks
 - `ContentView`: unsupported format alert binding
 
 ### Files
@@ -115,11 +123,15 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift`
   (modify — Paywall sheet, unsupported format alert)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
-  (modify — Open panel always includes FLAC/DSF/DFF)
+  (modify — Open panel always includes FLAC/DSF/DFF; strikethrough for
+  Pro-format tracks when Free tier)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/MiniPlayerView.swift`
+  (modify — Paywall sheet; track list popover with lock icon for format-gated tracks)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — `showPaywall`, `showPaywallIfNeeded()`, `featureFlags` var,
-  `freeFormats`/`proOnlyFormats`, `skippedProFormatURLs`, `skippedUnsupportedURLs`,
-  load gate in `load(urls:)`, `purchasePro()`, `refreshEntitlements()`)
+  (modify — `showPaywall`, `showPaywallIfNeeded()`, `paywallDismissedThisSession`,
+  `featureFlags` var, `freeFormats`/`proOnlyFormats`, `skippedUnsupportedURLs`,
+  load behaviour in `load(urls:)`, `trackDidFinishPlaying()` silent skip,
+  `purchasePro()`, `refreshEntitlements()`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
   (modify — use `StoreKitIAPManager` in production)
 - `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings`
@@ -159,7 +171,7 @@ final class StoreKitIAPManager: IAPManager {
 
 // AppState additions
 @Published var showPaywall: Bool = false
-@Published var skippedProFormatURLs: [URL] = []
+@Published var paywallDismissedThisSession: Bool = false   // session-only, not persisted
 @Published var skippedUnsupportedURLs: [URL] = []
 
 static let freeFormats: Set<String>    = ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
@@ -178,46 +190,61 @@ func refreshEntitlements() async
 | `testIsProUnlocked_DefaultIsFalse` | Fresh `MockIAPManager` | read `isProUnlocked` | `false` |
 | `testShowPaywallIfNeeded_ReturnsTrueForFreeUser` | `isProUnlocked == false` | `showPaywallIfNeeded()` | returns `true`, `showPaywall == true` |
 | `testShowPaywallIfNeeded_ReturnsFalseForProUser` | `isProUnlocked == true` | `showPaywallIfNeeded()` | returns `false`, `showPaywall == false` |
-| `testShowPaywall_WhenFreeUserLoadsFlac` | `isProUnlocked == false`, `.flac` file | `load(urls:)` | `showPaywall == true`, playlist empty |
-| `testShowPaywall_NotSet_WhenProUserLoadsFlac` | `isProUnlocked == true`, `.flac` file | `load(urls:)` | `showPaywall == false`, track added |
-| `testLoadGate_FLAC_FreeTier_BlockedAndShowsPaywall` | Free, `.flac` URL | `load(urls:)` | playlist empty, `showPaywall == true` |
-| `testLoadGate_FLAC_ProTier_AddedToPlaylist` | Pro, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
-| `testLoadGate_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
+| `testLoad_FLAC_FreeTier_AddsToPlaylist` | `isProUnlocked == false`, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1`, `showPaywall == false` |
+| `testLoad_FLAC_ProTier_AddsToPlaylist` | `isProUnlocked == true`, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
+| `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
+| `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
+| `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `fakePlaybackService.loadCallCount == 0` |
+| `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
+| `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, `paywallDismissedThisSession == true`, playlist [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], `showPaywall == false` |
+| `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, `paywallDismissedThisSession == false`, playlist [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
 
 ### Done criteria
 - ✅ `StoreKitIAPManager` fetches product and completes purchase via StoreKit 2
 - ✅ `Transaction.updates` listener running throughout app lifecycle; handles Ask to Buy and background purchases
 - ✅ `isProUnlocked` persists across launches after purchase
-- ✅ `featureFlags` rebuilt after purchase/restore so load gate reflects updated tier
-- ✅ FLAC/DSF/DFF visible in Open panel for all tiers
-- ✅ Free user selects or drops FLAC/DSF/DFF → Paywall shown, track not added
-- ✅ Pro user selects or drops FLAC/DSF/DFF → track added normally
+- ✅ `featureFlags` rebuilt after purchase/restore so play gate reflects updated tier
+- ✅ FLAC/DSF/DFF visible in Open panel for all tiers; added to playlist for all tiers
+- ✅ Free user drops/imports FLAC → added to playlist with strikethrough
+- ✅ Free user plays FLAC → Paywall shown, track not played
+- ✅ Pro user plays FLAC → plays normally, no Paywall
 - ✅ Unrecognised format → unsupported format alert, track not added
 - ✅ "Restore Purchases" correctly restores prior purchase
-- ✅ All IAPManagerTests green
+- ✅ PaywallView checkbox sets `paywallDismissedThisSession` on Maybe Later
+- ✅ Auto-play silently skips Pro-format tracks when `paywallDismissedThisSession == true`
+- ✅ MiniPlayerView shows Paywall sheet and track list popover
+- ✅ All IAPManagerTests and AppStateFormatGatingTests green
 - ✅ All Slice 1–8 tests still green
 
 ### Commit message
 ```
-feat(slice 9-A): implement StoreKit 2 IAP, Paywall UI, and load-time format gate
+feat(slice 9-A): implement StoreKit 2 IAP, Paywall UI, and Pro-format display
 
 - Add IAPError enum and extend IAPManager protocol: refreshEntitlements(), purchasePro()
 - Add StoreKitIAPManager: StoreKit 2 purchase and restore, UserDefaults cache
 - Add StoreKitIAPManager.updatesTask: observe Transaction.updates for Ask to Buy,
   Family Sharing, and background purchase completion (required for App Store approval)
-- Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases, Maybe Later
+- Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases, Maybe Later,
+  session-skip checkbox (default checked)
 - AppState.showPaywall and showPaywallIfNeeded()
+- AppState.paywallDismissedThisSession: session-only flag for silent auto-play skip
 - AppState.featureFlags: private(set) var, rebuilt after purchasePro/refreshEntitlements
-- AppState.load(urls:): block Pro-only formats for Free users, block unsupported formats
+- AppState.load(urls:): allow FLAC/DSF/DFF into playlist for all tiers;
+  only truly unsupported formats are blocked
+- AppState.trackDidFinishPlaying(): silently skip format-gated tracks when
+  paywallDismissedThisSession is true (all repeat modes and shuffle)
 - AppState.freeFormats / proOnlyFormats static format classification sets
-- PlaylistView.openFilePicker(): always show FLAC/DSF/DFF; load gate handles Paywall
+- PlaylistView: strikethrough and tertiary colour for Pro-format tracks on Free tier;
+  Open panel always shows FLAC/DSF/DFF
+- MiniPlayerView: Paywall sheet; track list popover with lock icon for format-gated tracks
 - ContentView: Paywall sheet, unsupported format alert
-- Localizable (en/zh-Hant/ja): alert_unsupported_format_title/body
+- Localizable (en/zh-Hant/ja): alert_unsupported_format_title/body,
+  paywall_skip_session_checkbox
 - HarmoniaPlayerApp: switch to StoreKitIAPManager, refresh entitlements on launch
 - MockIAPManager: PurchaseResult enum, mutable isProUnlocked, call tracking
-- IAPManagerTests: @MainActor, bundleURL helper, 5 new test cases
-- AppStateFormatGatingTests: replace play-gate FLAC+Free with load-gate tests (10 cases)
-- IntegrationTests: update UnsupportedFormat_Free for load-gate behaviour
+- IAPManagerTests: @MainActor, bundleURL helper, Pro unlock flow tests
+- AppStateFormatGatingTests: rewritten to cover new load + play + auto-play behaviour
+- IntegrationTests: update UnsupportedFormat_Free for new load behaviour
 ```
 
 ---
@@ -741,8 +768,14 @@ feat(slice 9-H): implement gapless playback (Pro)
 | `testIsProUnlocked_DefaultIsFalse` | Fresh `MockIAPManager` | read `isProUnlocked` | `false` |
 | `testShowPaywallIfNeeded_ReturnsTrueForFreeUser` | `isProUnlocked == false` | `showPaywallIfNeeded()` | returns `true`, `showPaywall == true` |
 | `testShowPaywallIfNeeded_ReturnsFalseForProUser` | `isProUnlocked == true` | `showPaywallIfNeeded()` | returns `false`, `showPaywall == false` |
-| `testShowPaywall_WhenFreeUserPlaysFlac` | `isProUnlocked == false`, `.flac` track | `play(trackID:)` | `showPaywall == true` |
-| `testShowPaywall_NotSet_WhenProUserPlaysFlac` | `isProUnlocked == true`, `.flac` track | `play(trackID:)` | `showPaywall == false` |
+| `testLoad_FLAC_FreeTier_AddsToPlaylist` | Free, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1`, `showPaywall == false` |
+| `testLoad_FLAC_ProTier_AddsToPlaylist` | Pro, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
+| `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
+| `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
+| `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `loadCallCount == 0` |
+| `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
+| `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, dismissed, [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], no Paywall |
+| `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, not dismissed, [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
 
 ---
 
