@@ -60,6 +60,15 @@ final class StoreKitIAPManager: IAPManager {
 
     private let defaults: UserDefaults
 
+    // MARK: - Transaction observer
+
+    /// Long-running task that processes incoming transactions from the App Store.
+    ///
+    /// Handles purchases completed outside the app (Ask to Buy approvals,
+    /// Family Sharing, purchases made on another device). Started in `init()`
+    /// and cancelled in `deinit`. Required by App Store review guidelines.
+    private var updatesTask: Task<Void, Never>?
+
     // MARK: - Initialization
 
     /// Creates a `StoreKitIAPManager`.
@@ -69,6 +78,29 @@ final class StoreKitIAPManager: IAPManager {
         self.defaults = userDefaults
         // Fast-read cache; refreshed async by refreshEntitlements() at launch.
         self.isProUnlocked = userDefaults.bool(forKey: Self.defaultsKey)
+        // Start listening for incoming transactions immediately so purchases
+        // completed outside the app (Ask to Buy, Family Sharing, background
+        // purchases) are handled throughout the app lifecycle.
+        updatesTask = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+                await self.handleTransactionUpdate(result)
+            }
+        }
+    }
+
+    deinit {
+        updatesTask?.cancel()
+    }
+
+    // MARK: - Private helpers
+
+    /// Handles a single transaction update from `Transaction.updates`.
+    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
+        guard case .verified(let transaction) = result,
+              transaction.productID == Self.productID else { return }
+        isProUnlocked = true
+        await transaction.finish()
     }
 
     // MARK: - IAPManager
