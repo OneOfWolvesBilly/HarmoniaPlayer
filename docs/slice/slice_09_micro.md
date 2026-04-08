@@ -103,12 +103,19 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
 - `AppState.paywallDismissedThisSession: Bool` — session-only flag; when `true`,
   `trackDidFinishPlaying()` silently skips Pro-format tracks during auto-play;
   manual selection always shows Paywall regardless
+- `AppState.play(trackID:)` format gate: posts `bringMainWindowToFront` notification
+  before `showPaywallIfNeeded()`; does NOT set `lastError` to avoid double modal
 - `PlaylistView`: Pro-format tracks show strikethrough + tertiary colour for Free users
 - `PlaylistView.openFilePicker()`: FLAC/DSF/DFF always visible in Open panel
-- `PaywallView`: checkbox "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒"
+- `PaywallView`: add `L()` localisation helper; checkbox
+  "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒"
   (default checked); sets `paywallDismissedThisSession` on Maybe Later
-- `MiniPlayerView`: Paywall sheet + track list popover with lock icon for
-  format-gated tracks
+- `MiniPlayerView`: track list popover with lock icon for format-gated tracks;
+  listens for `bringMainWindowToFront` notification to close self so Paywall
+  appears on main window
+- `HarmoniaPlayerCommands`: add `bringMainWindowToFront` `Notification.Name`
+- `HarmoniaPlayerApp`: `.defaultLaunchBehavior(.suppressed)` + `didFinishLaunching`
+  observer to prevent MiniPlayer auto-restoration on launch
 - `ContentView`: unsupported format alert binding
 
 ### Files
@@ -126,14 +133,18 @@ Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
   (modify — Open panel always includes FLAC/DSF/DFF; strikethrough for
   Pro-format tracks when Free tier)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/MiniPlayerView.swift`
-  (modify — Paywall sheet; track list popover with lock icon for format-gated tracks)
+  (modify — track list popover with lock icon for format-gated tracks;
+  listen for `bringMainWindowToFront` notification to close self)
+- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
+  (modify — add `bringMainWindowToFront` Notification.Name)
 - `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
   (modify — `showPaywall`, `showPaywallIfNeeded()`, `paywallDismissedThisSession`,
   `featureFlags` var, `freeFormats`/`proOnlyFormats`, `skippedUnsupportedURLs`,
   load behaviour in `load(urls:)`, `trackDidFinishPlaying()` silent skip,
-  `purchasePro()`, `refreshEntitlements()`)
+  format gate posts `bringMainWindowToFront`, `purchasePro()`, `refreshEntitlements()`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
-  (modify — use `StoreKitIAPManager` in production)
+  (modify — use `StoreKitIAPManager` in production; `.defaultLaunchBehavior(.suppressed)`;
+  `didFinishLaunching` observer closes restored MiniPlayer)
 - `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings`
   (modify — add `alert_unsupported_format_title/body`)
 - `App/HarmoniaPlayer/HarmoniaPlayer/zh-Hant.lproj/Localizable.strings`
@@ -179,6 +190,11 @@ static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
 
 @discardableResult
 func showPaywallIfNeeded() -> Bool
+
+// Notification posted by AppState format gate; MiniPlayerView listens to close self
+extension Notification.Name {
+    static let bringMainWindowToFront = Notification.Name("harmoniaPlayer.bringMainWindowToFront")
+}
 func purchasePro() async throws
 func refreshEntitlements() async
 ```
@@ -195,6 +211,8 @@ func refreshEntitlements() async
 | `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
 | `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
 | `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `fakePlaybackService.loadCallCount == 0` |
+| `testPlayGate_FLAC_FreeTier_DoesNotSetLastError` | Free, FLAC in playlist | `play(trackID:)` | `lastError == nil` |
+| `testPlayGate_FLAC_FreeTier_PostsBringMainWindowToFrontNotification` | Free, FLAC in playlist | `play(trackID:)` | `bringMainWindowToFront` notification received |
 | `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
 | `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, `paywallDismissedThisSession == true`, playlist [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], `showPaywall == false` |
 | `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, `paywallDismissedThisSession == false`, playlist [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
@@ -206,46 +224,17 @@ func refreshEntitlements() async
 - ✅ `featureFlags` rebuilt after purchase/restore so play gate reflects updated tier
 - ✅ FLAC/DSF/DFF visible in Open panel for all tiers; added to playlist for all tiers
 - ✅ Free user drops/imports FLAC → added to playlist with strikethrough
-- ✅ Free user plays FLAC → Paywall shown, track not played
+- ✅ Free user plays FLAC → MiniPlayer closes, Paywall shown on main window, track not played
+- ✅ format gate does not set `lastError`; no double modal
 - ✅ Pro user plays FLAC → plays normally, no Paywall
 - ✅ Unrecognised format → unsupported format alert, track not added
 - ✅ "Restore Purchases" correctly restores prior purchase
 - ✅ PaywallView checkbox sets `paywallDismissedThisSession` on Maybe Later
 - ✅ Auto-play silently skips Pro-format tracks when `paywallDismissedThisSession == true`
-- ✅ MiniPlayerView shows Paywall sheet and track list popover
+- ✅ MiniPlayerView closes on `bringMainWindowToFront`; track list popover with lock icon
+- ✅ MiniPlayer does not auto-restore on launch
 - ✅ All IAPManagerTests and AppStateFormatGatingTests green
 - ✅ All Slice 1–8 tests still green
-
-### Commit message
-```
-feat(slice 9-A): implement StoreKit 2 IAP, Paywall UI, and Pro-format display
-
-- Add IAPError enum and extend IAPManager protocol: refreshEntitlements(), purchasePro()
-- Add StoreKitIAPManager: StoreKit 2 purchase and restore, UserDefaults cache
-- Add StoreKitIAPManager.updatesTask: observe Transaction.updates for Ask to Buy,
-  Family Sharing, and background purchase completion (required for App Store approval)
-- Add PaywallView: Pro feature list, Unlock Pro, Restore Purchases, Maybe Later,
-  session-skip checkbox (default checked)
-- AppState.showPaywall and showPaywallIfNeeded()
-- AppState.paywallDismissedThisSession: session-only flag for silent auto-play skip
-- AppState.featureFlags: private(set) var, rebuilt after purchasePro/refreshEntitlements
-- AppState.load(urls:): allow FLAC/DSF/DFF into playlist for all tiers;
-  only truly unsupported formats are blocked
-- AppState.trackDidFinishPlaying(): silently skip format-gated tracks when
-  paywallDismissedThisSession is true (all repeat modes and shuffle)
-- AppState.freeFormats / proOnlyFormats static format classification sets
-- PlaylistView: strikethrough and tertiary colour for Pro-format tracks on Free tier;
-  Open panel always shows FLAC/DSF/DFF
-- MiniPlayerView: Paywall sheet; track list popover with lock icon for format-gated tracks
-- ContentView: Paywall sheet, unsupported format alert
-- Localizable (en/zh-Hant/ja): alert_unsupported_format_title/body,
-  paywall_skip_session_checkbox
-- HarmoniaPlayerApp: switch to StoreKitIAPManager, refresh entitlements on launch
-- MockIAPManager: PurchaseResult enum, mutable isProUnlocked, call tracking
-- IAPManagerTests: @MainActor, bundleURL helper, Pro unlock flow tests
-- AppStateFormatGatingTests: rewritten to cover new load + play + auto-play behaviour
-- IntegrationTests: update UnsupportedFormat_Free for new load behaviour
-```
 
 ---
 
@@ -326,20 +315,6 @@ func saveTagEdits(trackID: Track.ID, editedTrack: Track) async
 - ✅ TagWriterServiceTests green
 - ✅ All Slice 1–8 tests still green
 
-### Commit message
-```
-feat(slice 9-B): add Tag Editor for basic fields (Pro)
-
-- Add TagWriterService protocol (accepts Track, not TagBundle — module boundary safe)
-- Add HarmoniaTagWriterAdapter: Integration Layer, converts Track → TagBundle internally
-- Add TagEditorView (macOS/Pro/Views/): basic fields (Groups A+C from Track model)
-- Add AppState.showTagEditor, tagEditorTrack, saveTagEdits(trackID:editedTrack:)
-- Add right-click "Edit Tags" in PlaylistView context menu
-- Add ⌘E shortcut in HarmoniaPlayerCommands (Pro-gated)
-- Pro-gate: showPaywallIfNeeded() before opening editor
-- Add TagWriterServiceTests
-```
-
 ---
 
 ## Slice 9-C: Tag Editor — Sort Fields
@@ -395,16 +370,6 @@ var sortComposer: String     // TSOC — default ""
 - ✅ TrackTests green
 - ✅ All Slice 1–8 tests still green
 
-### Commit message
-```
-feat(slice 9-C): add sort fields to Tag Editor
-
-- Add sortTitle, sortArtist, sortAlbum, sortAlbumArtist, sortComposer to Track
-- Map sort fields in HarmoniaTagReaderAdapter from TagBundle
-- Add Sorting tab to TagEditorView
-- Add sort field tests to TrackTests
-```
-
 ---
 
 ## Slice 9-D: Tag Editor — Artwork
@@ -441,14 +406,6 @@ Allow Pro users to view and replace embedded album artwork in the Tag Editor.
 - ✅ Remove Artwork clears the embedded image
 - ✅ Save writes artwork correctly to file
 - ✅ All Slice 1–8 tests still green
-
-### Commit message
-```
-feat(slice 9-D): add artwork tab to Tag Editor
-
-- Add Artwork tab to TagEditorView: display, add, remove artwork
-- Implement artworkData write in HarmoniaTagWriterAdapter
-```
 
 ---
 
@@ -505,17 +462,6 @@ var lyrics: String?   // USLT — default nil
 - ✅ Edit and save via Tag Editor writes USLT back to file (Pro only)
 - ✅ TrackTests green
 - ✅ All Slice 1–8 tests still green
-
-### Commit message
-```
-feat(slice 9-E): add USLT lyrics display and editing
-
-- Add Track.lyrics (USLT tag, all tiers)
-- Map USLT in HarmoniaTagReaderAdapter from TagBundle
-- Add LyricsView: read-only static display (all tiers)
-- Add Lyrics tab to TagEditorView (write via TagWriterService, Pro-gated)
-- Add lyrics field tests to TrackTests
-```
 
 ---
 
@@ -586,17 +532,6 @@ struct LRCParser {
 - ✅ LRCParserTests green
 - ✅ All Slice 1–8 tests still green
 
-### Commit message
-```
-feat(slice 9-F): add LRC synchronised lyrics display (Pro)
-
-- Add LRCLine model and LRCParser (parse [mm:ss.xx] format)
-- Add AppState.lrcLines: load from sidecar .lrc in play(trackID:)
-- Extend LyricsView: synchronised mode with auto-scroll and line highlight
-- Pro-gate: showPaywallIfNeeded() before enabling synchronised mode
-- Add LRCParserTests (5 cases)
-```
-
 ---
 
 ## Slice 9-G: MPNowPlayingInfoCenter + MPRemoteCommandCenter (All Tiers)
@@ -664,16 +599,6 @@ protocol NowPlayingService: AnyObject {
 - ✅ Now Playing cleared when playback stops
 - ✅ All Slice 1–8 tests still green
 
-### Commit message
-```
-feat(slice 9-G): integrate MPNowPlayingInfoCenter and MPRemoteCommandCenter
-
-- Add NowPlayingService protocol and MPNowPlayingAdapter
-- Wire update() calls in AppState: play, pause, stop, polling loop
-- Register remote commands: play, pause, next, prev, seek
-- Inject MPNowPlayingAdapter in HarmoniaPlayerApp
-```
-
 ---
 
 ## Slice 9-H: Gapless Playback (Pro)
@@ -737,18 +662,6 @@ private func preloadNextTrackIfNeeded() async
 - ✅ AppStateGaplessTests green
 - ✅ All Slice 1–8 tests still green
 
-### Commit message
-```
-feat(slice 9-H): implement gapless playback (Pro)
-
-- Add CoreFeatureFlags.supportsGapless
-- Add CoreFactory.makeGaplessPlaybackServicePair(): shared AVAudioEngineOutputAdapter
-- Add AppState gapless preload logic with 5 s threshold
-- preloadNextTrackIfNeeded() triggered from polling loop
-- Pro-gate: Free tier uses single PlaybackService unchanged
-- Add AppStateGaplessTests (5 cases)
-```
-
 ---
 
 ## Slice 9 TDD Matrix
@@ -773,6 +686,8 @@ feat(slice 9-H): implement gapless playback (Pro)
 | `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
 | `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
 | `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `loadCallCount == 0` |
+| `testPlayGate_FLAC_FreeTier_DoesNotSetLastError` | Free, FLAC in playlist | `play(trackID:)` | `lastError == nil` |
+| `testPlayGate_FLAC_FreeTier_PostsBringMainWindowToFrontNotification` | Free, FLAC in playlist | `play(trackID:)` | notification received |
 | `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
 | `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, dismissed, [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], no Paywall |
 | `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, not dismissed, [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
