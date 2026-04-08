@@ -202,10 +202,6 @@ final class AppState: ObservableObject {
     /// the files were not found on disk. Non-empty triggers a warning alert.
     @Published var skippedImportURLs: [URL] = []
 
-    /// URLs skipped during load() because they use a Pro-only format (FLAC/DSF/DFF)
-    /// and the user is on the Free tier. Non-empty triggers the Paywall sheet.
-    @Published var skippedProFormatURLs: [URL] = []
-
     /// URLs skipped during load() because their format is not supported by
     /// HarmoniaPlayer at any tier. Non-empty triggers an unsupported-format alert.
     @Published var skippedUnsupportedURLs: [URL] = []
@@ -227,6 +223,16 @@ final class AppState: ObservableObject {
     /// triggers a Pro-only action. The sheet binding resets it to `false`
     /// on dismissal.
     @Published var showPaywall: Bool = false
+
+    /// Whether the user has chosen to silently skip Pro-only format tracks
+    /// during auto-play for this session.
+    ///
+    /// Set to `true` when the user dismisses the Paywall with the
+    /// "skip session" checkbox checked. Resets to `false` on every app
+    /// launch (not persisted). When `true`, `trackDidFinishPlaying()`
+    /// silently advances past format-gated tracks without showing the Paywall.
+    /// Manual track selection always shows the Paywall regardless of this flag.
+    @Published var paywallDismissedThisSession: Bool = false
 
     // MARK: - Settings
 
@@ -651,28 +657,25 @@ final class AppState: ObservableObject {
         // Reset skipped lists before each load so alerts re-trigger
         // even if the same files are dropped again.
         skippedDuplicateURLs   = []
-        skippedProFormatURLs   = []
         skippedUnsupportedURLs = []
         // Collect existing URLs to prevent duplicates within the same playlist.
         let existingURLs = Set(playlists[activePlaylistIndex].tracks.map { $0.url })
         var skipped: [URL] = []
-        var addedIDs: [Track.ID] = []
+        var addedIDs: [Track.ID] = [Track.ID]()
         for url in urls {
             if !allowDuplicateTracks && existingURLs.contains(url) {
                 skipped.append(url)
                 continue
             }
 
-            // Format gate: classify before any file I/O.
+            // Format classification: reject completely unrecognised formats.
+            // Pro-only formats (FLAC/DSF/DFF) are allowed into the playlist for
+            // all tiers — PlaylistView shows them with strikethrough for Free users,
+            // and play(trackID:) presents the Paywall when the user tries to play them.
             let ext          = url.pathExtension.lowercased()
             let isProFormat  = Self.proOnlyFormats.contains(ext)
             let isFreeFormat = Self.freeFormats.contains(ext)
 
-            if isProFormat && !featureFlags.supportsFLAC {
-                // Free user — block Pro-only format and queue Paywall.
-                skippedProFormatURLs.append(url)
-                continue
-            }
             if !isProFormat && !isFreeFormat {
                 // Format not recognised at any tier.
                 skippedUnsupportedURLs.append(url)
@@ -692,10 +695,6 @@ final class AppState: ObservableObject {
         }
         if !skipped.isEmpty {
             skippedDuplicateURLs = skipped
-        }
-        // Trigger Paywall if any Pro-only formats were blocked on the Free tier.
-        if !skippedProFormatURLs.isEmpty {
-            showPaywallIfNeeded()
         }
 
         // Update insertionOrder with newly added track IDs.
@@ -1245,12 +1244,13 @@ final class AppState: ObservableObject {
         }
 
         // Step 2b: Format gate — reject Pro-only formats on the Free tier.
+        // Post bringMainWindowToFront so MiniPlayerView closes itself and brings
+        // the main window to front before the Paywall sheet appears.
         let ext = track.url.pathExtension.lowercased()
         if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
+            NotificationCenter.default.post(name: .bringMainWindowToFront, object: nil)
             showPaywallIfNeeded()
             currentTrack = nil
-            lastError = .unsupportedFormat
-            playbackState = .error(.unsupportedFormat)
             return
         }
 
@@ -1443,13 +1443,23 @@ final class AppState: ObservableObject {
         switch repeatMode {
         case .off:
             if isShuffled {
-                // Shuffle mode: advance through queue skipping inaccessible tracks.
+                // Shuffle mode: advance through queue skipping inaccessible tracks
+                // and format-gated tracks (when paywallDismissedThisSession is true).
                 var skipped: [String] = []
                 var nextIndex = shuffleQueueIndex + 1
                 while nextIndex < shuffleQueue.count {
                     guard let trackID = shuffleQueue[safe: nextIndex],
                           let next = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
                     else { nextIndex += 1; continue }
+
+                    // Silently skip format-gated tracks if user dismissed paywall this session.
+                    let nextExt = next.url.pathExtension.lowercased()
+                    let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                    if isFormatGated && paywallDismissedThisSession {
+                        nextIndex += 1
+                        continue
+                    }
+
                     if next.isAccessible {
                         shuffleQueueIndex = nextIndex
                         await play(trackID: next.id)
@@ -1478,13 +1488,23 @@ final class AppState: ObservableObject {
                 shuffleQueue = []
                 shuffleQueueIndex = 0
             } else {
-                // Normal mode: skip inaccessible tracks, collect names, show one popup, stop at end.
+                // Normal mode: skip inaccessible tracks and format-gated tracks
+                // (when paywallDismissedThisSession is true).
                 guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
                 else { return }
                 var skipped: [String] = []
                 var nextIndex = currentIndex + 1
                 while nextIndex < playlists[activePlaylistIndex].tracks.count {
                     let next = playlists[activePlaylistIndex].tracks[nextIndex]
+
+                    // Silently skip format-gated tracks if user dismissed paywall this session.
+                    let nextExt = next.url.pathExtension.lowercased()
+                    let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                    if isFormatGated && paywallDismissedThisSession {
+                        nextIndex += 1
+                        continue
+                    }
+
                     if next.isAccessible {
                         await play(trackID: next.id)
                         if case .error(.failedToOpenFile) = playbackState {
@@ -1502,7 +1522,7 @@ final class AppState: ObservableObject {
                     }
                     nextIndex += 1
                 }
-                // No more accessible tracks — show popup and stop.
+                // No more playable tracks — show popup and stop.
                 if !skipped.isEmpty {
                     skippedInaccessibleNames = skipped
                     showFileNotFoundAlert = true
@@ -1511,7 +1531,8 @@ final class AppState: ObservableObject {
                 currentTrack = nil
             }
         case .all:
-            // Wrap around skipping inaccessible tracks, collect names, show one popup.
+            // Wrap around skipping inaccessible tracks and format-gated tracks
+            // (when paywallDismissedThisSession is true).
             guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
             else { return }
             let count = playlists[activePlaylistIndex].tracks.count
@@ -1520,6 +1541,16 @@ final class AppState: ObservableObject {
             var skipped: [String] = []
             while attempts < count {
                 let next = playlists[activePlaylistIndex].tracks[nextIndex]
+
+                // Silently skip format-gated tracks if user dismissed paywall this session.
+                let nextExt = next.url.pathExtension.lowercased()
+                let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                if isFormatGated && paywallDismissedThisSession {
+                    nextIndex = (nextIndex + 1) % count
+                    attempts += 1
+                    continue
+                }
+
                 if next.isAccessible {
                     await play(trackID: next.id)
                     if case .error(.failedToOpenFile) = playbackState {

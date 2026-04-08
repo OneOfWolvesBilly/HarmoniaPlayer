@@ -15,7 +15,7 @@
 //  - testIntegration_CompletePlaybackFlow   : valid MP3 → .playing
 //  - testIntegration_MetadataEnrichment     : tagged MP3 → title enriched
 //  - testIntegration_CorruptFile_SetsError  : zero-byte file → lastError != nil
-//  - testIntegration_UnsupportedFormat_Free : .flac, Free → blocked at load, showPaywall == true
+//  - testIntegration_UnsupportedFormat_Free : .flac, Free → added to playlist, showPaywall == false at load
 //  - testIntegration_TrackSwitching         : 2 MP3s → currentTrack == track2, .playing
 //  - testIntegration_StopResetsState        : playing → stop() → .stopped, currentTime == 0
 //  - testIntegration_PauseSetsPausedState   : playing → pause() → .paused
@@ -148,19 +148,17 @@ final class IntegrationTests: XCTestCase {
         XCTAssertNotNil(sut.lastError)
     }
 
-    /// Verifies that loading a `.flac` file on the Free tier is blocked at
-    /// load time: the track is not added to the playlist and the Paywall is shown.
-    ///
-    /// With load-time format gating, FLAC never enters the playlist so
-    /// `play()` is never reached. The observable outcome is `showPaywall == true`.
+    /// Verifies that loading a `.flac` file on the Free tier adds it to the
+    /// playlist with no Paywall shown at load time.
+    /// The Paywall is shown only when the user attempts to play the track.
     func testIntegration_UnsupportedFormat_Free() async throws {
         let url = try bundleURL(forResource: "test_format", withExtension: "flac")
         await sut.load(urls: [url])
 
-        XCTAssertTrue(sut.playlist.tracks.isEmpty,
-                      "FLAC must not be added to playlist for Free user")
-        XCTAssertTrue(sut.showPaywall,
-                      "Paywall must be shown when Free user loads FLAC")
+        XCTAssertFalse(sut.playlist.tracks.isEmpty,
+                       "FLAC must be added to playlist for Free user")
+        XCTAssertFalse(sut.showPaywall,
+                       "Paywall must not be shown at load time — only when playing")
     }
 
     /// Verifies that switching from one track to another sets `currentTrack`

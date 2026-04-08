@@ -19,8 +19,8 @@
 //  │ │ art  │  ─────────────────────────────     │  ← seek slider
 //  │ └──────┘  0:42                        3:30  │
 //  │                                             │
-//  │         ◀◀   ⏸   ▶▶   🔁   🔀             │
-//  │  🔈  ────────●───────────────────  🔊      │  ← volume slider
+//  │          ◀◀   ⏸   ▶▶   🔁   🔀              │
+//  │  🔈  ────────●────────────────────  🔊      │  ← volume slider
 //  └─────────────────────────────────────────────┘
 //
 //  DESIGN NOTES
@@ -181,6 +181,7 @@ struct MiniPlayerView: View {
     @State private var isSeeking = false
     @State private var seekValue: Double = 0
     @State private var showMarqueeSettings = false
+    @State private var showTrackList = false
 
     private func L(_ key: String) -> String {
         NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
@@ -223,6 +224,11 @@ struct MiniPlayerView: View {
         }
         .popover(isPresented: $showMarqueeSettings, arrowEdge: .bottom) {
             MarqueeSettingsPopover()
+        }
+        // When AppState triggers a Pro-format gate, close MiniPlayer so the
+        // Paywall sheet can appear on the main window.
+        .onReceive(NotificationCenter.default.publisher(for: .bringMainWindowToFront)) { _ in
+            closeMiniPlayer()
         }
     }
 
@@ -424,9 +430,101 @@ struct MiniPlayerView: View {
             }
             .buttonStyle(.plain)
 
+            // Track list — opens a popover showing all tracks in the current playlist.
+            // Format-gated tracks (Pro-only formats on Free tier) show a lock icon.
+            Button {
+                showTrackList.toggle()
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 12))
+                    .foregroundStyle(showTrackList ? Color.accentColor : Color.primary)
+            }
+            .buttonStyle(.plain)
+            .disabled(appState.playlist.tracks.isEmpty)
+            .popover(isPresented: $showTrackList, arrowEdge: .top) {
+                trackListPopover
+            }
+
             Spacer()
         }
         .frame(height: 28)
+    }
+
+    // MARK: - Track List Popover
+
+    /// Popover listing all tracks in the current playlist.
+    /// Format-gated tracks show a lock icon and cannot be played on the Free tier.
+    private var trackListPopover: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(appState.playlist.name)
+                .font(.headline)
+                .padding(.horizontal, 12)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+
+            Divider()
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(appState.playlist.tracks) { track in
+                        let isFormatGated = AppState.proOnlyFormats
+                            .contains(track.url.pathExtension.lowercased())
+                            && !appState.isProUnlocked
+                        let isCurrent = appState.currentTrack?.id == track.id
+
+                        Button {
+                            showTrackList = false
+                            Task { await appState.play(trackID: track.id) }
+                        } label: {
+                            HStack(spacing: 8) {
+                                // Playing indicator or lock icon
+                                Group {
+                                    if isCurrent {
+                                        Image(systemName: "speaker.wave.2.fill")
+                                            .foregroundStyle(Color.accentColor)
+                                    } else if isFormatGated {
+                                        Image(systemName: "lock.fill")
+                                            .foregroundStyle(Color.secondary)
+                                    } else {
+                                        Color.clear
+                                    }
+                                }
+                                .frame(width: 16)
+                                .font(.system(size: 11))
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(track.title)
+                                        .font(.body)
+                                        .fontWeight(isCurrent ? .semibold : .regular)
+                                        .lineLimit(1)
+                                        .foregroundStyle(isFormatGated
+                                            ? Color(nsColor: .tertiaryLabelColor)
+                                            : Color.primary)
+                                        .strikethrough(isFormatGated)
+                                    if !track.artist.isEmpty {
+                                        Text(track.artist)
+                                            .font(.caption)
+                                            .foregroundStyle(Color.secondary)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(isCurrent
+                                ? Color.accentColor.opacity(0.1)
+                                : Color.clear)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .frame(width: 280, height: min(
+                CGFloat(appState.playlist.tracks.count) * 44 + 16,
+                320
+            ))
+        }
     }
 
     // MARK: - Volume Row
@@ -436,11 +534,17 @@ struct MiniPlayerView: View {
             Image(systemName: "speaker.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)
-            Slider(value: $appState.volume, in: 0...1 as ClosedRange<Float>)
-                .controlSize(.mini)
-                .onChange(of: appState.volume) { _, newValue in
-                    Task { await appState.setVolume(newValue) }
-                }
+            Slider(
+                value: Binding(
+                    get: { Double(appState.volume) },
+                    set: { newValue in
+                        let snapped = Float((newValue * 1000).rounded() / 1000)
+                        Task { await appState.setVolume(snapped) }
+                    }
+                ),
+                in: 0.0...1.0
+            )
+            .controlSize(.mini)
             Image(systemName: "speaker.wave.3.fill")
                 .font(.system(size: 10))
                 .foregroundStyle(.secondary)

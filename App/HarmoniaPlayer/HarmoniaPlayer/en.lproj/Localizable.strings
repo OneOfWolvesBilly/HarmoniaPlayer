@@ -148,3 +148,6 @@
 // Slice 9-A: Load-time format gate
 "alert_unsupported_format_title" = "Unsupported Format";
 "alert_unsupported_format_body" = "The following files use a format not supported by HarmoniaPlayer and were not added:\n%@";
+
+// Slice 9-A fix: Paywall session skip checkbox
+"paywall_skip_session_checkbox" = "For this session, skip paid formats during auto-play without reminding me again.";

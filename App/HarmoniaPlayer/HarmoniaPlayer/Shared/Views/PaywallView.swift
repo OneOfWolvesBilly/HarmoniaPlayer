@@ -32,6 +32,14 @@ struct PaywallView: View {
     @State private var isBusy = false
     @State private var errorMessage: String?
 
+    /// Whether to set paywallDismissedThisSession when the user dismisses.
+    /// Defaults to true so auto-play silently skips Pro-format tracks by default.
+    @State private var skipSession: Bool = true
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+    }
+
     // MARK: - Body
 
     var body: some View {
@@ -124,9 +132,22 @@ struct PaywallView: View {
             .foregroundStyle(.secondary)
             .disabled(isBusy)
 
+            // Session skip checkbox — checked by default.
+            // When checked, auto-play silently skips Pro-format tracks
+            // for the remainder of this session without showing this Paywall again.
+            // Manual track selection always shows the Paywall regardless.
+            Toggle(isOn: $skipSession) {
+                Text(L("paywall_skip_session_checkbox"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .toggleStyle(.checkbox)
+            .disabled(isBusy)
+
             // Dismiss
             Button("Maybe Later") {
-                dismiss()
+                dismissPaywall()
             }
             .buttonStyle(.plain)
             .foregroundStyle(.tertiary)
@@ -138,6 +159,11 @@ struct PaywallView: View {
 
     // MARK: - Actions
 
+    /// Dismisses the Paywall and applies the session skip preference.
+    private func dismissPaywall() {
+        appState.paywallDismissedThisSession = skipSession
+        dismiss()
+    }
     private func performPurchase() async {
         isBusy = true
         errorMessage = nil

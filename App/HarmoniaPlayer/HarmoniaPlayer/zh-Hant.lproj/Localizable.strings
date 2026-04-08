@@ -148,3 +148,6 @@
 // Slice 9-A: Load-time format gate
 "alert_unsupported_format_title" = "不支援的格式";
 "alert_unsupported_format_body" = "下列檔案的格式不受 HarmoniaPlayer 支援，因此未加入：\n%@";
+
+// Slice 9-A fix: Paywall session skip checkbox
+"paywall_skip_session_checkbox" = "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒";

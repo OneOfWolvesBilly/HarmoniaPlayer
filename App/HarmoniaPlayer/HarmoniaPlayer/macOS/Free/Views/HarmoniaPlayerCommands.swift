@@ -19,6 +19,11 @@ extension Notification.Name {
     /// Posted when the user selects "Rename Playlist" from the menu bar.
     /// `PlaylistView` listens and activates inline tab rename.
     static let renameActivePlaylist = Notification.Name("harmoniaPlayer.renameActivePlaylist")
+
+    /// Posted by AppState when a Pro-only format is played on the Free tier.
+    /// `MiniPlayerView` listens and calls `closeMiniPlayer()` so the Paywall
+    /// sheet can appear on the main window instead of the MiniPlayer.
+    static let bringMainWindowToFront = Notification.Name("harmoniaPlayer.bringMainWindowToFront")
 }
 
 // MARK: - Commands

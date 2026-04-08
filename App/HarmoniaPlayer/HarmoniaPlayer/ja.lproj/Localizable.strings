@@ -148,3 +148,6 @@
 // Slice 9-A: Load-time format gate
 "alert_unsupported_format_title" = "未対応フォーマット";
 "alert_unsupported_format_body" = "次のファイルは HarmoniaPlayer が未対応のフォーマットのため、追加されませんでした：\n%@";
+
+// Slice 9-A fix: Paywall session skip checkbox
+"paywall_skip_session_checkbox" = "今回の使用中は、自動再生で有料形式に遭遇した場合、再度通知せずスキップする";

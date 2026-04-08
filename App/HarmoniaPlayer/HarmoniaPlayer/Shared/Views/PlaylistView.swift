@@ -327,34 +327,43 @@ struct PlaylistView: View {
         .width(24)
 
         TableColumn(L("col_title"), value: \.title) { track in
+            let isFormatGated = AppState.proOnlyFormats
+                .contains(track.url.pathExtension.lowercased())
+                && !appState.isProUnlocked
             Text(track.title)
                 .lineLimit(1)
-                .foregroundStyle(track.isAccessible
+                .foregroundStyle((track.isAccessible && !isFormatGated)
                                  ? Color.primary
                                  : Color(nsColor: .tertiaryLabelColor))
-                .strikethrough(!track.isAccessible)
+                .strikethrough(!track.isAccessible || isFormatGated)
         }
         .width(min: 120, ideal: 180)
         .customizationID("col.title")
 
         TableColumn(L("col_artist"), value: \.artist) { track in
+            let isFormatGated = AppState.proOnlyFormats
+                .contains(track.url.pathExtension.lowercased())
+                && !appState.isProUnlocked
             Text(track.artist.isEmpty ? "—" : track.artist)
                 .lineLimit(1)
-                .foregroundStyle(track.isAccessible
+                .foregroundStyle((track.isAccessible && !isFormatGated)
                                  ? Color.secondary
                                  : Color(nsColor: .tertiaryLabelColor))
-                .strikethrough(!track.isAccessible)
+                .strikethrough(!track.isAccessible || isFormatGated)
         }
         .width(min: 100, ideal: 140)
         .customizationID("col.artist")
 
         TableColumn(L("col_duration"), value: \.duration) { track in
+            let isFormatGated = AppState.proOnlyFormats
+                .contains(track.url.pathExtension.lowercased())
+                && !appState.isProUnlocked
             Text(formatDuration(track.duration))
                 .monospacedDigit()
-                .foregroundStyle(track.isAccessible
+                .foregroundStyle((track.isAccessible && !isFormatGated)
                                  ? Color.secondary
                                  : Color(nsColor: .tertiaryLabelColor))
-                .strikethrough(!track.isAccessible)
+                .strikethrough(!track.isAccessible || isFormatGated)
         }
         .width(min: 52, ideal: 64)
         .customizationID("col.duration")

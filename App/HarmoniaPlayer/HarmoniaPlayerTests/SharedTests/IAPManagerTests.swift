@@ -120,6 +120,8 @@ final class IAPManagerTests: XCTestCase {
     }
 
     /// testShowPaywall_WhenFreeUserLoadsFlac
+    /// FLAC is now added to playlist for all tiers.
+    /// Paywall is shown only when the user attempts to play the track.
     func testShowPaywall_WhenFreeUserLoadsFlac() async throws {
         let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
         let appState = AppState(
@@ -130,11 +132,11 @@ final class IAPManagerTests: XCTestCase {
         let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
         await appState.load(urls: [flacURL])
 
-        // Load gate blocks FLAC for Free users — track must not be in playlist.
-        XCTAssertTrue(appState.playlist.tracks.isEmpty,
-                      "FLAC must not be added to playlist for Free user")
-        XCTAssertTrue(appState.showPaywall,
-                      "showPaywall should be true when Free user loads FLAC")
+        // FLAC is added to playlist; Paywall is not shown at load time.
+        XCTAssertFalse(appState.playlist.tracks.isEmpty,
+                       "FLAC must be added to playlist for Free user")
+        XCTAssertFalse(appState.showPaywall,
+                       "showPaywall must not be shown at load time — only when playing")
     }
 
     /// testShowPaywall_NotSet_WhenProUserLoadsFlac
@@ -153,5 +155,26 @@ final class IAPManagerTests: XCTestCase {
                        "FLAC must be added to playlist for Pro user")
         XCTAssertFalse(appState.showPaywall,
                        "showPaywall should remain false for Pro user")
+    }
+
+    // MARK: - purchasePro side effects
+
+    /// After a successful purchase, featureFlags must reflect Pro tier
+    /// so FLAC/DSF/DFF are no longer gated.
+    func testPurchasePro_UpdatesFeatureFlags() async {
+        let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
+        let mock = MockIAPManager(isProUnlocked: false)
+        mock.purchaseResult = .success
+        let appState = AppState(
+            iapManager: mock,
+            provider: FakeCoreProvider(),
+            userDefaults: suite
+        )
+        XCTAssertFalse(appState.featureFlags.supportsFLAC, "Pre-condition: Free tier")
+
+        try? await appState.purchasePro()
+
+        XCTAssertTrue(appState.featureFlags.supportsFLAC,
+                      "featureFlags must reflect Pro tier after successful purchase")
     }
 }

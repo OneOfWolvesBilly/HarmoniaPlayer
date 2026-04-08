@@ -28,6 +28,19 @@ struct HarmoniaPlayerApp: App {
         if savedLang == "system" {
             UserDefaults.standard.removeObject(forKey: "AppleLanguages")
         }
+
+        // Close any MiniPlayer window restored by State Restoration.
+        // MiniPlayer must only be opened explicitly by the user (⌘M or menu),
+        // never auto-restored on launch.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            NSApp.windows
+                .first { $0.identifier?.rawValue == "mini-player" }?
+                .close()
+        }
     }
 
     @StateObject private var appState = AppState(
@@ -67,6 +80,7 @@ struct HarmoniaPlayerApp: App {
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
         .windowStyle(.plain)
+        .defaultLaunchBehavior(.suppressed)
 
         Settings {
             SettingsView()
