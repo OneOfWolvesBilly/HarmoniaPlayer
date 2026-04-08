@@ -61,6 +61,17 @@ struct HarmoniaPlayerCommands: Commands {
         // Remove default "New" item — not applicable for a music player.
         CommandGroup(replacing: .newItem) {}
 
+        // "Upgrade to Pro" — shown only when user is on Free tier.
+        // Placed in the app menu (appInfo group), after About.
+        CommandGroup(after: .appInfo) {
+            if appState?.isProUnlocked == false {
+                Button(L("menu_upgrade_to_pro")) {
+                    appState?.showPaywallIfNeeded()
+                }
+                Divider()
+            }
+        }
+
         // Replace default Undo/Redo with versions wired to AppState.undoManager.
         // Disabled when the manager has nothing to undo/redo.
         CommandGroup(replacing: .undoRedo) {
@@ -76,11 +87,15 @@ struct HarmoniaPlayerCommands: Commands {
             .keyboardShortcut("z", modifiers: [.command, .shift])
             .disabled(appState?.canRedo != true)
         }
-        CommandGroup(replacing: .pasteboard) {}
-        CommandGroup(replacing: .systemServices) {}
-        CommandGroup(replacing: .textEditing) {}
-        CommandGroup(replacing: .textFormatting) {}
-        CommandGroup(replacing: .help) {}
+
+        // Remove unused default menu groups.
+        Group {
+            CommandGroup(replacing: .pasteboard) {}
+            CommandGroup(replacing: .systemServices) {}
+            CommandGroup(replacing: .textEditing) {}
+            CommandGroup(replacing: .textFormatting) {}
+            CommandGroup(replacing: .help) {}
+        }
 
         // Window menu — Mini Player toggle (⌘M).
         CommandGroup(replacing: .windowArrangement) {

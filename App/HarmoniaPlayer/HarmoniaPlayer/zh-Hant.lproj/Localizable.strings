@@ -131,6 +131,7 @@
 
 // Slice 8-B: Mini Player
 "menu_mini_player" = "迷你播放器";
+"menu_upgrade_to_pro" = "升級至 Pro…";
 "mini_player_no_track" = "沒有正在播放";
 "menu_marquee_settings" = "跑馬燈設定...";
 "settings_section_mini_player" = "迷你播放器";

@@ -131,6 +131,7 @@
 
 // Slice 8-B: Mini Player
 "menu_mini_player" = "Mini Player";
+"menu_upgrade_to_pro" = "Upgrade to Pro…";
 "mini_player_no_track" = "No Track Playing";
 "menu_marquee_settings" = "Marquee Settings...";
 "settings_section_mini_player" = "Mini Player";
