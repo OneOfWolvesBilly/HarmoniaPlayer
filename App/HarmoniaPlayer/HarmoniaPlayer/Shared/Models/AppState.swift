@@ -312,6 +312,16 @@ final class AppState: ObservableObject {
     /// File extensions that require the Pro tier (FLAC / DSD).
     static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
 
+    /// Number of tracks added between incremental saves in batch operations.
+    /// Provides crash safety for large imports without saving on every track.
+    private static let saveBatchSize = 5
+
+    /// Returns `true` if the file extension is recognised by any tier (Free or Pro).
+    private func isURLSupported(_ url: URL) -> Bool {
+        let ext = url.pathExtension.lowercased()
+        return Self.freeFormats.contains(ext) || Self.proOnlyFormats.contains(ext)
+    }
+
     // MARK: - Polling
 
     /// Task that polls playback state and currentTime while playing.
@@ -691,6 +701,9 @@ final class AppState: ObservableObject {
                 playlists[activePlaylistIndex].tracks.append(track)
                 addedIDs.append(track.id)
                 lastError = .failedToOpenFile
+            }
+            if addedIDs.count % Self.saveBatchSize == 0 {
+                saveState()
             }
         }
         if !skipped.isEmpty {
@@ -1632,7 +1645,12 @@ final class AppState: ObservableObject {
         newPlaylist(name: tabName)
 
         var skipped: [URL] = []
+        var addedCount = 0
         for fileURL in urls {
+            guard isURLSupported(fileURL) else {
+                skipped.append(fileURL)
+                continue
+            }
             guard FileManager.default.fileExists(atPath: fileURL.path) else {
                 skipped.append(fileURL)
                 continue
@@ -1646,11 +1664,16 @@ final class AppState: ObservableObject {
                 playlists[activePlaylistIndex].tracks.append(track)
                 playlists[activePlaylistIndex].insertionOrder.append(track.id)
             }
+            addedCount += 1
+            if addedCount % Self.saveBatchSize == 0 {
+                saveState()
+            }
         }
 
         if !skipped.isEmpty {
             skippedImportURLs = skipped
         }
+        saveState()
     }
 
     // MARK: - Private Helpers
