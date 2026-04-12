@@ -55,10 +55,10 @@ struct HarmoniaPlayerApp: App {
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
-                .task {
-                    // Refresh Pro entitlements at launch to sync with App Store.
-                    await appState.refreshEntitlements()
-                }
+                // v0.1 frozen: Pro UI hidden. Re-enable in v0.2.
+                // .task {
+                //     await appState.refreshEntitlements()
+                // }
                 .onReceive(
                     NotificationCenter.default.publisher(
                         for: NSApplication.willTerminateNotification
