@@ -61,16 +61,15 @@ struct HarmoniaPlayerCommands: Commands {
         // Remove default "New" item — not applicable for a music player.
         CommandGroup(replacing: .newItem) {}
 
-        // "Upgrade to Pro" — shown only when user is on Free tier.
-        // Placed in the app menu (appInfo group), after About.
-        CommandGroup(after: .appInfo) {
-            if appState?.isProUnlocked == false {
-                Button(L("menu_upgrade_to_pro")) {
-                    appState?.showPaywallIfNeeded()
-                }
-                Divider()
-            }
-        }
+        // v0.1 frozen: Pro UI hidden. Re-enable in v0.2.
+        // CommandGroup(after: .appInfo) {
+        //     if appState?.isProUnlocked == false {
+        //         Button(L("menu_upgrade_to_pro")) {
+        //             appState?.showPaywallIfNeeded()
+        //         }
+        //         Divider()
+        //     }
+        // }
 
         // Replace default Undo/Redo with versions wired to AppState.undoManager.
         // Disabled when the manager has nothing to undo/redo.
