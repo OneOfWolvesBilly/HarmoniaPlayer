@@ -130,6 +130,7 @@ struct PlaylistView: View {
             }
         }
         .dropDestination(for: AudioFileItem.self) { items, _ in
+            guard !appState.isPerformingBlockingOperation else { return false }
             let urls = items.map(\.url)
             Task { await appState.handleFileDrop(urls: urls) }
             return true
@@ -300,6 +301,7 @@ struct PlaylistView: View {
         }
         .accessibilityIdentifier("playlist-list")
         .dropDestination(for: AudioFileItem.self) { items, _ in
+            guard !appState.isPerformingBlockingOperation else { return false }
             let urls = items.map(\.url)
             Task { await appState.handleFileDrop(urls: urls) }
             return true

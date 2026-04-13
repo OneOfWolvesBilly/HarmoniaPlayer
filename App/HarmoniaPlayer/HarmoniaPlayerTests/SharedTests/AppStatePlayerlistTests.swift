@@ -244,4 +244,24 @@ extension AppStatePlaylistTests {
         // Then: C moves to front
         XCTAssertEqual(sut.playlist.tracks[0].url.lastPathComponent, "c.mp3")
     }
+
+    // MARK: - isPerformingBlockingOperation
+
+    func testIsPerformingBlockingOperation_InitiallyFalse() {
+        XCTAssertFalse(sut.isPerformingBlockingOperation)
+    }
+
+    func testLoad_ResetsBlockingFlagOnCompletion() async {
+        await sut.load(urls: [URL(fileURLWithPath: "/tmp/a.mp3")])
+        XCTAssertFalse(sut.isPerformingBlockingOperation,
+                       "Flag must be reset after load(urls:) completes")
+    }
+
+    func testImportPlaylist_ResetsBlockingFlagOnCompletion() async {
+        // importPlaylist with a non-existent file hits the early return guard.
+        // defer must still reset the flag.
+        await sut.importPlaylist(from: URL(fileURLWithPath: "/tmp/nonexistent.m3u8"))
+        XCTAssertFalse(sut.isPerformingBlockingOperation,
+                       "Flag must be reset after importPlaylist completes (even on error path)")
+    }
 }

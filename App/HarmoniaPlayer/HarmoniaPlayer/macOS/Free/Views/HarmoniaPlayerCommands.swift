@@ -78,13 +78,13 @@ struct HarmoniaPlayerCommands: Commands {
                 appState?.undo()
             }
             .keyboardShortcut("z", modifiers: .command)
-            .disabled(appState?.canUndo != true)
+            .disabled(appState?.canUndo != true || isBlocking)
 
             Button(L("menu_redo")) {
                 appState?.redo()
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
-            .disabled(appState?.canRedo != true)
+            .disabled(appState?.canRedo != true || isBlocking)
         }
 
         // Remove unused default menu groups.
@@ -116,6 +116,7 @@ struct HarmoniaPlayerCommands: Commands {
                 NotificationCenter.default.post(name: .openFilePicker, object: nil)
             }
             .keyboardShortcut("o", modifiers: .command)
+            .disabled(isBlocking)
 
             Divider()
 
@@ -153,6 +154,7 @@ struct HarmoniaPlayerCommands: Commands {
                 guard let state = appState else { return }
                 importPlaylist(appState: state)
             }
+            .disabled(isBlocking)
         }
 
         // Playback menu
@@ -252,6 +254,12 @@ struct HarmoniaPlayerCommands: Commands {
     /// These operations require an active playback position to be meaningful.
     private var needsActiveTrack: Bool {
         playlistIsEmpty || appState?.currentTrack == nil
+    }
+
+    /// True when a batch playlist operation (load / import) is in progress.
+    /// Used for: Add Files, Import M3U8, Undo, Redo.
+    private var isBlocking: Bool {
+        appState?.isPerformingBlockingOperation == true
     }
 
     private var repeatModeLabel: String {

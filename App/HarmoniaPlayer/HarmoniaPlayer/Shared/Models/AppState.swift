@@ -206,6 +206,17 @@ final class AppState: ObservableObject {
     /// HarmoniaPlayer at any tier. Non-empty triggers an unsupported-format alert.
     @Published var skippedUnsupportedURLs: [URL] = []
 
+    // MARK: - Blocking Operation
+
+    /// Whether a batch playlist operation (load or import) is in progress.
+    ///
+    /// Set to `true` at the start of `load(urls:)` and `importPlaylist(from:)`,
+    /// reset to `false` via `defer` when the method returns.
+    /// Used by HarmoniaPlayerCommands to disable playlist-mutating menu items
+    /// and by PlaylistView to reject drops during batch operations.
+    /// Not persisted — always starts as `false` on launch.
+    @Published private(set) var isPerformingBlockingOperation: Bool = false
+
     // MARK: - File Info Panel
 
     /// Track currently shown in the File Info panel sheet.
@@ -664,6 +675,8 @@ final class AppState: ObservableObject {
     }
 
     func load(urls: [URL]) async {
+        isPerformingBlockingOperation = true
+        defer { isPerformingBlockingOperation = false }
         // Reset skipped lists before each load so alerts re-trigger
         // even if the same files are dropped again.
         skippedDuplicateURLs   = []
@@ -1630,6 +1643,8 @@ final class AppState: ObservableObject {
     ///
     /// - Parameter url: Source `.m3u8` file URL (provided by NSOpenPanel).
     func importPlaylist(from url: URL) async {
+        isPerformingBlockingOperation = true
+        defer { isPerformingBlockingOperation = false }
         skippedImportURLs = []
 
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
