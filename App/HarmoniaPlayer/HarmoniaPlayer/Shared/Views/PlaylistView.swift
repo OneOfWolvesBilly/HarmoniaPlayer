@@ -723,7 +723,7 @@ struct PlaylistView: View {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.allowedContentTypes = [
             UTType.mp3,
             UTType.aiff,
@@ -732,10 +732,11 @@ struct PlaylistView: View {
             UTType(filenameExtension: "alac") ?? .audio,
             UTType(filenameExtension: "flac") ?? .audio,
             UTType(filenameExtension: "dsf")  ?? .audio,
-            UTType(filenameExtension: "dff")  ?? .audio
+            UTType(filenameExtension: "dff")  ?? .audio,
+            UTType.folder
         ]
         if panel.runModal() == .OK {
-            Task { await appState.load(urls: panel.urls) }
+            Task { await appState.handleFileDrop(urls: panel.urls) }
         }
     }
 
