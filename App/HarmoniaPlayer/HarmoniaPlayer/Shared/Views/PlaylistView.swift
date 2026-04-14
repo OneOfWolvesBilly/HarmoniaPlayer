@@ -730,9 +730,10 @@ struct PlaylistView: View {
             UTType.wav,
             UTType(filenameExtension: "m4a")  ?? .audio,
             UTType(filenameExtension: "alac") ?? .audio,
-            UTType(filenameExtension: "flac") ?? .audio,
-            UTType(filenameExtension: "dsf")  ?? .audio,
-            UTType(filenameExtension: "dff")  ?? .audio,
+            // v0.1 frozen: Pro formats hidden. Re-enable in v0.2.
+            // UTType(filenameExtension: "flac") ?? .audio,
+            // UTType(filenameExtension: "dsf")  ?? .audio,
+            // UTType(filenameExtension: "dff")  ?? .audio,
             UTType.folder
         ]
         if panel.runModal() == .OK {

@@ -148,18 +148,32 @@ final class IntegrationTests: XCTestCase {
         XCTAssertNotNil(sut.lastError)
     }
 
-    /// Verifies that loading a `.flac` file on the Free tier adds it to the
-    /// playlist with no Paywall shown at load time.
-    /// The Paywall is shown only when the user attempts to play the track.
+    /// v0.1: Loading a `.flac` file on the Free tier is blocked as unsupported.
+    /// FLAC must not enter the playlist — same as any unknown format.
     func testIntegration_UnsupportedFormat_Free() async throws {
         let url = try bundleURL(forResource: "test_format", withExtension: "flac")
         await sut.load(urls: [url])
 
-        XCTAssertFalse(sut.playlist.tracks.isEmpty,
-                       "FLAC must be added to playlist for Free user")
-        XCTAssertFalse(sut.showPaywall,
-                       "Paywall must not be shown at load time — only when playing")
+        XCTAssertTrue(sut.playlist.tracks.isEmpty,
+                      "v0.1: FLAC must be blocked at load time")
+        XCTAssertEqual(sut.skippedUnsupportedURLs.count, 1,
+                       "FLAC must appear in skippedUnsupportedURLs")
     }
+
+    // v0.2 RESTORE: original test (FLAC enters playlist, Paywall at play time).
+    //
+    // /// Verifies that loading a `.flac` file on the Free tier adds it to the
+    // /// playlist with no Paywall shown at load time.
+    // /// The Paywall is shown only when the user attempts to play the track.
+    // func testIntegration_UnsupportedFormat_Free() async throws {
+    //     let url = try bundleURL(forResource: "test_format", withExtension: "flac")
+    //     await sut.load(urls: [url])
+    //
+    //     XCTAssertFalse(sut.playlist.tracks.isEmpty,
+    //                    "FLAC must be added to playlist for Free user")
+    //     XCTAssertFalse(sut.showPaywall,
+    //                    "Paywall must not be shown at load time — only when playing")
+    // }
 
     /// Verifies that switching from one track to another sets `currentTrack`
     /// to the new track and `playbackState` to `.playing`.

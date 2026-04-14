@@ -119,43 +119,45 @@ final class IAPManagerTests: XCTestCase {
         XCTAssertFalse(appState.showPaywall,"showPaywall should remain false")
     }
 
-    /// testShowPaywall_WhenFreeUserLoadsFlac
-    /// FLAC is now added to playlist for all tiers.
-    /// Paywall is shown only when the user attempts to play the track.
-    func testShowPaywall_WhenFreeUserLoadsFlac() async throws {
-        let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
-        let appState = AppState(
-            iapManager: MockIAPManager(isProUnlocked: false),
-            provider: FakeCoreProvider(),
-            userDefaults: suite
-        )
-        let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
-        await appState.load(urls: [flacURL])
-
-        // FLAC is added to playlist; Paywall is not shown at load time.
-        XCTAssertFalse(appState.playlist.tracks.isEmpty,
-                       "FLAC must be added to playlist for Free user")
-        XCTAssertFalse(appState.showPaywall,
-                       "showPaywall must not be shown at load time — only when playing")
-    }
-
-    /// testShowPaywall_NotSet_WhenProUserLoadsFlac
-    func testShowPaywall_NotSet_WhenProUserLoadsFlac() async throws {
-        let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
-        let appState = AppState(
-            iapManager: MockIAPManager(isProUnlocked: true),
-            provider: FakeCoreProvider(),
-            userDefaults: suite
-        )
-        let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
-        await appState.load(urls: [flacURL])
-
-        // Pro user — FLAC must be added to playlist, no Paywall.
-        XCTAssertFalse(appState.playlist.tracks.isEmpty,
-                       "FLAC must be added to playlist for Pro user")
-        XCTAssertFalse(appState.showPaywall,
-                       "showPaywall should remain false for Pro user")
-    }
+    // v0.1 frozen: FLAC cannot enter playlist. Re-enable in v0.2.
+    //
+    // /// testShowPaywall_WhenFreeUserLoadsFlac
+    // /// FLAC is now added to playlist for all tiers.
+    // /// Paywall is shown only when the user attempts to play the track.
+    // func testShowPaywall_WhenFreeUserLoadsFlac() async throws {
+    //     let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
+    //     let appState = AppState(
+    //         iapManager: MockIAPManager(isProUnlocked: false),
+    //         provider: FakeCoreProvider(),
+    //         userDefaults: suite
+    //     )
+    //     let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
+    //     await appState.load(urls: [flacURL])
+    //
+    //     // FLAC is added to playlist; Paywall is not shown at load time.
+    //     XCTAssertFalse(appState.playlist.tracks.isEmpty,
+    //                    "FLAC must be added to playlist for Free user")
+    //     XCTAssertFalse(appState.showPaywall,
+    //                    "showPaywall must not be shown at load time — only when playing")
+    // }
+    //
+    // /// testShowPaywall_NotSet_WhenProUserLoadsFlac
+    // func testShowPaywall_NotSet_WhenProUserLoadsFlac() async throws {
+    //     let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
+    //     let appState = AppState(
+    //         iapManager: MockIAPManager(isProUnlocked: true),
+    //         provider: FakeCoreProvider(),
+    //         userDefaults: suite
+    //     )
+    //     let flacURL = try bundleURL(forResource: "test_format", withExtension: "flac")
+    //     await appState.load(urls: [flacURL])
+    //
+    //     // Pro user — FLAC must be added to playlist, no Paywall.
+    //     XCTAssertFalse(appState.playlist.tracks.isEmpty,
+    //                    "FLAC must be added to playlist for Pro user")
+    //     XCTAssertFalse(appState.showPaywall,
+    //                    "showPaywall should remain false for Pro user")
+    // }
 
     // MARK: - purchasePro side effects
 

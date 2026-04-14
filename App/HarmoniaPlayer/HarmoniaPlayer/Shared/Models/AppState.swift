@@ -323,14 +323,21 @@ final class AppState: ObservableObject {
     /// File extensions that require the Pro tier (FLAC / DSD).
     static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
 
+    /// File extensions currently allowed for loading into playlists.
+    ///
+    /// v0.1 frozen: returns freeFormats only. FLAC/DSF/DFF are treated as
+    /// unsupported (same as .xyz) — not added to playlist, no Paywall.
+    /// v0.2: restore to `isProUnlocked ? freeFormats.union(proOnlyFormats) : freeFormats`
+    static var allowedFormats: Set<String> { freeFormats }
+
     /// Number of tracks added between incremental saves in batch operations.
     /// Provides crash safety for large imports without saving on every track.
     private static let saveBatchSize = 5
 
-    /// Returns `true` if the file extension is recognised by any tier (Free or Pro).
+    /// Returns `true` if the file extension is allowed in the current tier.
     private func isURLSupported(_ url: URL) -> Bool {
         let ext = url.pathExtension.lowercased()
-        return Self.freeFormats.contains(ext) || Self.proOnlyFormats.contains(ext)
+        return Self.allowedFormats.contains(ext)
     }
 
     // MARK: - Polling
@@ -691,16 +698,11 @@ final class AppState: ObservableObject {
                 continue
             }
 
-            // Format classification: reject completely unrecognised formats.
-            // Pro-only formats (FLAC/DSF/DFF) are allowed into the playlist for
-            // all tiers — PlaylistView shows them with strikethrough for Free users,
-            // and play(trackID:) presents the Paywall when the user tries to play them.
-            let ext          = url.pathExtension.lowercased()
-            let isProFormat  = Self.proOnlyFormats.contains(ext)
-            let isFreeFormat = Self.freeFormats.contains(ext)
-
-            if !isProFormat && !isFreeFormat {
-                // Format not recognised at any tier.
+            // Format gate: reject formats not in allowedFormats.
+            // v0.1 frozen: allowedFormats == freeFormats only.
+            // FLAC/DSF/DFF are treated as unsupported, same as .xyz.
+            let ext = url.pathExtension.lowercased()
+            if !Self.allowedFormats.contains(ext) {
                 skippedUnsupportedURLs.append(url)
                 continue
             }
@@ -1269,16 +1271,18 @@ final class AppState: ObservableObject {
             return
         }
 
+        // v0.1 frozen: Pro format gate disabled. FLAC/DSF/DFF cannot enter
+        // the playlist, so this code path is unreachable. Re-enable in v0.2.
         // Step 2b: Format gate — reject Pro-only formats on the Free tier.
         // Post bringMainWindowToFront so MiniPlayerView closes itself and brings
         // the main window to front before the Paywall sheet appears.
-        let ext = track.url.pathExtension.lowercased()
-        if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
-            NotificationCenter.default.post(name: .bringMainWindowToFront, object: nil)
-            showPaywallIfNeeded()
-            currentTrack = nil
-            return
-        }
+        // let ext = track.url.pathExtension.lowercased()
+        // if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
+        //     NotificationCenter.default.post(name: .bringMainWindowToFront, object: nil)
+        //     showPaywallIfNeeded()
+        //     currentTrack = nil
+        //     return
+        // }
 
         // Step 3–6: Standard load-and-play flow.
         stopPolling()
@@ -1478,13 +1482,14 @@ final class AppState: ObservableObject {
                           let next = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
                     else { nextIndex += 1; continue }
 
+                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
-                    let nextExt = next.url.pathExtension.lowercased()
-                    let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    if isFormatGated && paywallDismissedThisSession {
-                        nextIndex += 1
-                        continue
-                    }
+                    // let nextExt = next.url.pathExtension.lowercased()
+                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                    // if isFormatGated && paywallDismissedThisSession {
+                    //     nextIndex += 1
+                    //     continue
+                    // }
 
                     if next.isAccessible {
                         shuffleQueueIndex = nextIndex
@@ -1523,13 +1528,14 @@ final class AppState: ObservableObject {
                 while nextIndex < playlists[activePlaylistIndex].tracks.count {
                     let next = playlists[activePlaylistIndex].tracks[nextIndex]
 
+                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
-                    let nextExt = next.url.pathExtension.lowercased()
-                    let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    if isFormatGated && paywallDismissedThisSession {
-                        nextIndex += 1
-                        continue
-                    }
+                    // let nextExt = next.url.pathExtension.lowercased()
+                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                    // if isFormatGated && paywallDismissedThisSession {
+                    //     nextIndex += 1
+                    //     continue
+                    // }
 
                     if next.isAccessible {
                         await play(trackID: next.id)
@@ -1568,14 +1574,15 @@ final class AppState: ObservableObject {
             while attempts < count {
                 let next = playlists[activePlaylistIndex].tracks[nextIndex]
 
+                // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
                 // Silently skip format-gated tracks if user dismissed paywall this session.
-                let nextExt = next.url.pathExtension.lowercased()
-                let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                if isFormatGated && paywallDismissedThisSession {
-                    nextIndex = (nextIndex + 1) % count
-                    attempts += 1
-                    continue
-                }
+                // let nextExt = next.url.pathExtension.lowercased()
+                // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
+                // if isFormatGated && paywallDismissedThisSession {
+                //     nextIndex = (nextIndex + 1) % count
+                //     attempts += 1
+                //     continue
+                // }
 
                 if next.isAccessible {
                     await play(trackID: next.id)
