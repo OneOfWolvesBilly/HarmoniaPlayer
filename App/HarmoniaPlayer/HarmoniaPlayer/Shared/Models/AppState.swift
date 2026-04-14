@@ -8,7 +8,7 @@
 import Foundation
 import Combine
 
-private extension Array {
+extension Array {
     /// Returns the element at `index` if it is within bounds, otherwise `nil`.
     subscript(safe index: Int) -> Element? {
         indices.contains(index) ? self[index] : nil
@@ -88,7 +88,7 @@ final class AppState: ObservableObject {
     let tagReaderService: TagReaderService
 
     /// File drop service — validates URLs received from drag-and-drop.
-    private let fileDropService: FileDropService
+    let fileDropService: FileDropService
 
     // MARK: - Published State
 
@@ -103,7 +103,7 @@ final class AppState: ObservableObject {
     ///
     /// Initialised with one empty playlist named "Session".
     /// Use `newPlaylist(name:)`, `renamePlaylist(at:name:)`, `deletePlaylist(at:)` to manage.
-    @Published private(set) var playlists: [Playlist]
+    @Published var playlists: [Playlist]
 
     /// Index of the currently visible and active playlist.
     ///
@@ -123,7 +123,7 @@ final class AppState: ObservableObject {
     /// `nil` when no track is selected, or after the selected track
     /// is removed from the playlist or the playlist is cleared.
     /// Set via `play(trackID:)`. Does not trigger audio playback.
-    @Published private(set) var currentTrack: Track?
+    @Published var currentTrack: Track?
 
     // MARK: - UI Preference State
 
@@ -142,29 +142,29 @@ final class AppState: ObservableObject {
     ///
     /// Initialised to `.idle`. Updated by playback control methods
     /// (`play()`, `pause()`, `stop()`, `play(trackID:)`).
-    @Published private(set) var playbackState: PlaybackState = .idle
+    @Published var playbackState: PlaybackState = .idle
 
     /// ID of the playlist that contains the currently playing track.
     ///
     /// Set to `playlists[activePlaylistIndex].id` when `play(trackID:)` succeeds.
     /// Cleared to `nil` by `stop()` and when the last track finishes naturally.
     /// Uses `Playlist.ID` (UUID) so it remains valid after tab reordering.
-    @Published private(set) var playingPlaylistID: Playlist.ID?
+    @Published var playingPlaylistID: Playlist.ID?
 
     /// Current playback position in seconds.
     ///
     /// Initialised to `0`. Updated on successful `seek(to:)` and
     /// reset to `0` by `stop()`.
-    @Published private(set) var currentTime: TimeInterval = 0
+    @Published var currentTime: TimeInterval = 0
 
     /// Position the user has seeked to while stopped or paused.
     /// Used by play() to resume from the correct position.
-    private var pendingSeekTime: TimeInterval = 0
+    var pendingSeekTime: TimeInterval = 0
 
     /// Duration of the currently loaded track in seconds.
     ///
     /// Initialised to `0`. Updated after a successful `load` in `play(trackID:)`.
-    @Published private(set) var duration: TimeInterval = 0
+    @Published var duration: TimeInterval = 0
 
     // MARK: - Error State
 
@@ -172,13 +172,13 @@ final class AppState: ObservableObject {
     ///
     /// `nil` on init. Set by playback logic when an error occurs.
     /// Views observe this to present error banners or alerts.
-    @Published private(set) var lastError: PlaybackError?
+    @Published var lastError: PlaybackError?
 
     /// Display name of the track that triggered the most recent `failedToOpenFile` error.
     ///
     /// Set to "Title - Artist" when artist is available, otherwise the URL filename.
     /// Cleared when `clearLastError()` is called.
-    @Published private(set) var failedTrackName: String?
+    @Published var failedTrackName: String?
 
     /// Controls the file-not-found alert presentation.
     ///
@@ -215,7 +215,7 @@ final class AppState: ObservableObject {
     /// Used by HarmoniaPlayerCommands to disable playlist-mutating menu items
     /// and by PlaylistView to reject drops during batch operations.
     /// Not persisted — always starts as `false` on launch.
-    @Published private(set) var isPerformingBlockingOperation: Bool = false
+    @Published var isPerformingBlockingOperation: Bool = false
 
     // MARK: - File Info Panel
 
@@ -286,10 +286,10 @@ final class AppState: ObservableObject {
     ///
     /// Defaults to `.off` on launch. Updated by `cycleRepeatMode()`.
     /// Controls behaviour of `playNextTrack()` and `trackDidFinishPlaying()`.
-    @Published private(set) var repeatMode: RepeatMode = .off
+    @Published var repeatMode: RepeatMode = .off
 
     /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
-    @Published private(set) var isShuffled: ShuffleMode = .off
+    @Published var isShuffled: ShuffleMode = .off
 
     // MARK: - ReplayGain State
 
@@ -305,15 +305,15 @@ final class AppState: ObservableObject {
     /// Contains a permutation of all track IDs in `playlists[activePlaylistIndex].tracks`.
     /// Rebuilt whenever shuffle is toggled on or the playlist changes.
     /// `shuffleQueueIndex` points to the current position in this queue.
-    private(set) var shuffleQueue: [Track.ID] = []
-    private(set) var shuffleQueueIndex: Int = 0
+    var shuffleQueue: [Track.ID] = []
+    var shuffleQueueIndex: Int = 0
 
     /// The ID of the last successfully played track.
     ///
     /// Set after `playbackService.play()` succeeds in `play(trackID:)`.
     /// Used by `trackDidFinishPlaying()` to find the current position in the playlist
     /// when `currentTrack` has been cleared (e.g. after a failed play attempt).
-    private var lastPlayedTrackID: Track.ID?
+    var lastPlayedTrackID: Track.ID?
 
     // MARK: - Format Classification
 
@@ -332,18 +332,12 @@ final class AppState: ObservableObject {
 
     /// Number of tracks added between incremental saves in batch operations.
     /// Provides crash safety for large imports without saving on every track.
-    private static let saveBatchSize = 5
-
-    /// Returns `true` if the file extension is allowed in the current tier.
-    private func isURLSupported(_ url: URL) -> Bool {
-        let ext = url.pathExtension.lowercased()
-        return Self.allowedFormats.contains(ext)
-    }
+    static let saveBatchSize = 5
 
     // MARK: - Polling
 
     /// Task that polls playback state and currentTime while playing.
-    private var pollingTask: Task<Void, Never>?
+    var pollingTask: Task<Void, Never>?
 
     /// Combine subscriptions retained for the lifetime of AppState.
     private var cancellables = Set<AnyCancellable>()
@@ -454,7 +448,7 @@ final class AppState: ObservableObject {
     // Remove when Xcode 26 stable is released.
     nonisolated deinit {}
 
-    // MARK: - Persistence
+    // MARK: - Display Name
 
     /// Returns a human-readable display name for a track.
     ///
@@ -463,7 +457,7 @@ final class AppState: ObservableObject {
     /// 2. title only    → "title"
     /// 3. artist only   → "artist"
     /// 4. neither       → filename from originalPath (no extension)
-    private func displayName(for track: Track) -> String {
+    func displayName(for track: Track) -> String {
         let hasTitle = !track.title.isEmpty
         let hasArtist = !track.artist.isEmpty
         switch (hasTitle, hasArtist) {
@@ -474,6 +468,8 @@ final class AppState: ObservableObject {
                                  .deletingPathExtension().lastPathComponent
         }
     }
+
+    // MARK: - Error Helpers
 
     /// Clears the last playback error. Called when the user dismisses an error alert.
     func clearLastError() {
@@ -534,6 +530,8 @@ final class AppState: ObservableObject {
         isProUnlocked = iapManager.isProUnlocked
         featureFlags = CoreFeatureFlags(iapManager: iapManager)
     }
+
+    // MARK: - Persistence
 
     /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.
     ///
@@ -658,1149 +656,5 @@ final class AppState: ObservableObject {
         }
 
         if didRefreshAny { saveState() }
-    }
-
-    // MARK: - Playlist Operations
-
-    /// Appends enriched tracks to the playlist by reading metadata for each URL.
-    ///
-    /// Calls `TagReaderService.readMetadata(for:)` per URL and appends the
-    /// returned `Track` (title, artist, album, duration) in order.\
-    /// On failure, falls back to a URL-derived `Track` and sets `lastError`
-    /// to `.failedToOpenFile`.
-    ///
-    /// - Parameter urls: Audio file URLs to add.
-    /// Handles URLs received from a drag-and-drop operation.
-    ///
-    /// Delegates URL validation to `FileDropService`, then forwards
-    /// valid audio file URLs to `load(urls:)`.
-    /// Invalid or non-audio URLs are silently ignored.
-    func handleFileDrop(urls: [URL]) async {
-        let valid = fileDropService.validate(urls)
-        guard !valid.isEmpty else { return }
-        await load(urls: valid)
-    }
-
-    func load(urls: [URL]) async {
-        isPerformingBlockingOperation = true
-        defer { isPerformingBlockingOperation = false }
-        // Reset skipped lists before each load so alerts re-trigger
-        // even if the same files are dropped again.
-        skippedDuplicateURLs   = []
-        skippedUnsupportedURLs = []
-        // Collect existing URLs to prevent duplicates within the same playlist.
-        let existingURLs = Set(playlists[activePlaylistIndex].tracks.map { $0.url })
-        var skipped: [URL] = []
-        var addedIDs: [Track.ID] = [Track.ID]()
-        for url in urls {
-            if !allowDuplicateTracks && existingURLs.contains(url) {
-                skipped.append(url)
-                continue
-            }
-
-            // Format gate: reject formats not in allowedFormats.
-            // v0.1 frozen: allowedFormats == freeFormats only.
-            // FLAC/DSF/DFF are treated as unsupported, same as .xyz.
-            let ext = url.pathExtension.lowercased()
-            if !Self.allowedFormats.contains(ext) {
-                skippedUnsupportedURLs.append(url)
-                continue
-            }
-
-            do {
-                let track = try await tagReaderService.readMetadata(for: url)
-                playlists[activePlaylistIndex].tracks.append(track)
-                addedIDs.append(track.id)
-            } catch {
-                let track = Track(url: url)
-                playlists[activePlaylistIndex].tracks.append(track)
-                addedIDs.append(track.id)
-                lastError = .failedToOpenFile
-            }
-            if addedIDs.count % Self.saveBatchSize == 0 {
-                saveState()
-            }
-        }
-        if !skipped.isEmpty {
-            skippedDuplicateURLs = skipped
-        }
-
-        // Update insertionOrder with newly added track IDs.
-        // Uses addedIDs collected during the loop so duplicate-allowed tracks
-        // are included correctly.
-        playlists[activePlaylistIndex].insertionOrder.append(contentsOf: addedIDs)
-
-        // If shuffle is active, insert newly added tracks at random positions
-        // in the remaining (unplayed) portion of the shuffleQueue.
-        if isShuffled {
-            for id in addedIDs {
-                // Insert at a random position strictly after the current playing track
-                // (shuffleQueueIndex + 1) so the new track can be played in the
-                // current round. If we're at the last track, append at the end.
-                let afterCurrent = shuffleQueueIndex + 1
-                let end = shuffleQueue.count
-                let insertIndex = afterCurrent <= end
-                    ? Int.random(in: afterCurrent...end)
-                    : end
-                shuffleQueue.insert(id, at: insertIndex)
-            }
-        }
-
-        // Register undo: remove the tracks that were just added.
-        // Only register when at least one track was actually added.
-        if !addedIDs.isEmpty {
-            // Capture the full Track values so redo can re-append them in order.
-            let addedTracks = playlists[activePlaylistIndex].tracks.filter {
-                addedIDs.contains($0.id)
-            }
-            let targetPlaylistIndex = activePlaylistIndex
-            let capturedIDs = addedIDs
-
-            undoManager.registerUndo(withTarget: self) { [addedTracks] state in
-                // Undo: remove the added tracks
-                let idSet = Set(capturedIDs)
-                state.playlists[targetPlaylistIndex].tracks.removeAll { idSet.contains($0.id) }
-                state.playlists[targetPlaylistIndex].insertionOrder.removeAll { idSet.contains($0) }
-
-                // Register redo: re-append the same tracks
-                state.undoManager.registerUndo(withTarget: state) { inner in
-                    inner.playlists[targetPlaylistIndex].tracks.append(contentsOf: addedTracks)
-                    inner.playlists[targetPlaylistIndex].insertionOrder
-                        .append(contentsOf: addedTracks.map(\.id))
-                    inner.saveState()
-                }
-
-                state.saveState()
-            }
-        }
-
-        saveState()
-    }
-    func clearPlaylist() {
-        playlists[activePlaylistIndex].tracks = []
-        currentTrack = nil
-        // Clear undo stack: no meaningful undo target after playlist is wiped.
-        undoManager.removeAllActions()
-        saveState()
-    }
-
-    // MARK: - Playlist Management
-
-    /// Switches the active playlist tab without affecting playback.
-    ///
-    /// Encapsulates tab-switching logic so Views do not need to mutate
-    /// `activePlaylistIndex` directly or manage the undo stack themselves.
-    ///
-    /// - Clears the undo stack so prior operations on a different playlist
-    ///   cannot be accidentally applied to the new context.
-    /// - No-op if `index` is out of range or already active.
-    ///
-    /// - Parameter index: Target playlist index.
-    func switchPlaylist(to index: Int) {
-        guard playlists.indices.contains(index) else { return }
-        guard index != activePlaylistIndex else { return }
-        activePlaylistIndex = index
-        undoManager.removeAllActions()
-    }
-
-    // MARK: - Undo / Redo
-
-    /// Whether the undo stack has an available undo action.
-    var canUndo: Bool { undoManager.canUndo }
-
-    /// Whether the undo stack has an available redo action.
-    var canRedo: Bool { undoManager.canRedo }
-
-    /// Performs the most recent undoable playlist operation.
-    func undo() { undoManager.undo() }
-
-    /// Re-applies the most recently undone playlist operation.
-    func redo() { undoManager.redo() }
-
-    /// Appends a new empty playlist and switches to it.
-    ///
-    /// If `name` is empty, generates the next available "Playlist N" name
-    /// by finding the lowest unused number across all existing playlists.
-    ///
-    /// - Parameter name: Display name for the new playlist.
-    func newPlaylist(name: String) {
-        let resolvedName = name.isEmpty ? nextAvailablePlaylistName() : name
-        playlists.append(Playlist(name: resolvedName))
-        activePlaylistIndex = playlists.count - 1
-        // Clear undo stack: switched to a new playlist context.
-        undoManager.removeAllActions()
-        saveState()
-    }
-
-    /// Returns the next available "Playlist N" name by finding the lowest
-    /// unused number across all existing playlists.
-    private func nextAvailablePlaylistName() -> String {
-        let usedNumbers = Set(playlists.compactMap { pl -> Int? in
-            guard pl.name.hasPrefix("Playlist ") else { return nil }
-            return Int(pl.name.dropFirst("Playlist ".count))
-        })
-        let next = (1...).first { !usedNumbers.contains($0) } ?? (playlists.count + 1)
-        return "Playlist \(next)"
-    }
-
-    /// Renames the playlist at the given index.
-    ///
-    /// No-op if `index` is out of range.
-    ///
-    /// - Parameters:
-    ///   - index: Index of the playlist to rename.
-    ///   - name: New display name.
-    func renamePlaylist(at index: Int, name: String) {
-        guard playlists.indices.contains(index) else { return }
-        playlists[index].name = name
-        saveState()
-    }
-
-    /// Deletes the playlist at the given index.
-    ///
-    /// No-op if `index` is out of range.
-    /// If deleting the last playlist, inserts an empty `"Session"` playlist
-    /// before removing so `playlists` is never empty.
-    /// Adjusts `activePlaylistIndex` to remain valid after deletion:
-    /// - deleted index < activePlaylistIndex → decrement by 1
-    /// - deleted index >= activePlaylistIndex → clamp to new last index
-    ///
-    /// - Parameter index: Index of the playlist to delete.
-    func deletePlaylist(at index: Int) {
-        guard playlists.indices.contains(index) else { return }
-
-        // If deleting the playlist that is currently playing, stop playback first.
-        if playlists[index].id == playingPlaylistID {
-            Task {
-                await stop()
-                currentTrack = nil
-            }
-        }
-
-        if playlists.count == 1 {
-            playlists.append(Playlist(name: "Playlist 1"))
-        }
-        playlists.remove(at: index)
-        if index < activePlaylistIndex {
-            activePlaylistIndex -= 1
-        } else {
-            activePlaylistIndex = min(activePlaylistIndex, playlists.count - 1)
-        }
-        // Clear undo stack: playlist context changed, prior track operations
-        // no longer have a valid target.
-        undoManager.removeAllActions()
-        saveState()
-    }
-
-    /// Removes the track with the given ID from the playlist.
-    ///
-    /// No-op if `trackID` is not found. Sets `currentTrack` to `nil`
-    /// if the removed track was selected.
-    ///
-    /// - Parameter trackID: The `UUID` of the track to remove.
-    func removeTrack(_ trackID: Track.ID) {
-        let wasPlaying = currentTrack?.id == trackID && playbackState == .playing
-        let wasCurrentTrack = currentTrack?.id == trackID
-
-        // Capture position and value BEFORE mutation so undo can restore them.
-        let removalIndex = playlists[activePlaylistIndex].tracks
-            .firstIndex(where: { $0.id == trackID })
-        let removedTrack = removalIndex.map { playlists[activePlaylistIndex].tracks[$0] }
-        let targetPlaylistIndex = activePlaylistIndex
-
-        playlists[activePlaylistIndex].tracks.removeAll { $0.id == trackID }
-        playlists[activePlaylistIndex].insertionOrder.removeAll { $0 == trackID }
-
-        if wasCurrentTrack {
-            if wasPlaying {
-                // Find the next track to play before clearing currentTrack.
-                // After removal, the track that was at the next index is now
-                // at the same index (or we wrap to first if it was the last).
-                let nextTrackID: Track.ID? = {
-                    guard !playlists[activePlaylistIndex].tracks.isEmpty else { return nil }
-                    if isShuffled, let nextIdx = shuffleQueue[safe: shuffleQueueIndex] {
-                        return nextIdx
-                    }
-                    // In normal mode, find the original index of removed track.
-                    // After removal, that index now points to the next track.
-                    // If removed track was the last one, there is no next track
-                    // (unless repeatMode == .all wraps to first).
-                    guard let removedIdx = playlists[activePlaylistIndex].insertionOrder.firstIndex(of: trackID)
-                    else { return playlists[activePlaylistIndex].tracks.first?.id }
-
-                    if removedIdx < playlists[activePlaylistIndex].tracks.count {
-                        // There is a track at this index (the one that shifted up)
-                        return playlists[activePlaylistIndex].tracks[removedIdx].id
-                    } else if repeatMode == .all {
-                        // Removed track was last — wrap to first if repeat all
-                        return playlists[activePlaylistIndex].tracks.first?.id
-                    } else {
-                        // Removed track was last — stop
-                        return nil
-                    }
-                }()
-
-                Task {
-                    await playbackService.stop()
-                    currentTrack = nil
-                    if playlists[activePlaylistIndex].tracks.isEmpty || nextTrackID == nil {
-                        playbackState = .stopped
-                        currentTime = 0
-                    } else if let nextID = nextTrackID {
-                        await play(trackID: nextID)
-                    }
-                }
-            } else {
-                currentTrack = nil
-            }
-        }
-
-        // Remove from shuffleQueue and adjust index if needed.
-        if isShuffled, let removedIdx = shuffleQueue.firstIndex(of: trackID) {
-            shuffleQueue.remove(at: removedIdx)
-            // If removed track was before current position, shift index back
-            // so shuffleQueueIndex still points to the same track.
-            if removedIdx < shuffleQueueIndex {
-                shuffleQueueIndex = max(0, shuffleQueueIndex - 1)
-            }
-            // If removed track was the current position, index stays the same
-            // (now pointing to the next track in queue).
-        }
-
-        // Register undo: re-insert the track at its original index.
-        if let track = removedTrack, let idx = removalIndex {
-            undoManager.registerUndo(withTarget: self) { [track, idx] state in
-                let insertAt = min(idx, state.playlists[targetPlaylistIndex].tracks.count)
-                state.playlists[targetPlaylistIndex].tracks.insert(track, at: insertAt)
-                state.playlists[targetPlaylistIndex].insertionOrder.insert(track.id, at: insertAt)
-
-                // Register redo: remove it again
-                state.undoManager.registerUndo(withTarget: state) { inner in
-                    inner.playlists[targetPlaylistIndex].tracks.removeAll { $0.id == track.id }
-                    inner.playlists[targetPlaylistIndex].insertionOrder.removeAll { $0 == track.id }
-                    inner.saveState()
-                }
-
-                state.saveState()
-            }
-        }
-
-        saveState()
-    }
-
-    /// Inserts a track immediately after the currently playing track.
-    ///
-    /// Allows the user to queue a specific track to play next without
-    /// interrupting current playback. If shuffle is active, also inserts
-    /// the track at the next position in the shuffle queue.
-    ///
-    /// - Parameter trackID: The `UUID` of the track to play next.
-    func playNext(_ trackID: Track.ID) {
-        guard let track = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID }) else { return }
-
-        // Find current playing position in playlist
-        let currentIndex = currentTrack.flatMap { ct in
-            playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == ct.id })
-        } ?? -1
-
-        let insertIndex = currentIndex + 1
-
-        // Remove from current position if already in playlist
-        playlists[activePlaylistIndex].tracks.removeAll { $0.id == trackID }
-
-        // Re-insert after current track
-        let clampedIndex = min(insertIndex, playlists[activePlaylistIndex].tracks.count)
-        playlists[activePlaylistIndex].tracks.insert(track, at: clampedIndex)
-
-        // Keep insertionOrder in sync with the new track order
-        playlists[activePlaylistIndex].insertionOrder = playlists[activePlaylistIndex].tracks.map { $0.id }
-
-        // If shuffle is active, also insert at next position in queue
-        if isShuffled {
-            shuffleQueue.removeAll { $0 == trackID }
-            let nextQueueIndex = min(shuffleQueueIndex + 1, shuffleQueue.count)
-            shuffleQueue.insert(trackID, at: nextQueueIndex)
-        }
-
-        saveState()
-    }
-
-    /// Applies a sorted track order to the playlist.
-    ///
-    /// Called by PlaylistView when the user clicks a column header.
-    /// Reorders `playlists[activePlaylistIndex].tracks` so playback follows the sorted order.
-    /// Applies a sorted track order and records the sort state in the playlist.
-    func applySort(_ sorted: [Track], key: PlaylistSortKey, ascending: Bool) {
-        playlists[activePlaylistIndex].tracks = sorted
-        playlists[activePlaylistIndex].sortKey = key
-        playlists[activePlaylistIndex].sortAscending = ascending
-        // Do NOT rebuild shuffleQueue here — sort only changes the visual display
-        // order in PlaylistView. shuffleQueue is an independent playback order
-        // and must not be affected by column sorting.
-        saveState()
-    }
-
-    /// Restores insertion order and clears sort state.
-    func restoreInsertionOrder() {
-        let ordered = playlists[activePlaylistIndex].insertionOrder.compactMap { id in
-            playlists[activePlaylistIndex].tracks.first { $0.id == id }
-        }
-        playlists[activePlaylistIndex].tracks = ordered
-        playlists[activePlaylistIndex].sortKey = .none
-        playlists[activePlaylistIndex].sortAscending = true
-        // Do NOT rebuild shuffleQueue here — same reason as applySort().
-        saveState()
-    }
-
-    /// Reorders tracks in the playlist.
-    ///
-    /// Signature is compatible with SwiftUI's `onMove` callback.
-    /// Implemented without SwiftUI import to maintain module boundary.
-    ///
-    /// - Parameters:
-    ///   - fromOffsets: Source indices
-    ///   - toOffset: Destination offset
-    func moveTrack(fromOffsets: IndexSet, toOffset: Int) {
-        // Capture snapshot before mutation so undo can restore previous order.
-        let beforeTracks = playlists[activePlaylistIndex].tracks
-        let targetPlaylistIndex = activePlaylistIndex
-
-        let itemsToMove = fromOffsets.map { playlists[activePlaylistIndex].tracks[$0] }
-        var result = playlists[activePlaylistIndex].tracks.enumerated()
-            .filter { !fromOffsets.contains($0.offset) }
-            .map { $0.element }
-        let adjustedOffset = toOffset - fromOffsets.filter { $0 < toOffset }.count
-        result.insert(contentsOf: itemsToMove, at: min(adjustedOffset, result.count))
-        playlists[activePlaylistIndex].tracks = result
-        // Keep insertionOrder in sync with the new track order so that
-        // restoreInsertionOrder() reflects the user's manual reorder.
-        playlists[activePlaylistIndex].insertionOrder = result.map { $0.id }
-
-        // Capture snapshot after mutation for redo.
-        let afterTracks = playlists[activePlaylistIndex].tracks
-
-        // Register undo: restore previous order.
-        undoManager.registerUndo(withTarget: self) { [beforeTracks, afterTracks] state in
-            state.playlists[targetPlaylistIndex].tracks = beforeTracks
-            state.playlists[targetPlaylistIndex].insertionOrder = beforeTracks.map(\.id)
-
-            // Register redo: re-apply the move.
-            state.undoManager.registerUndo(withTarget: state) { inner in
-                inner.playlists[targetPlaylistIndex].tracks = afterTracks
-                inner.playlists[targetPlaylistIndex].insertionOrder = afterTracks.map(\.id)
-                inner.saveState()
-            }
-
-            state.saveState()
-        }
-
-        saveState()
-    }
-
-    // MARK: - Transport Controls
-
-    /// Start playback of the currently loaded track.
-    ///
-    /// No-op if no track has been loaded via `play(trackID:)`.
-    /// Resumes playback of the current track, or plays the first track if
-    /// nothing is loaded yet.
-    ///
-    /// On error: sets `lastError` and `playbackState = .error(mapped)`.
-    func play() async {
-        // If no track is loaded, play the first track in the playlist.
-        if currentTrack == nil {
-            if let first = playlists[activePlaylistIndex].tracks.first {
-                await play(trackID: first.id)
-            }
-            return
-        }
-
-        // If playbackService is stopped (e.g. after stop() was called, or after
-        // the last track finished naturally), reload and resume.
-        if case .stopped = playbackService.state {
-            // After natural completion of the last track with repeatMode == .off,
-            // pressing Play restarts from the first track in the playlist.
-            let isLastTrack: Bool = {
-                guard let current = currentTrack,
-                      let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
-                else { return false }
-                return idx == playlists[activePlaylistIndex].tracks.count - 1
-            }()
-
-            if isLastTrack && repeatMode == .off && pendingSeekTime <= 0.1 {
-                if let first = playlists[activePlaylistIndex].tracks.first {
-                    await play(trackID: first.id)
-                }
-                return
-            }
-
-            if let track = currentTrack {
-                let targetTime = pendingSeekTime
-                await play(trackID: track.id)
-                if targetTime > 0.1 {
-                    await seek(to: targetTime)
-                }
-            }
-            return
-        }
-
-        do {
-            try await playbackService.play()
-            playbackState = .playing
-            startPolling()
-        } catch {
-            let mapped = mapToPlaybackError(error)
-            lastError = mapped
-            playbackState = .error(mapped)
-        }
-    }
-
-    /// Pause playback. Playback position is preserved.
-    func pause() async {
-        await playbackService.pause()
-        playbackState = .paused
-    }
-
-    /// Stop playback. Resets `currentTime` to 0.
-    func stop() async {
-        stopPolling()
-        await playbackService.stop()
-        playbackState = .stopped
-        currentTime = 0
-        pendingSeekTime = 0
-        playingPlaylistID = nil
-    }
-
-    /// Seek to an absolute position in the current track.
-    ///
-    /// On success: updates `currentTime`.
-    /// On error: sets `lastError`. `playbackState` is not changed.
-    ///
-    /// - Parameter seconds: Target playback position in seconds.
-    func seek(to seconds: TimeInterval) async {
-        do {
-            try await playbackService.seek(to: seconds)
-            currentTime = seconds
-        } catch {
-            lastError = mapToPlaybackError(error)
-        }
-    }
-
-    /// Sets the output volume.
-    ///
-    /// Clamps `volume` to 0.0–1.0 before updating the published property
-    /// and forwarding to `PlaybackService`.
-    ///
-    /// - Parameter volume: Desired volume. Out-of-range values are silently clamped.
-    func setVolume(_ volume: Float) async {
-        let clamped = max(0.0, min(1.0, volume))
-        self.volume = clamped
-        await playbackService.setVolume(clamped)
-    }
-
-    // MARK: - Track Selection
-
-    /// Loads and plays the track matching `trackID`.
-    ///
-    /// **Execution order:**
-    /// 1. Resolve `trackID` in the playlist. Set `currentTrack`, or set it to `nil`
-    ///    and return if not found.
-    /// 2. **Format gate:** If the track's extension is `flac`, `dsf`, or
-    ///    `dff` AND `featureFlags.supportsFLAC` is `false` (Free tier), set
-    ///    `lastError = .unsupportedFormat`, `playbackState = .error(.unsupportedFormat)`,
-    ///    and return. `playbackService.load` is never reached for gated formats.
-    /// 3. Set `playbackState = .loading`.
-    /// 4. Call `playbackService.load(url:)` and update `duration`.
-    /// 5. Call `playbackService.play()` and set `playbackState = .playing`.
-    /// 6. On any error: map to `PlaybackError`, set `lastError` and `playbackState = .error`.
-    ///
-    /// - Parameter trackID: The `UUID` of the track to load and play.
-    func play(trackID: Track.ID) async {
-        // Step 1: Resolve track across all playlists.
-        // Search activePlaylistIndex first, then other playlists.
-        // If found in a different playlist, switch activePlaylistIndex to that playlist.
-        var resolvedTrack: Track? = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
-        var resolvedPlaylistIndex = activePlaylistIndex
-
-        if resolvedTrack == nil {
-            for (i, playlist) in playlists.enumerated() where i != activePlaylistIndex {
-                if let found = playlist.tracks.first(where: { $0.id == trackID }) {
-                    resolvedTrack = found
-                    resolvedPlaylistIndex = i
-                    break
-                }
-            }
-        }
-
-        guard let track = resolvedTrack else {
-            currentTrack = nil
-            return
-        }
-
-        // Switch to the playlist that owns this track.
-        if resolvedPlaylistIndex != activePlaylistIndex {
-            activePlaylistIndex = resolvedPlaylistIndex
-        }
-
-        // If shuffle is active, sync shuffleQueueIndex to the manually selected track
-        // so Next/Previous continue from the correct position in the queue.
-        if isShuffled {
-            if let idx = shuffleQueue.firstIndex(of: trackID) {
-                shuffleQueueIndex = idx
-            } else {
-                // Track not in queue (e.g. added after shuffle) — rebuild queue
-                buildShuffleQueue(startingWith: trackID)
-            }
-        }
-
-        // Step 2: Accessibility gate — reject inaccessible tracks BEFORE setting currentTrack
-        // so PlayerView is never updated with a track that cannot be played.
-        if !track.isAccessible {
-            // Stop current playback so the playing track does not continue.
-            stopPolling()
-            await playbackService.stop()
-            currentTrack = nil
-            lastError = .failedToOpenFile
-            failedTrackName = displayName(for: track)
-            showFileNotFoundAlert = true
-            playbackState = .error(.failedToOpenFile)
-            // Write back so PlaylistView re-renders with strikethrough.
-            if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
-                playlists[activePlaylistIndex].tracks[idx].isAccessible = false
-            }
-            return
-        }
-
-        // v0.1 frozen: Pro format gate disabled. FLAC/DSF/DFF cannot enter
-        // the playlist, so this code path is unreachable. Re-enable in v0.2.
-        // Step 2b: Format gate — reject Pro-only formats on the Free tier.
-        // Post bringMainWindowToFront so MiniPlayerView closes itself and brings
-        // the main window to front before the Paywall sheet appears.
-        // let ext = track.url.pathExtension.lowercased()
-        // if (ext == "flac" || ext == "dsf" || ext == "dff") && !featureFlags.supportsFLAC {
-        //     NotificationCenter.default.post(name: .bringMainWindowToFront, object: nil)
-        //     showPaywallIfNeeded()
-        //     currentTrack = nil
-        //     return
-        // }
-
-        // Step 3–6: Standard load-and-play flow.
-        stopPolling()
-        await playbackService.stop()
-        playbackState = .loading
-
-        do {
-            try await playbackService.load(url: track.url)
-            duration = await playbackService.duration()
-
-            await applyReplayGainVolume(for: track)
-
-            try await playbackService.play()
-            currentTrack = track
-            lastPlayedTrackID = track.id
-            playbackState = .playing
-            playingPlaylistID = playlists[activePlaylistIndex].id
-            startPolling()
-        } catch {
-            let mapped = mapToPlaybackError(error)
-            currentTrack = nil
-            lastError = mapped
-            playbackState = .error(mapped)
-            if mapped == .failedToOpenFile {
-                failedTrackName = displayName(for: track)
-                showFileNotFoundAlert = true
-                if let idx = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == trackID }) {
-                    playlists[activePlaylistIndex].tracks[idx].isAccessible = false
-                }
-            }
-        }
-    }
-
-
-    // MARK: - Repeat Mode Control
-
-    /// Cycles repeat mode: off → all → one → off.
-    ///
-    /// Synchronous. Safe to call directly from SwiftUI button actions.
-    func cycleRepeatMode() {
-        switch repeatMode {
-        case .off: repeatMode = .all
-        case .all: repeatMode = .one
-        case .one: repeatMode = .off
-        }
-    }
-
-    /// Toggles shuffle mode on or off.
-    ///
-    /// Synchronous. Safe to call directly from SwiftUI button actions.
-    func toggleShuffle() {
-        isShuffled = !isShuffled
-        if isShuffled {
-            buildShuffleQueue(startingWith: currentTrack?.id)
-        } else {
-            shuffleQueue = []
-            shuffleQueueIndex = 0
-        }
-    }
-
-    /// Builds a shuffled queue of all track IDs.
-    ///
-    /// If `startID` is provided, places it first so the currently playing
-    /// track stays at the head of the new queue.
-    private func buildShuffleQueue(startingWith startID: Track.ID? = nil) {
-        var ids = playlists[activePlaylistIndex].tracks
-            .filter { $0.isAccessible }
-            .map { $0.id }
-        ids.shuffle()
-        if let startID, let idx = ids.firstIndex(of: startID) {
-            ids.remove(at: idx)
-            ids.insert(startID, at: 0)
-        }
-        shuffleQueue = ids
-        shuffleQueueIndex = 0
-    }
-
-    // MARK: - Navigation
-
-    /// Plays the next track in the playlist.
-    ///
-    /// Behaviour depends on `repeatMode`:
-    /// - `.off`: Advance to next; stop if already at last track.
-    /// - `.all`: Advance to next; loop to first if at last track.
-    /// - `.one`: Replay current track.
-    ///
-    /// No-op if playlist is empty.
-    func playNextTrack() async {
-        guard !playlists[activePlaylistIndex].tracks.isEmpty else { return }
-
-        // repeatMode == .one does NOT intercept Next/Previous button presses.
-        // The button should navigate the playlist; repeat-one only applies to
-        // natural track completion (trackDidFinishPlaying).
-
-        if isShuffled {
-            // Rebuild queue if it's empty or stale
-            if shuffleQueue.isEmpty {
-                buildShuffleQueue(startingWith: currentTrack?.id)
-            }
-            let nextIndex = shuffleQueueIndex + 1
-            if nextIndex < shuffleQueue.count {
-                shuffleQueueIndex = nextIndex
-            } else {
-                // Queue exhausted — rebuild and start from beginning
-                buildShuffleQueue()
-                shuffleQueueIndex = 0
-            }
-            if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
-                await play(trackID: trackID)
-            }
-            return
-        }
-
-        guard let current = currentTrack,
-              let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
-        else {
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
-            return
-        }
-
-        let nextIndex = currentIndex + 1
-        if nextIndex < playlists[activePlaylistIndex].tracks.count {
-            await play(trackID: playlists[activePlaylistIndex].tracks[nextIndex].id)
-        } else {
-            // At last track — always wrap to first regardless of repeatMode.
-            // Natural completion (trackDidFinishPlaying) respects repeatMode;
-            // manual Next button always wraps for better user experience.
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
-        }
-    }
-
-    /// Plays the previous track in the playlist.
-    ///
-    /// If `currentTrack` is the first track, seeks to the beginning
-    /// and replays it instead of wrapping around.
-    ///
-    /// No-op if playlist is empty.
-    func playPreviousTrack() async {
-        guard !playlists[activePlaylistIndex].tracks.isEmpty else { return }
-
-        if isShuffled {
-            if shuffleQueue.isEmpty { buildShuffleQueue(startingWith: currentTrack?.id) }
-            let prevIndex = shuffleQueueIndex - 1
-            if prevIndex >= 0 {
-                shuffleQueueIndex = prevIndex
-                if let trackID = shuffleQueue[safe: shuffleQueueIndex] {
-                    await play(trackID: trackID)
-                }
-            } else {
-                // At beginning of shuffle queue — restart current track
-                if let current = currentTrack {
-                    await play(trackID: current.id)
-                }
-            }
-            return
-        }
-
-        guard let current = currentTrack,
-              let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
-        else {
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
-            return
-        }
-
-        if currentIndex > 0 {
-            await play(trackID: playlists[activePlaylistIndex].tracks[currentIndex - 1].id)
-        } else {
-            do {
-                try await playbackService.seek(to: 0)
-                currentTime = 0
-            } catch {
-                lastError = mapToPlaybackError(error)
-            }
-            await play(trackID: current.id)
-        }
-    }
-
-    /// Called by the View layer when natural playback completion is detected.
-    ///
-    /// Dispatches based on `repeatMode`:
-    /// - `.off`: `playNextTrack()` (stop if at last).
-    /// - `.all`: `playNextTrack()` (loop if at last).
-    /// - `.one`: `play(trackID:)` for `currentTrack`.
-    ///
-    /// No-op if `currentTrack` is `nil`.
-    func trackDidFinishPlaying() async {
-        guard let lastID = lastPlayedTrackID else { return }
-        switch repeatMode {
-        case .off:
-            if isShuffled {
-                // Shuffle mode: advance through queue skipping inaccessible tracks
-                // and format-gated tracks (when paywallDismissedThisSession is true).
-                var skipped: [String] = []
-                var nextIndex = shuffleQueueIndex + 1
-                while nextIndex < shuffleQueue.count {
-                    guard let trackID = shuffleQueue[safe: nextIndex],
-                          let next = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
-                    else { nextIndex += 1; continue }
-
-                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
-                    // Silently skip format-gated tracks if user dismissed paywall this session.
-                    // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    // if isFormatGated && paywallDismissedThisSession {
-                    //     nextIndex += 1
-                    //     continue
-                    // }
-
-                    if next.isAccessible {
-                        shuffleQueueIndex = nextIndex
-                        await play(trackID: next.id)
-                        if case .error(.failedToOpenFile) = playbackState {
-                            skipped.append(displayName(for: next))
-                            nextIndex += 1
-                            continue
-                        }
-                        if !skipped.isEmpty {
-                            skippedInaccessibleNames = skipped
-                            showFileNotFoundAlert = true
-                        }
-                        return
-                    } else {
-                        skipped.append(displayName(for: next))
-                    }
-                    nextIndex += 1
-                }
-                // Queue exhausted — show popup and stop.
-                if !skipped.isEmpty {
-                    skippedInaccessibleNames = skipped
-                    showFileNotFoundAlert = true
-                }
-                await stop()
-                currentTrack = nil
-                shuffleQueue = []
-                shuffleQueueIndex = 0
-            } else {
-                // Normal mode: skip inaccessible tracks and format-gated tracks
-                // (when paywallDismissedThisSession is true).
-                guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
-                else { return }
-                var skipped: [String] = []
-                var nextIndex = currentIndex + 1
-                while nextIndex < playlists[activePlaylistIndex].tracks.count {
-                    let next = playlists[activePlaylistIndex].tracks[nextIndex]
-
-                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
-                    // Silently skip format-gated tracks if user dismissed paywall this session.
-                    // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    // if isFormatGated && paywallDismissedThisSession {
-                    //     nextIndex += 1
-                    //     continue
-                    // }
-
-                    if next.isAccessible {
-                        await play(trackID: next.id)
-                        if case .error(.failedToOpenFile) = playbackState {
-                            skipped.append(displayName(for: next))
-                            nextIndex += 1
-                            continue
-                        }
-                        if !skipped.isEmpty {
-                            skippedInaccessibleNames = skipped
-                            showFileNotFoundAlert = true
-                        }
-                        return
-                    } else {
-                        skipped.append(displayName(for: next))
-                    }
-                    nextIndex += 1
-                }
-                // No more playable tracks — show popup and stop.
-                if !skipped.isEmpty {
-                    skippedInaccessibleNames = skipped
-                    showFileNotFoundAlert = true
-                }
-                await stop()
-                currentTrack = nil
-            }
-        case .all:
-            // Wrap around skipping inaccessible tracks and format-gated tracks
-            // (when paywallDismissedThisSession is true).
-            guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
-            else { return }
-            let count = playlists[activePlaylistIndex].tracks.count
-            var nextIndex = (currentIndex + 1) % count
-            var attempts = 0
-            var skipped: [String] = []
-            while attempts < count {
-                let next = playlists[activePlaylistIndex].tracks[nextIndex]
-
-                // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
-                // Silently skip format-gated tracks if user dismissed paywall this session.
-                // let nextExt = next.url.pathExtension.lowercased()
-                // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                // if isFormatGated && paywallDismissedThisSession {
-                //     nextIndex = (nextIndex + 1) % count
-                //     attempts += 1
-                //     continue
-                // }
-
-                if next.isAccessible {
-                    await play(trackID: next.id)
-                    if case .error(.failedToOpenFile) = playbackState {
-                        skipped.append(displayName(for: next))
-                        nextIndex = (nextIndex + 1) % count
-                        attempts += 1
-                        continue
-                    }
-                    if !skipped.isEmpty {
-                        skippedInaccessibleNames = skipped
-                        showFileNotFoundAlert = true
-                    }
-                    return
-                } else {
-                    skipped.append(displayName(for: next))
-                }
-                nextIndex = (nextIndex + 1) % count
-                attempts += 1
-            }
-            // All tracks inaccessible — show popup and stop.
-            if !skipped.isEmpty {
-                skippedInaccessibleNames = skipped
-                showFileNotFoundAlert = true
-            }
-            await stop()
-            currentTrack = nil
-        case .one:
-            guard let current = playlists[activePlaylistIndex].tracks.first(where: { $0.id == lastID })
-            else { return }
-            if !current.isAccessible {
-                failedTrackName = displayName(for: current)
-                showFileNotFoundAlert = true
-                await stop()
-                currentTrack = nil
-            } else {
-                await play(trackID: lastID)
-            }
-        }
-    }
-
-    // MARK: - M3U8 Import / Export
-
-    /// Generates M3U8 content for the active playlist and writes it to the given URL.
-    ///
-    /// Called by `HarmoniaPlayerCommands` after `NSSavePanel` resolves the destination.
-    ///
-    /// - Parameters:
-    ///   - url: Destination file URL (provided by NSSavePanel).
-    ///   - pathStyle: Whether to write absolute or relative paths.
-    /// - Throws: If the file cannot be written.
-    func writeExport(to url: URL, pathStyle: M3U8PathStyle) throws {
-        let service = M3U8Service()
-        let content = service.export(playlist: playlist, pathStyle: pathStyle)
-        try content.write(to: url, atomically: true, encoding: .utf8)
-    }
-
-    /// Reads an M3U8 file, creates a new playlist tab named after the filename,
-    /// and re-reads metadata via `TagReaderService` for each resolved URL.
-    ///
-    /// Files not found on disk are skipped and recorded in `skippedImportURLs`,
-    /// which the view layer observes to present a warning alert.
-    ///
-    /// Called by `HarmoniaPlayerCommands` after `NSOpenPanel` resolves the source URL.
-    ///
-    /// - Parameter url: Source `.m3u8` file URL (provided by NSOpenPanel).
-    func importPlaylist(from url: URL) async {
-        isPerformingBlockingOperation = true
-        defer { isPerformingBlockingOperation = false }
-        skippedImportURLs = []
-
-        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-            lastError = .failedToOpenFile
-            return
-        }
-
-        let service = M3U8Service()
-        let urls = service.parse(m3u8: content, baseURL: url)
-
-        // Create new playlist tab named after the .m3u8 filename (without extension)
-        let tabName = url.deletingPathExtension().lastPathComponent
-        newPlaylist(name: tabName)
-
-        var skipped: [URL] = []
-        var addedCount = 0
-        for fileURL in urls {
-            guard isURLSupported(fileURL) else {
-                skipped.append(fileURL)
-                continue
-            }
-            guard FileManager.default.fileExists(atPath: fileURL.path) else {
-                skipped.append(fileURL)
-                continue
-            }
-            do {
-                let track = try await tagReaderService.readMetadata(for: fileURL)
-                playlists[activePlaylistIndex].tracks.append(track)
-                playlists[activePlaylistIndex].insertionOrder.append(track.id)
-            } catch {
-                let track = Track(url: fileURL)
-                playlists[activePlaylistIndex].tracks.append(track)
-                playlists[activePlaylistIndex].insertionOrder.append(track.id)
-            }
-            addedCount += 1
-            if addedCount % Self.saveBatchSize == 0 {
-                saveState()
-            }
-        }
-
-        if !skipped.isEmpty {
-            skippedImportURLs = skipped
-        }
-        saveState()
-    }
-
-    // MARK: - Private Helpers
-
-    /// Starts a polling loop that updates `currentTime` and detects
-    /// natural playback completion while `playbackState == .playing`.
-    private func startPolling() {
-        stopPolling()
-        pollingTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s
-                guard !Task.isCancelled else { break }
-                let serviceState = self.playbackService.state
-                let time = await self.playbackService.currentTime()
-                await MainActor.run {
-                    self.currentTime = time
-                    // Detect natural completion: service stopped but we think we're playing.
-                    // Ignore .buffering — that is the drain state used by DefaultPlaybackService
-                    // during EOF drain; we must not trigger completion until .stopped.
-                    if case .stopped = serviceState, self.playbackState == .playing {
-                        self.playbackState = .stopped
-                        Task { await self.trackDidFinishPlaying() }
-                    }
-                }
-                // Only break out of polling when truly stopped (not buffering/draining).
-                if case .stopped = serviceState { break }
-            }
-        }
-    }
-
-    /// Switches the active playlist from Mini Player and starts playing from the first track.
-    ///
-    /// Called by MiniPlayerView when the user selects a different playlist.
-    /// Stops current playback, switches activePlaylistIndex, then plays the
-    /// first track in the new playlist. No-op if index is out of range.
-    ///
-    /// - Parameter index: Index of the playlist to switch to.
-    func switchMiniPlayerPlaylist(to index: Int) async {
-        guard playlists.indices.contains(index) else { return }
-        await stop()
-        activePlaylistIndex = index
-        // Clear undo stack: switched playlist context.
-        undoManager.removeAllActions()
-        if let first = playlists[index].tracks.first {
-            await play(trackID: first.id)
-        }
-    }
-
-    /// Calculates and applies the effective playback volume for the current track.
-    ///
-    /// Called in two places:
-    /// 1. `play(trackID:)` — once when a new track starts.
-    /// 2. The `$replayGainMode` Combine sink — whenever the user changes mode in Settings.
-    ///
-    /// Gain logic:
-    /// - `.off`  → use `volume` unchanged
-    /// - `.track` → `replayGainTrack` dB; fallback to `replayGainAlbum` if absent
-    /// - `.album` → `replayGainAlbum` dB; fallback to `replayGainTrack` if absent
-    /// - Both nil → use `volume` unchanged
-    /// - Result is clamped to [0, 1].
-    private func applyReplayGainVolume(for explicitTrack: Track? = nil, requiresActivePlayback: Bool = false) async {
-        if requiresActivePlayback {
-            guard playbackState == .playing || playbackState == .paused else { return }
-        }
-        // explicitTrack is passed from play(trackID:) before currentTrack is set.
-        // Combine sink passes nil and falls back to currentTrack instead.
-        let track = explicitTrack ?? currentTrack
-
-        let gainDB: Double? = {
-            switch replayGainMode {
-            case .off:   return nil
-            case .track: return track?.replayGainTrack ?? track?.replayGainAlbum
-            case .album: return track?.replayGainAlbum ?? track?.replayGainTrack
-            }
-        }()
-        let effectiveVolume: Float = {
-            guard let db = gainDB else { return volume }
-            let linear = pow(10.0, db / 20.0)
-            return Float(min(1.0, Double(volume) * linear))
-        }()
-        await playbackService.setVolume(effectiveVolume)
-    }
-
-    /// Cancels the polling loop.
-    private func stopPolling() {
-        pollingTask?.cancel()
-        pollingTask = nil
-    }
-
-    /// Maps any thrown error to a `PlaybackError` for UI consumption.
-    ///
-    /// If the error is already a `PlaybackError`, it is returned as-is.
-    /// Otherwise, the error's localized description is wrapped in `.coreError`.
-    private func mapToPlaybackError(_ error: Error) -> PlaybackError {
-        if let playbackError = error as? PlaybackError { return playbackError }
-        let desc = error.localizedDescription
-        // HarmoniaCore.CoreError error 3 = notFound / cannot open file
-        // Map file-related core errors to user-friendly failedToOpenFile
-        if desc.contains("CoreError error 3") ||
-           desc.contains("notFound") ||
-           desc.contains("not found") ||
-           desc.contains("No such file") {
-            return .failedToOpenFile
-        }
-        return .coreError(desc)
     }
 }
