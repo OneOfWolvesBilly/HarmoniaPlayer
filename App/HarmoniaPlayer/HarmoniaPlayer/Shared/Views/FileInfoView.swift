@@ -7,7 +7,8 @@
 //  PURPOSE
 //  -------
 //  Sheet-style "Get Info" panel for a single track.
-//  Displays four sections:
+//  Displays five sections:
+//    • Artwork    — embedded cover art image with dimensions, format, size (read-only)
 //    • Location   — fileName, folder, path, fileSize, modified, created (read-only)
 //    • Tags       — title, artist, album, albumArtist, composer, genre, year,
 //                   trackNumber/trackTotal, discNumber/discTotal, bpm, comment,
@@ -29,6 +30,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 struct FileInfoView: View {
 
@@ -75,6 +77,8 @@ struct FileInfoView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    artworkSection
+                    Divider().padding(.horizontal, 16)
                     locationSection
                     Divider().padding(.horizontal, 16)
                     tagsSection
@@ -86,11 +90,111 @@ struct FileInfoView: View {
                 .padding(.bottom, 16)
             }
         }
-        .frame(width: 500, height: 640)
+        .frame(width: 500, height: 720)
         .onAppear {
             loadAttributes()
             loadWhereSources()
         }
+    }
+
+    // MARK: - Artwork Section
+
+    private var artworkSection: some View {
+        InfoSection(title: "ARTWORK") {
+            VStack(spacing: 8) {
+                if let data = track.artworkData,
+                   let nsImage = NSImage(data: data) {
+                    Image(nsImage: nsImage)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxHeight: 160)
+                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                        .padding(.horizontal, 16)
+                        .accessibilityIdentifier("file-info-artwork-image")
+
+                    artworkMetadataView(data: data, image: nsImage)
+                } else {
+                    artworkPlaceholder
+                }
+            }
+        }
+    }
+
+    /// Placeholder shown when the track has no embedded artwork.
+    private var artworkPlaceholder: some View {
+        VStack(spacing: 6) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.secondary.opacity(0.12))
+                    .frame(width: 120, height: 120)
+                Image(systemName: "music.note")
+                    .font(.system(size: 32))
+                    .foregroundStyle(Color.secondary.opacity(0.5))
+            }
+            Text("No Artwork")
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 16)
+        .accessibilityIdentifier("file-info-artwork-placeholder")
+    }
+
+    /// Shows dimensions, image format, and data size below the artwork image.
+    private func artworkMetadataView(data: Data, image: NSImage) -> some View {
+        let dimensions = artworkPixelDimensions(image)
+        let format = artworkFormatName(data)
+        let size = ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+
+        return HStack(spacing: 12) {
+            if let dimensions {
+                Text("\(dimensions.width) × \(dimensions.height) px")
+                    .font(.caption)
+                    .foregroundStyle(Color.secondary)
+            }
+            Text(format)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+            Text(size)
+                .font(.caption)
+                .foregroundStyle(Color.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .accessibilityIdentifier("file-info-artwork-metadata")
+    }
+
+    /// Returns pixel dimensions from the first bitmap representation, or nil.
+    private func artworkPixelDimensions(_ image: NSImage) -> (width: Int, height: Int)? {
+        guard let rep = image.representations.first else { return nil }
+        let w = rep.pixelsWide
+        let h = rep.pixelsHigh
+        // NSImageRep returns -1 for unknown pixel dimensions
+        guard w > 0, h > 0 else { return nil }
+        return (w, h)
+    }
+
+    /// Detects image format from magic bytes in the data header.
+    private func artworkFormatName(_ data: Data) -> String {
+        guard data.count >= 4 else { return "Image" }
+        let header = [UInt8](data.prefix(4))
+        // JPEG: FF D8 FF
+        if header[0] == 0xFF, header[1] == 0xD8, header[2] == 0xFF {
+            return "JPEG"
+        }
+        // PNG: 89 50 4E 47
+        if header[0] == 0x89, header[1] == 0x50, header[2] == 0x4E, header[3] == 0x47 {
+            return "PNG"
+        }
+        // TIFF: 49 49 2A 00 (little-endian) or 4D 4D 00 2A (big-endian)
+        if (header[0] == 0x49 && header[1] == 0x49 && header[2] == 0x2A && header[3] == 0x00) ||
+           (header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A) {
+            return "TIFF"
+        }
+        // BMP: 42 4D
+        if header[0] == 0x42, header[1] == 0x4D {
+            return "BMP"
+        }
+        return "Image"
     }
 
     // MARK: - Location Section
