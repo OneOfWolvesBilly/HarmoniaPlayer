@@ -236,6 +236,64 @@ func refreshEntitlements() async
 - ✅ All IAPManagerTests and AppStateFormatGatingTests green
 - ✅ All Slice 1–8 tests still green
 
+### v0.1 Freeze Addendum
+
+> **Added after v0.1 freeze commits.** The 9-A spec above describes the
+> original Pro-tier design (load-then-paywall). v0.1 ships as Free-only
+> with all Pro UI hidden. This section documents the exact changes applied
+> and the steps to restore for v0.2.
+
+#### v0.1 Behaviour Changes
+
+| Area | 9-A Original | v0.1 Frozen |
+|------|-------------|-------------|
+| FLAC/DSF/DFF load | Added to playlist, strikethrough for Free | **Blocked at load time** — treated as unsupported, same as .xyz |
+| `play(trackID:)` format gate | Posts `bringMainWindowToFront`, shows Paywall | **Commented out** — unreachable since FLAC cannot enter playlist |
+| `trackDidFinishPlaying()` format gate | Silently skips Pro formats when `paywallDismissedThisSession` | **Commented out** (3 places) |
+| `openFilePicker` allowedContentTypes | Includes FLAC/DSF/DFF | **Removed** FLAC/DSF/DFF (commented out) |
+| "Upgrade to Pro" menu | Visible when `isProUnlocked == false` | **Commented out** |
+| Launch `refreshEntitlements` | `.task { await appState.refreshEntitlements() }` | **Commented out** |
+| `HarmoniaPlayerApp` IAPManager | `StoreKitIAPManager()` | `StoreKitIAPManager()` (unchanged, but `refreshEntitlements` not called) |
+
+#### v0.1 New Additions (not in original 9-A)
+
+| Feature | Description |
+|---------|-------------|
+| `allowedFormats` | Computed property: v0.1 = `freeFormats` only. v0.2: restore Pro check |
+| `isURLSupported(_:)` | Uses `allowedFormats` instead of `freeFormats ∪ proOnlyFormats` |
+| `isPerformingBlockingOperation` | `@Published` flag, set true/defer false in `load(urls:)` and `importPlaylist(from:)` |
+| Menu disable during blocking | Add Files, Import M3U8, Undo, Redo disabled when `isPerformingBlockingOperation == true` |
+| Drop reject during blocking | Both `PlaylistView.dropDestination` closures return false when blocking |
+| Sub-batch save | `load(urls:)` and `importPlaylist(from:)` call `saveState()` every 5 tracks |
+| `importPlaylist` format gate | `isURLSupported()` check added (was missing in 9-A) |
+| `importPlaylist` final `saveState()` | Added (was missing in 9-A) |
+| Directory drop + selection | `FileDropService` recursively expands directories; `openFilePicker` `canChooseDirectories = true` |
+
+#### v0.1 Test Changes
+
+| Test file | Change |
+|-----------|--------|
+| `AppStateFormatGatingTests` | 14 Pro format gate tests commented out (full body preserved); 3 new v0.1 block tests added |
+| `IAPManagerTests` | 2 FLAC load tests commented out (full body preserved) |
+| `IntegrationTests` | `testIntegration_UnsupportedFormat_Free` updated to test blocked path (original preserved as comment) |
+| `AppStatePlayerlistTests` | 3 new `isPerformingBlockingOperation` tests added |
+| `AppStatePersistenceTests` | 2 new sub-batch save + importPlaylist persistence tests added (from commit #1) |
+| `FileDropServiceTests` | New file: 6 tests for directory expansion |
+
+#### v0.2 Restore Checklist
+
+When restoring Pro features for v0.2:
+
+1. `AppState.allowedFormats` → change to `isProUnlocked ? freeFormats.union(proOnlyFormats) : freeFormats`
+2. Uncomment `play(trackID:)` Step 2b format gate
+3. Uncomment `trackDidFinishPlaying()` format gate (3 places)
+4. Uncomment `openFilePicker` FLAC/DSF/DFF in allowedContentTypes
+5. Uncomment `HarmoniaPlayerApp.swift` `.task { await appState.refreshEntitlements() }`
+6. Uncomment `HarmoniaPlayerCommands.swift` "Upgrade to Pro" `CommandGroup`
+7. Uncomment all 14 + 2 test methods (full bodies preserved)
+8. Update `IntegrationTests.testIntegration_UnsupportedFormat_Free` back to original
+9. Put FLAC/DSF/DFF back in `proFormats` for `PlaylistView` strikethrough rendering
+
 ---
 
 ## Slice 9-B: Tag Editor — Basic Fields

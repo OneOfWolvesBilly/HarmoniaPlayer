@@ -118,6 +118,34 @@ final class AppState: ObservableObject {
     @Published private(set) var isShuffled: ShuffleMode
     @Published var volume: Float
     @Published var allowDuplicateTracks: Bool
+    @Published var replayGainMode: ReplayGainMode
+
+    // MARK: - Blocking Operation (v0.1)
+    /// True during batch load/import operations.
+    /// Menu items (Add Files, Import M3U8, Undo, Redo) are disabled.
+    /// Drop destinations reject drops. Not persisted.
+    @Published private(set) var isPerformingBlockingOperation: Bool
+
+    // MARK: - Error / Alert State
+    @Published private(set) var failedTrackName: String?
+    @Published var showFileNotFoundAlert: Bool
+    @Published var skippedInaccessibleNames: [String]
+    @Published var skippedDuplicateURLs: [URL]
+    @Published var skippedImportURLs: [URL]
+    @Published var skippedUnsupportedURLs: [URL]
+
+    // MARK: - Paywall (v0.1: hidden, code retained for v0.2)
+    @Published var showPaywall: Bool
+    @Published var paywallDismissedThisSession: Bool
+
+    // MARK: - File Info Panel
+    @Published var fileInfoTrack: Track?
+
+    // MARK: - Format Classification
+    static let freeFormats: Set<String>     // ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
+    static let proOnlyFormats: Set<String>  // ["flac", "dsf", "dff"]
+    /// v0.1: returns freeFormats only. v0.2: restore Pro check.
+    static var allowedFormats: Set<String>
 
     // MARK: - UndoManager
     /// Injected at init for testability. Production uses UndoManager().
@@ -134,19 +162,21 @@ final class AppState: ObservableObject {
         undoManager: UndoManager? = nil   // nil → creates UndoManager() inside @MainActor body
     )
 
-    // MARK: - Playlist Management
-    func load(urls: [URL]) async
+    // MARK: - Playlist Operations
+    func load(urls: [URL]) async       // sub-batch save every 5 tracks
+    func handleFileDrop(urls: [URL]) async  // validates via FileDropService then calls load
     func clearPlaylist()
     func removeTrack(_ trackID: Track.ID)
     func moveTrack(fromOffsets: IndexSet, toOffset: Int)
+    func playNext(_ trackID: Track.ID)
+
+    // MARK: - Playlist Management
     func newPlaylist(name: String)
     func renamePlaylist(at index: Int, name: String)
     func deletePlaylist(at index: Int)
-    func playNext(_ trackID: Track.ID)
+    func switchPlaylist(to index: Int)
 
     // MARK: - Mini Player
-    /// Stops playback, switches activePlaylistIndex, clears undo stack,
-    /// then plays the first track in the new playlist.
     func switchMiniPlayerPlaylist(to index: Int) async
 
     // MARK: - Playback Control
@@ -164,6 +194,21 @@ final class AppState: ObservableObject {
     // MARK: - Persistence
     func saveState()
     func restoreState()
+
+    // MARK: - Undo / Redo
+    var canUndo: Bool
+    var canRedo: Bool
+    func undo()
+    func redo()
+
+    // MARK: - M3U8 Import / Export
+    func writeExport(to url: URL, pathStyle: M3U8PathStyle) throws
+    func importPlaylist(from url: URL) async  // format gate + sub-batch save + final saveState
+
+    // MARK: - IAP / Paywall
+    @discardableResult func showPaywallIfNeeded() -> Bool
+    func purchasePro() async throws
+    func refreshEntitlements() async
 
     // MARK: - File Info
     func showFileInfo(trackID: Track.ID)
@@ -252,6 +297,22 @@ protocol CoreFactory {
 - Construct HarmoniaCore services
 - Wire ports to platform adapters
 - Apply product configuration (Free vs Pro)
+
+### 4.4 FileDropService
+
+```swift
+struct FileDropService {
+    /// Returns valid local audio file URLs from the given array.
+    /// Directories are recursively expanded into their contained audio files.
+    /// Non-file URLs and non-audio files are filtered out.
+    func validate(_ urls: [URL]) -> [URL]
+}
+```
+
+**Responsibilities:**
+- Validate drag-and-drop URLs (must be `isFileURL` + `UTType.conforms(to: .audio)`)
+- Recursively expand directories into audio files (skips hidden files)
+- Used by `AppState.handleFileDrop(urls:)` and `PlaylistView.openFilePicker()`
 
 ---
 
