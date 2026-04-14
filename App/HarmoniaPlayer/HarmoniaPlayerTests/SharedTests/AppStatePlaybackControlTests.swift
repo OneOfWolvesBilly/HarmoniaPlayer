@@ -184,6 +184,34 @@ final class AppStatePlaybackControlTests: XCTestCase {
         XCTAssertEqual(sut.currentTime, 0)
     }
 
+    /// `testStop_ClearsCurrentTrack`
+    ///
+    /// Given a track is loaded and playing,
+    /// when `stop()` is called,
+    /// then `currentTrack` is `nil`.
+    func testStop_ClearsCurrentTrack() async {
+        await loadTrackIntoSUT()
+        XCTAssertNotNil(sut.currentTrack, "Pre-condition: currentTrack should be set")
+
+        await sut.stop()
+
+        XCTAssertNil(sut.currentTrack)
+    }
+
+    /// `testStop_ClearsPlayingPlaylistID`
+    ///
+    /// Given a track is loaded and playing,
+    /// when `stop()` is called,
+    /// then `playingPlaylistID` is `nil`.
+    func testStop_ClearsPlayingPlaylistID() async {
+        await loadTrackIntoSUT()
+        XCTAssertNotNil(sut.playingPlaylistID, "Pre-condition: playingPlaylistID should be set")
+
+        await sut.stop()
+
+        XCTAssertNil(sut.playingPlaylistID)
+    }
+
     // MARK: - seek(to:) — Slice 4-D
 
     /// `testSeek_CallsPlaybackServiceSeek`

@@ -75,11 +75,12 @@ extension AppState {
         playbackState = .paused
     }
 
-    /// Stop playback. Resets `currentTime` to 0.
+    /// Stop playback. Resets `currentTime` to 0 and clears `currentTrack`.
     func stop() async {
         stopPolling()
         await playbackService.stop()
         playbackState = .stopped
+        currentTrack = nil
         currentTime = 0
         pendingSeekTime = 0
         playingPlaylistID = nil
