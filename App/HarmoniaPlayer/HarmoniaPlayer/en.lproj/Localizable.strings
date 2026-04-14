@@ -18,7 +18,7 @@
 "error_unsupported_format" = "This format is not supported in the Free version.";
 "error_failed_to_decode" = "The file could not be decoded.";
 "error_output_error" = "A playback output error occurred.";
-"error_core_error" = "A playback error occurred.\n\nCode: %@";
+"error_internal" = "An internal playback error occurred.";
 
 /* MARK: - PlayerView: Metadata */
 "no_track_playing" = "No Track Playing";

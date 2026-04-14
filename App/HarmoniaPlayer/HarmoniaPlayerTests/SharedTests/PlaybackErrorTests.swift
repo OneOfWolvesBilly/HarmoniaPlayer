@@ -22,19 +22,23 @@ final class PlaybackErrorTests: XCTestCase {
         XCTAssertNotEqual(PlaybackError.failedToOpenFile, PlaybackError.failedToDecode)
     }
 
-    // MARK: - Associated Value: coreError
+    // MARK: - New Cases: invalidState and invalidArgument
 
-    func testPlaybackError_CoreError_SameString() {
-        XCTAssertEqual(PlaybackError.coreError("X"), PlaybackError.coreError("X"))
+    func testPlaybackError_InvalidState_NotEqualInvalidArgument() {
+        XCTAssertNotEqual(PlaybackError.invalidState, PlaybackError.invalidArgument)
     }
 
-    func testPlaybackError_CoreError_DifferentString() {
-        XCTAssertNotEqual(PlaybackError.coreError("X"), PlaybackError.coreError("Y"))
+    func testPlaybackError_InvalidState_EqualsSelf() {
+        XCTAssertEqual(PlaybackError.invalidState, PlaybackError.invalidState)
+    }
+
+    func testPlaybackError_InvalidArgument_EqualsSelf() {
+        XCTAssertEqual(PlaybackError.invalidArgument, PlaybackError.invalidArgument)
     }
 
     // MARK: - Exhaustive Case Check (compile-time)
     //
-    // If any of the 5 cases is missing this file will not compile,
+    // If any case is missing this file will not compile,
     // which is the intended red-bar signal.
 
     func testPlaybackError_AllCasesExist() {
@@ -44,7 +48,8 @@ final class PlaybackErrorTests: XCTestCase {
         case .failedToOpenFile:  break
         case .failedToDecode:    break
         case .outputError:       break
-        case .coreError:         break
+        case .invalidState:      break
+        case .invalidArgument:   break
         }
     }
 

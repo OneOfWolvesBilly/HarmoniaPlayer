@@ -143,8 +143,8 @@ struct ContentView: View {
                 Text(L("error_failed_to_decode"))
             case .outputError:
                 Text(L("error_output_error"))
-            case .coreError(let code):
-                Text(String(format: L("error_core_error"), code))
+            case .invalidState, .invalidArgument:
+                Text(L("error_internal"))
             default:
                 Text(verbatim: "")
             }

@@ -18,7 +18,7 @@
 "error_unsupported_format" = "このフォーマットは無料版では対応していません。";
 "error_failed_to_decode" = "ファイルをデコードできませんでした。";
 "error_output_error" = "再生中に出力エラーが発生しました。";
-"error_core_error" = "再生中にエラーが発生しました。\n\nエラーコード%@";
+"error_internal" = "再生中に内部エラーが発生しました。";
 
 /* MARK: - PlayerView: Metadata */
 "no_track_playing" = "再生中の曲はありません";

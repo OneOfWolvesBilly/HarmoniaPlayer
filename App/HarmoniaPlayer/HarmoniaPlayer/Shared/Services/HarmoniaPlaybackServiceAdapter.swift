@@ -28,15 +28,26 @@ import HarmoniaCore
 /// Bridges the synchronous `HarmoniaCore.PlaybackService` to the async
 /// `HarmoniaPlayer.PlaybackService` protocol consumed by `AppState`.
 ///
-/// Maps `HarmoniaCore.PlaybackState` to `HarmoniaPlayer.PlaybackState`:
+/// **State mapping** (`HarmoniaCore.PlaybackState` → `HarmoniaPlayer.PlaybackState`):
 ///
-/// | HarmoniaCore  | HarmoniaPlayer              |
-/// |---------------|-----------------------------|
-/// | .stopped      | .stopped                    |
-/// | .playing      | .playing                    |
-/// | .paused       | .paused                     |
-/// | .buffering    | .loading                    |
-/// | .error(e)     | .error(.coreError(e.description)) |
+/// | HarmoniaCore  | HarmoniaPlayer                       |
+/// |---------------|--------------------------------------|
+/// | .stopped      | .stopped                             |
+/// | .playing      | .playing                             |
+/// | .paused       | .paused                              |
+/// | .buffering    | .loading                             |
+/// | .error(e)     | .error(mapCoreError(e))               |
+///
+/// **Error mapping** (`CoreError` → `PlaybackError`):
+///
+/// | CoreError          | PlaybackError      |
+/// |--------------------|--------------------|
+/// | .notFound          | .failedToOpenFile  |
+/// | .ioError           | .failedToOpenFile  |
+/// | .unsupported       | .unsupportedFormat |
+/// | .decodeError       | .failedToDecode    |
+/// | .invalidState      | .invalidState      |
+/// | .invalidArgument   | .invalidArgument   |
 final class HarmoniaPlaybackServiceAdapter: PlaybackService {
 
     // MARK: - Dependencies
@@ -62,17 +73,29 @@ final class HarmoniaPlaybackServiceAdapter: PlaybackService {
         case .playing:          return .playing
         case .paused:           return .paused
         case .buffering:        return .loading          // HarmoniaCore uses .buffering; player uses .loading
-        case .error(let e):     return .error(.coreError(e.description))
+        case .error(let e):     return .error(Self.mapCoreError(e))
         }
     }
 
     // MARK: - PlaybackService (async methods)
 
-    /// Loads a track URL. Delegates directly to the synchronous core method.
-    func load(url: URL) async throws              { try core.load(url: url) }
+    /// Loads a track URL. Catches `CoreError` and rethrows as `PlaybackError`.
+    func load(url: URL) async throws {
+        do {
+            try core.load(url: url)
+        } catch let error as CoreError {
+            throw Self.mapCoreError(error)
+        }
+    }
 
-    /// Starts playback. Delegates directly to the synchronous core method.
-    func play() async throws                      { try core.play() }
+    /// Starts playback. Catches `CoreError` and rethrows as `PlaybackError`.
+    func play() async throws {
+        do {
+            try core.play()
+        } catch let error as CoreError {
+            throw Self.mapCoreError(error)
+        }
+    }
 
     /// Pauses playback. Non-throwing; delegates to the synchronous core method.
     func pause() async                            { core.pause() }
@@ -80,8 +103,14 @@ final class HarmoniaPlaybackServiceAdapter: PlaybackService {
     /// Stops playback and releases resources. Non-throwing; delegates to the synchronous core method.
     func stop() async                             { core.stop() }
 
-    /// Seeks to an absolute position. Delegates directly to the synchronous core method.
-    func seek(to seconds: TimeInterval) async throws { try core.seek(to: seconds) }
+    /// Seeks to an absolute position. Catches `CoreError` and rethrows as `PlaybackError`.
+    func seek(to seconds: TimeInterval) async throws {
+        do {
+            try core.seek(to: seconds)
+        } catch let error as CoreError {
+            throw Self.mapCoreError(error)
+        }
+    }
 
     /// Returns current playback position. Delegates to the synchronous core method.
     func currentTime() async -> TimeInterval      { core.currentTime() }
@@ -91,4 +120,22 @@ final class HarmoniaPlaybackServiceAdapter: PlaybackService {
 
     /// Sets the playback volume. Delegates to the synchronous core method.
     func setVolume(_ volume: Float) async         { core.setVolume(volume) }
+
+    // MARK: - Error Mapping
+
+    /// Maps a `HarmoniaCore.CoreError` to a `HarmoniaPlayer.PlaybackError`.
+    ///
+    /// This is the single boundary where Core error types are translated
+    /// into application-level typed error codes. No `String` payload is
+    /// carried across — technical details stay in HarmoniaCore's logger.
+    static func mapCoreError(_ error: CoreError) -> PlaybackError {
+        switch error {
+        case .notFound:         return .failedToOpenFile
+        case .ioError:          return .failedToOpenFile
+        case .unsupported:      return .unsupportedFormat
+        case .decodeError:      return .failedToDecode
+        case .invalidState:     return .invalidState
+        case .invalidArgument:  return .invalidArgument
+        }
+    }
 }

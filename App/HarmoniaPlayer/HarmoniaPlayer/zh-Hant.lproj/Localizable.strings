@@ -18,7 +18,7 @@
 "error_unsupported_format" = "免費版本不支援此格式。";
 "error_failed_to_decode" = "無法解碼此檔案。";
 "error_output_error" = "播放輸出發生錯誤。";
-"error_core_error" = "播放時發生錯誤。\n\n錯誤碼：%@";
+"error_internal" = "播放時發生內部錯誤。";
 
 /* MARK: - PlayerView: Metadata */
 "no_track_playing" = "沒有播放中的曲目";

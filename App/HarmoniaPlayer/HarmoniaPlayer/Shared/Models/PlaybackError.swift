@@ -13,6 +13,11 @@ import Foundation
 /// Used as the associated value of `PlaybackState.error(_:)` and stored
 /// in `AppState.lastError`.
 ///
+/// All cases are typed codes with no `String` payload. The View layer
+/// maps each case to a localized user-facing message. Technical details
+/// from HarmoniaCore are logged at the Integration Layer and never
+/// propagated to the UI.
+///
 /// **Cases:**
 /// - `unsupportedFormat`: File format is not supported by the current
 ///   product variant (e.g. FLAC on Free). May trigger a paywall flow.
@@ -22,16 +27,21 @@ import Foundation
 ///   (corrupt data, partial download, etc.).
 /// - `outputError`: Audio output device or engine error (device
 ///   disconnected, exclusive mode conflict, etc.).
-/// - `coreError(String)`: Propagated error message from HarmoniaCore.
-///   Carries a human-readable description for logging and display.
+/// - `invalidState`: Operation attempted in an invalid state (e.g.
+///   play without load). UI should normally prevent this; indicates
+///   a logic error if reached.
+/// - `invalidArgument`: Invalid parameter passed to a service (e.g.
+///   seek to negative position). UI should normally prevent this;
+///   indicates a logic error if reached.
 ///
 /// **Usage:**
 /// ```swift
 /// switch error {
 /// case .unsupportedFormat:
 ///     showPaywallOrAlert()
-/// case .coreError(let message):
-///     logger.error("Core error: \(message)")
+/// case .invalidState, .invalidArgument:
+///     // Same user-facing message; distinct codes for logging/diagnostics.
+///     showInternalErrorAlert()
 /// default:
 ///     showGenericErrorAlert()
 /// }
@@ -41,5 +51,6 @@ enum PlaybackError: Error, Equatable, Sendable {
     case failedToOpenFile
     case failedToDecode
     case outputError
-    case coreError(String)
+    case invalidState
+    case invalidArgument
 }

@@ -349,19 +349,12 @@ extension AppState {
 
     /// Maps any thrown error to a `PlaybackError` for UI consumption.
     ///
-    /// If the error is already a `PlaybackError`, it is returned as-is.
-    /// Otherwise, the error's localized description is wrapped in `.coreError`.
+    /// In the normal flow, `HarmoniaPlaybackServiceAdapter` already converts
+    /// `CoreError` to `PlaybackError` before it reaches AppState, so this
+    /// method acts as a passthrough. The fallback exists only as a safety
+    /// net for unexpected non-`PlaybackError` errors.
     func mapToPlaybackError(_ error: Error) -> PlaybackError {
         if let playbackError = error as? PlaybackError { return playbackError }
-        let desc = error.localizedDescription
-        // HarmoniaCore.CoreError error 3 = notFound / cannot open file
-        // Map file-related core errors to user-friendly failedToOpenFile
-        if desc.contains("CoreError error 3") ||
-           desc.contains("notFound") ||
-           desc.contains("not found") ||
-           desc.contains("No such file") {
-            return .failedToOpenFile
-        }
-        return .coreError(desc)
+        return .invalidState
     }
 }
