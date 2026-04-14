@@ -122,10 +122,11 @@ struct HarmoniaPlayerCommands: Commands {
 
             Button(L("menu_get_info")) {
                 guard let state = appState,
-                      let trackID = state.currentTrack?.id else { return }
+                      let trackID = state.selectedTrackIDs.first else { return }
                 state.showFileInfo(trackID: trackID)
             }
             .keyboardShortcut("i", modifiers: .command)
+            .disabled(appState?.selectedTrackIDs.isEmpty != false)
 
             Divider()
 
@@ -226,11 +227,13 @@ struct HarmoniaPlayerCommands: Commands {
                 appState?.cycleRepeatMode()
             }
             .keyboardShortcut("r", modifiers: .command)
+            .disabled(playlistIsEmpty)
 
             Button(shuffleLabel) {
                 appState?.toggleShuffle()
             }
             .keyboardShortcut("s", modifiers: .command)
+            .disabled(playlistIsEmpty)
         }
     }
 
