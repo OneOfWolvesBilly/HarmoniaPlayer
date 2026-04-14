@@ -35,7 +35,6 @@ import UniformTypeIdentifiers
 struct PlaylistView: View {
 
     @EnvironmentObject private var appState: AppState
-    @State private var selectedTrackIDs = Set<Track.ID>()
     @State private var sortOrder: [KeyPathComparator<Track>] = []
     @State private var showShuffleQueue = false
 
@@ -263,7 +262,7 @@ struct PlaylistView: View {
 
     private var tableView: some View {
         Table(appState.playlist.tracks,
-              selection: $selectedTrackIDs,
+              selection: $appState.selectedTrackIDs,
               sortOrder: $sortOrder,
               columnCustomization: $columnCustomization) {
             coreColumns
@@ -291,7 +290,7 @@ struct PlaylistView: View {
                 Divider()
                 Button(L("ctx_remove"), role: .destructive) {
                     appState.removeTrack(id)
-                    selectedTrackIDs.remove(id)
+                    appState.selectedTrackIDs.remove(id)
                 }
             }
         } primaryAction: { ids in

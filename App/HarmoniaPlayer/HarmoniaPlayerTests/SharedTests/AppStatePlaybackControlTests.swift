@@ -276,4 +276,81 @@ final class AppStatePlaybackControlTests: XCTestCase {
 
         XCTAssertEqual(sut.playbackState, .playing)
     }
+
+    // MARK: - play() with selection
+
+    /// Loads three tracks and clears undo stack for a clean test baseline.
+    private func seedThreeTracks() async -> (Track, Track, Track) {
+        let urls = [
+            URL(fileURLWithPath: "/tmp/sel-a.mp3"),
+            URL(fileURLWithPath: "/tmp/sel-b.mp3"),
+            URL(fileURLWithPath: "/tmp/sel-c.mp3"),
+        ]
+        await sut.load(urls: urls)
+        sut.undoManager.removeAllActions()
+        let t = sut.playlist.tracks
+        return (t[0], t[1], t[2])
+    }
+
+    /// `testPlay_NoCurrentTrack_WithSelection_PlaysSelectedTrack`
+    ///
+    /// Given currentTrack is nil and the user has selected the second track,
+    /// when play() is called,
+    /// then the second track becomes currentTrack.
+    func testPlay_NoCurrentTrack_WithSelection_PlaysSelectedTrack() async {
+        let (_, trackB, _) = await seedThreeTracks()
+        XCTAssertNil(sut.currentTrack, "Pre-condition: currentTrack should be nil")
+
+        sut.selectedTrackIDs = [trackB.id]
+
+        await sut.play()
+
+        XCTAssertEqual(sut.currentTrack?.id, trackB.id)
+    }
+
+    /// `testPlay_NoCurrentTrack_WithMultipleSelection_PlaysFirstInPlaylistOrder`
+    ///
+    /// Given currentTrack is nil and the user has selected tracks B and C,
+    /// when play() is called,
+    /// then track B (first in playlist order) becomes currentTrack.
+    func testPlay_NoCurrentTrack_WithMultipleSelection_PlaysFirstInPlaylistOrder() async {
+        let (_, trackB, trackC) = await seedThreeTracks()
+        XCTAssertNil(sut.currentTrack)
+
+        sut.selectedTrackIDs = [trackC.id, trackB.id]
+
+        await sut.play()
+
+        XCTAssertEqual(sut.currentTrack?.id, trackB.id)
+    }
+
+    /// `testPlay_NoCurrentTrack_NoSelection_PlaysFirstTrack`
+    ///
+    /// Given currentTrack is nil and no selection,
+    /// when play() is called,
+    /// then the first track in the playlist becomes currentTrack.
+    func testPlay_NoCurrentTrack_NoSelection_PlaysFirstTrack() async {
+        let (trackA, _, _) = await seedThreeTracks()
+        XCTAssertNil(sut.currentTrack)
+        XCTAssertTrue(sut.selectedTrackIDs.isEmpty)
+
+        await sut.play()
+
+        XCTAssertEqual(sut.currentTrack?.id, trackA.id)
+    }
+
+    /// `testPlay_NoCurrentTrack_EmptyPlaylist_IsNoop`
+    ///
+    /// Given an empty playlist,
+    /// when play() is called,
+    /// then currentTrack remains nil and playbackState stays idle.
+    func testPlay_NoCurrentTrack_EmptyPlaylist_IsNoop() async {
+        XCTAssertTrue(sut.playlist.tracks.isEmpty)
+        XCTAssertNil(sut.currentTrack)
+
+        await sut.play()
+
+        XCTAssertNil(sut.currentTrack)
+        XCTAssertEqual(sut.playbackState, .idle)
+    }
 }

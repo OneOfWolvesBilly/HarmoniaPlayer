@@ -112,6 +112,13 @@ final class AppState: ObservableObject {
     /// Set via `play(trackID:)`. Does not trigger audio playback.
     @Published var currentTrack: Track?
 
+    /// IDs of tracks currently selected in PlaylistView's Table.
+    ///
+    /// Promoted from PlaylistView `@State` so that `play()` can access
+    /// the playlist selection when `currentTrack` is nil (e.g. after stop).
+    /// Selection does NOT follow playback — it reflects user clicks only.
+    @Published var selectedTrackIDs = Set<Track.ID>()
+
     // MARK: - UI Preference State
 
     /// UI layout and visibility preferences.

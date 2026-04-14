@@ -16,14 +16,24 @@ extension AppState {
     /// Start playback of the currently loaded track.
     ///
     /// No-op if no track has been loaded via `play(trackID:)`.
-    /// Resumes playback of the current track, or plays the first track if
-    /// nothing is loaded yet.
+    /// Resumes playback of the current track, or starts playback from the
+    /// selected track (or first track) if nothing is loaded yet.
+    ///
+    /// When `currentTrack` is nil (e.g. after stop):
+    /// 1. Active playlist has a selection → play the first selected track
+    ///    (in playlist order).
+    /// 2. No selection but playlist has tracks → play the first track.
+    /// 3. Playlist empty → no-op.
     ///
     /// On error: sets `lastError` and `playbackState = .error(mapped)`.
     func play() async {
-        // If no track is loaded, play the first track in the playlist.
+        // If no track is loaded, resolve from selection or first track.
         if currentTrack == nil {
-            if let first = playlists[activePlaylistIndex].tracks.first {
+            let tracks = playlists[activePlaylistIndex].tracks
+            if !selectedTrackIDs.isEmpty,
+               let selected = tracks.first(where: { selectedTrackIDs.contains($0.id) }) {
+                await play(trackID: selected.id)
+            } else if let first = tracks.first {
                 await play(trackID: first.id)
             }
             return

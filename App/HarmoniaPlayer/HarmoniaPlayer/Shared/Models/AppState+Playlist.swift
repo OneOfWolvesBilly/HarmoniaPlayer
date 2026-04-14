@@ -131,6 +131,7 @@ extension AppState {
     func clearPlaylist() {
         playlists[activePlaylistIndex].tracks = []
         currentTrack = nil
+        selectedTrackIDs.removeAll()
         // Clear undo stack: no meaningful undo target after playlist is wiped.
         undoManager.removeAllActions()
         saveState()
@@ -152,6 +153,7 @@ extension AppState {
         guard playlists.indices.contains(index) else { return }
         guard index != activePlaylistIndex else { return }
         activePlaylistIndex = index
+        selectedTrackIDs.removeAll()
         undoManager.removeAllActions()
     }
 
@@ -240,6 +242,7 @@ extension AppState {
         }
         // Clear undo stack: playlist context changed, prior track operations
         // no longer have a valid target.
+        selectedTrackIDs.removeAll()
         undoManager.removeAllActions()
         saveState()
     }
