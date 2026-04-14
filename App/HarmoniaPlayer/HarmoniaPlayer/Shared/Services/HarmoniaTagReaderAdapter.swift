@@ -12,15 +12,13 @@
 //  DESIGN NOTES
 //  ------------
 //  - One of only three production files in HarmoniaPlayer allowed to import HarmoniaCore.
-//  - All metadata reading (including albumArtist, genre, year, trackNumber,
-//    discNumber) is performed inside HarmoniaCore's AVMetadataTagReaderAdapter.
-//    This file does pure TagBundle → Track mapping only. No AVFoundation calls.
-//  - Duration is not part of TagBundle; it is read via AVURLAsset.load(.duration).
-//  - Technical info (bitrate, sampleRate, channels, fileSize, fileFormat) is
-//    not part of TagBundle either; it is read via AVURLAsset here because
-//    HarmoniaCore's TagReaderPort contract is limited to tag metadata only.
-//  - metadataVersion is set to currentMetadataVersion on every new read so
-//    AppState.refreshMetadataIfNeeded() can skip already-up-to-date tracks.
+//  - All metadata reading (tags AND technical info) is performed inside
+//    HarmoniaCore's AVMetadataTagReaderAdapter. This file does pure
+//    TagBundle → Track mapping only. No AVFoundation calls.
+//  - fileFormat is derived from url.pathExtension — it is not part of TagBundle
+//    because it is a URL property, not an audio stream property.
+//  - currentSchemaVersion is forwarded from TagBundle.currentSchemaVersion so
+//    that AppState can detect stale tracks without importing HarmoniaCore.
 //
 //  FIELD MAPPING
 //  ─────────────────────────────────────────────────────────────────────────────
@@ -42,35 +40,27 @@
 //  replayGainTrack      → replayGainTrack   nil
 //  replayGainAlbum      → replayGainAlbum   nil
 //  artworkData          → artworkData       nil
-//  AVURLAsset.duration  → duration          0
-//  AVURLAsset tracks    → bitrate           kbps; nil if unavailable
-//  CMFormatDescription  → sampleRate        nil if unavailable
-//  CMFormatDescription  → channels          nil if unavailable
-//  FileManager          → fileSize          nil if unavailable
+//  duration             → duration          0
+//  bitrate              → bitrate           nil
+//  sampleRate           → sampleRate        nil
+//  channels             → channels          nil
+//  fileSize             → fileSize          nil
 //  url.pathExtension    → fileFormat        uppercased()
-//  constant (1)         → metadataVersion
+//  TagBundle.currentSchemaVersion → metadataVersion
 //  ─────────────────────────────────────────────────────────────────────────────
 
 import Foundation
-import AVFoundation
 import HarmoniaCore
 
 /// Bridges the synchronous `TagReaderPort` to the async `TagReaderService` protocol.
 ///
-/// Maps `TagBundle` fields to `Track`. All tag metadata is read by HarmoniaCore.
-/// Only duration and technical audio info (not part of TagBundle) are read here
-/// via AVFoundation.
+/// Maps `TagBundle` fields to `Track`. All metadata (tags + technical info) is
+/// read by HarmoniaCore. This adapter performs pure data mapping only.
 final class HarmoniaTagReaderAdapter: TagReaderService {
 
     // MARK: - Dependencies
 
     private let port: TagReaderPort
-
-    // MARK: - Metadata version
-
-    /// Must match `AppState.currentMetadataVersion`.
-    /// Increment both together whenever new fields are added to Track.
-    static let metadataVersion = 1
 
     // MARK: - Initialization
 
@@ -80,45 +70,13 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
 
     // MARK: - TagReaderService
 
+    var currentSchemaVersion: Int {
+        TagBundle.currentSchemaVersion
+    }
+
     func readMetadata(for url: URL) async throws -> Track {
-        // All tag metadata comes from HarmoniaCore
+        // All metadata (tags + technical info) comes from HarmoniaCore
         let bundle = try port.read(url: url)
-
-        let asset = AVURLAsset(url: url)
-
-        // ── Duration (not in TagBundle) ────────────────────────────────────
-        let cmDuration = try? await asset.load(.duration)
-        let duration: TimeInterval = cmDuration.map { $0.seconds > 0 ? $0.seconds : 0 } ?? 0
-
-        // ── Technical info (not in TagBundle) ─────────────────────────────
-        let assetTracks = try? await asset.load(.tracks)
-        let firstAudio  = assetTracks?.first { $0.mediaType == .audio }
-
-        let estimatedDataRate = try? await firstAudio?.load(.estimatedDataRate)
-        let bitrate: Int? = estimatedDataRate.flatMap { rate in
-            let kbps = Int(rate / 1000)
-            return kbps > 0 ? kbps : nil
-        }
-
-        var sampleRate: Double? = nil
-        var channels: Int? = nil
-        if let audioTrack = firstAudio,
-           let formatDescriptions = try? await audioTrack.load(.formatDescriptions),
-           let firstDesc = formatDescriptions.first {
-            let desc = firstDesc as CMFormatDescription
-            if let basic = CMAudioFormatDescriptionGetStreamBasicDescription(desc) {
-                let rate = basic.pointee.mSampleRate
-                sampleRate = rate > 0 ? rate : nil
-                let ch = Int(basic.pointee.mChannelsPerFrame)
-                channels = ch > 0 ? ch : nil
-            }
-        }
-
-        let fileSize: Int? = {
-            guard url.isFileURL else { return nil }
-            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
-            return attrs?[.size] as? Int
-        }()
 
         let fileFormat = url.pathExtension.uppercased()
 
@@ -128,7 +86,7 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
             title:            bundle.title       ?? url.deletingPathExtension().lastPathComponent,
             artist:           bundle.artist      ?? "",
             album:            bundle.album       ?? "",
-            duration:         duration,
+            duration:         bundle.duration    ?? 0,
             artworkData:      bundle.artworkData,
             albumArtist:      bundle.albumArtist ?? "",
             composer:         bundle.composer    ?? "",
@@ -142,12 +100,12 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
             replayGainTrack:  bundle.replayGainTrack,
             replayGainAlbum:  bundle.replayGainAlbum,
             comment:          bundle.comment     ?? "",
-            bitrate:          bitrate,
-            sampleRate:       sampleRate,
-            channels:         channels,
-            fileSize:         fileSize,
+            bitrate:          bundle.bitrate,
+            sampleRate:       bundle.sampleRate,
+            channels:         bundle.channels,
+            fileSize:         bundle.fileSize,
             fileFormat:       fileFormat,
-            metadataVersion:  Self.metadataVersion
+            metadataVersion:  TagBundle.currentSchemaVersion
         )
     }
 }

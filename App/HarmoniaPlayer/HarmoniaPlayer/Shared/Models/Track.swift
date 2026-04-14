@@ -71,14 +71,14 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
 
     /// Version of the metadata reading logic used to populate this track.
     ///
-    /// Incremented in `AppState.currentMetadataVersion` whenever new fields
-    /// are added. `restoreState()` triggers a background re-read for any
-    /// track whose version is lower than the current version, ensuring new
+    /// Matches `TagBundle.currentMetadataVersion` in HarmoniaCore. When
+    /// `restoreState()` detects a track whose version is lower than the
+    /// current schema version, it triggers a background re-read so new
     /// fields are populated without requiring the user to re-add files.
     ///
     /// History:
     /// - 0: legacy (Slices 1–6; no Groups A–E)
-    /// - 1: Groups A–D added (Slice 7-G)
+    /// - 1: Groups A–D + technical info added (Slice 7-G / Split B)
     var metadataVersion: Int = 0
 
     // MARK: - Runtime-only fields (not persisted)

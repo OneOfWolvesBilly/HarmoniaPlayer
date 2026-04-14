@@ -30,19 +30,6 @@ private enum PersistenceKey {
     static let replayGainMode      = "hp.replayGainMode"
 }
 
-/// Current version of the metadata reading logic.
-///
-/// Increment this value whenever new fields are added to `Track` that require
-/// re-reading from disk. `AppState.refreshMetadataIfNeeded()` uses this to
-/// detect tracks populated by older versions and re-reads them in the background.
-///
-/// Must match `HarmoniaTagReaderAdapter.metadataVersion`.
-///
-/// History:
-/// - 0: legacy (Slices 1–6; no Groups A–E)
-/// - 1: Groups A–D added (Slice 7-G)
-private let currentMetadataVersion = 1
-
 /// Central application state container.
 ///
 /// Wires all dependencies (IAP → FeatureFlags → CoreFactory → Services)
@@ -610,7 +597,7 @@ final class AppState: ObservableObject {
     }
 
     /// Re-reads metadata for any track whose `metadataVersion` is lower than
-    /// `currentMetadataVersion`.
+    /// `tagReaderService.currentSchemaVersion`.
     ///
     /// Runs in the background after `restoreState()`. Only tracks restored from
     /// older saves (version 0) are affected. New fields are written back and
@@ -618,41 +605,57 @@ final class AppState: ObservableObject {
     private func refreshMetadataIfNeeded() async {
         var didRefreshAny = false
 
-        for i in playlists.indices {
-            for j in playlists[i].tracks.indices {
-                let track = playlists[i].tracks[j]
+        // Snapshot track IDs and URLs that need refresh, so we don't
+        // rely on indices that may become stale across await points.
+        struct RefreshCandidate {
+            let id: Track.ID
+            let url: URL
+        }
 
-                guard track.isAccessible,
-                      track.metadataVersion < currentMetadataVersion
-                else { continue }
-
-                guard let refreshed = try? await tagReaderService.readMetadata(for: track.url)
-                else { continue }
-
-                // Merge: update only new-field groups; preserve core fields
-                // (title, artist, album, duration) from the stored version
-                // so user-visible data is not unexpectedly replaced.
-                playlists[i].tracks[j].albumArtist     = refreshed.albumArtist
-                playlists[i].tracks[j].composer        = refreshed.composer
-                playlists[i].tracks[j].genre           = refreshed.genre
-                playlists[i].tracks[j].year            = refreshed.year
-                playlists[i].tracks[j].trackNumber     = refreshed.trackNumber
-                playlists[i].tracks[j].trackTotal      = refreshed.trackTotal
-                playlists[i].tracks[j].discNumber      = refreshed.discNumber
-                playlists[i].tracks[j].discTotal       = refreshed.discTotal
-                playlists[i].tracks[j].bpm             = refreshed.bpm
-                playlists[i].tracks[j].replayGainTrack = refreshed.replayGainTrack
-                playlists[i].tracks[j].replayGainAlbum = refreshed.replayGainAlbum
-                playlists[i].tracks[j].comment         = refreshed.comment
-                playlists[i].tracks[j].bitrate         = refreshed.bitrate
-                playlists[i].tracks[j].sampleRate      = refreshed.sampleRate
-                playlists[i].tracks[j].channels        = refreshed.channels
-                playlists[i].tracks[j].fileSize        = refreshed.fileSize
-                playlists[i].tracks[j].fileFormat      = refreshed.fileFormat
-                playlists[i].tracks[j].metadataVersion = currentMetadataVersion
-
-                didRefreshAny = true
+        var candidates: [RefreshCandidate] = []
+        for playlist in playlists {
+            for track in playlist.tracks {
+                if track.isAccessible,
+                   track.metadataVersion < tagReaderService.currentSchemaVersion {
+                    candidates.append(RefreshCandidate(id: track.id, url: track.url))
+                }
             }
+        }
+
+        for candidate in candidates {
+            guard let refreshed = try? await tagReaderService.readMetadata(for: candidate.url)
+            else { continue }
+
+            // Re-locate the track by ID after the async suspension.
+            // The user may have reordered, removed, or added tracks while
+            // readMetadata was running, so stale indices are unsafe.
+            guard let pi = playlists.firstIndex(where: { $0.tracks.contains { $0.id == candidate.id } }),
+                  let ti = playlists[pi].tracks.firstIndex(where: { $0.id == candidate.id })
+            else { continue }
+
+            // Merge: update only new-field groups; preserve core fields
+            // (title, artist, album, duration) from the stored version
+            // so user-visible data is not unexpectedly replaced.
+            playlists[pi].tracks[ti].albumArtist     = refreshed.albumArtist
+            playlists[pi].tracks[ti].composer        = refreshed.composer
+            playlists[pi].tracks[ti].genre           = refreshed.genre
+            playlists[pi].tracks[ti].year            = refreshed.year
+            playlists[pi].tracks[ti].trackNumber     = refreshed.trackNumber
+            playlists[pi].tracks[ti].trackTotal      = refreshed.trackTotal
+            playlists[pi].tracks[ti].discNumber      = refreshed.discNumber
+            playlists[pi].tracks[ti].discTotal       = refreshed.discTotal
+            playlists[pi].tracks[ti].bpm             = refreshed.bpm
+            playlists[pi].tracks[ti].replayGainTrack = refreshed.replayGainTrack
+            playlists[pi].tracks[ti].replayGainAlbum = refreshed.replayGainAlbum
+            playlists[pi].tracks[ti].comment         = refreshed.comment
+            playlists[pi].tracks[ti].bitrate         = refreshed.bitrate
+            playlists[pi].tracks[ti].sampleRate      = refreshed.sampleRate
+            playlists[pi].tracks[ti].channels        = refreshed.channels
+            playlists[pi].tracks[ti].fileSize        = refreshed.fileSize
+            playlists[pi].tracks[ti].fileFormat      = refreshed.fileFormat
+            playlists[pi].tracks[ti].metadataVersion = tagReaderService.currentSchemaVersion
+
+            didRefreshAny = true
         }
 
         if didRefreshAny { saveState() }

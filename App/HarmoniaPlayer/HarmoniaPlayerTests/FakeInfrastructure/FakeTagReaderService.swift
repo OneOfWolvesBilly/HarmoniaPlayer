@@ -66,6 +66,16 @@ final class FakeTagReaderService: TagReaderService {
     /// the associated error. Takes precedence over `stubbedMetadata`.
     var stubbedErrors: [URL: Error] = [:]
 
+    // MARK: - Schema Version
+
+    /// Configurable schema version for testing metadata refresh logic.
+    ///
+    /// Defaults to `1` to match `TagBundle.currentSchemaVersion`.
+    /// Tests can override this to simulate version mismatches.
+    var stubbedSchemaVersion: Int = 1
+
+    var currentSchemaVersion: Int { stubbedSchemaVersion }
+
     // MARK: - TagReaderService
 
     func readMetadata(for url: URL) async throws -> Track {
