@@ -2,16 +2,14 @@
 
 ## 1. System Overview
 
-**Harmonia Player** is a reference audio player product.
-
-This repository, **HarmoniaPlayer**, contains the application codebase built on top of **HarmoniaCore**, a cross-platform audio framework that provides identical behavior on Apple (Swift) and Linux (C++20) platforms.
+**HarmoniaPlayer** is a macOS audio player application built on top of **HarmoniaCore-Swift**, a Swift Package that provides the audio engine, metadata reading, and platform adapters.
 
 HarmoniaPlayer has two primary roles:
 
-1. Provide a **practical, user-facing audio player** on each supported platform.
-2. Act as a **reference implementation and parity harness** for validating HarmoniaCore behavior across platforms.
+1. Provide a **practical, user-facing audio player** on macOS.
+2. Act as a **reference implementation** demonstrating how to consume HarmoniaCore-Swift APIs in a real application.
 
-The application is intentionally kept modular so that additional platforms or UI technologies can be added without changing HarmoniaCore itself.
+The application is intentionally kept modular so that its architecture can be reused if additional platforms (iOS, Linux) are introduced in the future.
 
 ---
 
@@ -21,128 +19,87 @@ HarmoniaPlayer is designed to work together with the following repositories:
 
 * **HarmoniaPlayer (this repository)**
 
-  * Contains the application code and documentation for:
-
-    * Apple / Swift implementation (macOS, iOS).
-    * Linux / C++ implementation (desktop Linux).
-  * Contains platform-specific architecture documents and product specifications.
+  * Contains the macOS application code and documentation.
+  * SwiftUI-based UI, application state, integration layer, and tests.
 
 * **HarmoniaCore-Swift**
 
-  * Swift Package providing audio services for Apple platforms.
-  * Implements the HarmoniaCore specification using AVFoundation and the Apple audio stack.
+  * Standalone Swift Package containing the audio engine and platform adapters.
+  * Created by tagging a release in HarmoniaCore and using `git subtree split` to extract the `apple-swift/` directory into its own repository, because SPM cannot consume a subdirectory of a repository directly.
+  * HarmoniaPlayer pins to a specific tagged version of this package for deployment. During development, a local path reference (`../HarmoniaCore/apple-swift`) is used for rapid iteration.
 
 * **HarmoniaCore**
 
-  * Main specification and core implementation repository.
+  * Source-of-truth specification and implementation repository.
+  * Contains both the Swift (`apple-swift/`) and C++ (`linux-cpp/`, deferred) implementations side by side.
   * Provides the cross-platform architecture and contracts for:
 
-    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, ClockPort, LoggerPort, FileAccessPort, TagWriterPort)
+    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, ClockPort, LoggerPort, FileAccessPort)
     * Services (PlaybackService)
-    * Models (Track metadata, Error types)
-    * Adapters (AVFoundation, OSLog, etc.)
-  * Contains both the Swift and C++20 implementations and their shared specs.
+    * Models (TagBundle, CoreError, StreamInfo)
 
-**Important:** HarmoniaPlayer never bypasses HarmoniaCore. All audio playback, decoding, clocking, and error behavior is delegated to HarmoniaCore implementations.
+**Important:** HarmoniaPlayer never bypasses HarmoniaCore. All audio playback, decoding, metadata reading, and error behavior is delegated to HarmoniaCore-Swift.
 
 **See HarmoniaCore Specs:**
 - [Architecture Overview](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
 - [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
 - [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+- [Models Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
 
 ---
 
-## 3. Platform Targets
+## 3. Platform Target
 
-HarmoniaPlayer currently targets two platform families.
+### macOS / Swift
 
-### 3.1 Apple / Swift
-
-* Platforms:
-
-  * macOS 13+ (Free / Pro variants)
-  * iOS 16+ (Free)
+* Platform: macOS 15.6+ (Free / Pro variants)
 * Technologies:
 
-  * Swift, SwiftUI
+  * Swift 6, SwiftUI
   * HarmoniaCore-Swift (Swift Package Manager)
   * AVFoundation, CoreAudio
   * StoreKit 2 (macOS Pro IAP)
 * Architecture:
 
-  * Single shared SwiftUI codebase for macOS and iOS.
-  * App-level state and ViewModels in Swift.
+  * SwiftUI-based macOS application.
+  * Central `AppState` (@MainActor ObservableObject) — no separate ViewModel layer.
+  * Views access AppState directly via `@EnvironmentObject`.
   * Integration layer constructs HarmoniaCore-Swift services and wires them into the app (CoreFactory, IAPManager).
 
-The detailed architecture for the Apple / Swift implementation is described in:
+Detailed interface contracts:
 
-* `docs/api_spec_apple_swift.md`
-* `docs/module_boundary.md`
-
-### 3.2 Linux / C++
-
-* Platforms:
-
-  * Desktop Linux distributions (exact support matrix TBD).
-* Technologies:
-
-  * C++20
-  * HarmoniaCore C++ implementation
-  * PipeWire / ALSA audio stack
-  * Desktop UI toolkit (Qt / GTK / other, chosen per implementation).
-* Architecture:
-
-  * Desktop UI (windows, menus, playlist views).
-  * ViewModel and application layer in C++.
-  * Integration layer constructs HarmoniaCore C++ services for Linux.
-
-The detailed architecture for the Linux / C++ implementation will be described in:
-
-* `docs/harmoniaplayer-architecture-linux-cpp.md` (future)
+* [API Reference](api_reference.md)
+* [Module Boundaries](module_boundary.md)
 
 ---
 
 ## 4. High-Level Context (C4 Level 1)
 
-At the highest level, HarmoniaPlayer consumes HarmoniaCore services and presents them through a platform-native UI.
+At the highest level, HarmoniaPlayer consumes HarmoniaCore-Swift services and presents them through a native macOS UI.
 
 ```mermaid
 flowchart LR
     user[User / Listener]
 
     subgraph player[HarmoniaPlayer]
-      appApple[Apple / Swift App
-(macOS / iOS)]
-      appLinux[Linux / C++ App]
+      app[macOS App
+SwiftUI]
     end
 
-    subgraph coreSwift[HarmoniaCore-Swift]
-      svcSwift[PlaybackService
-+ Ports + Adapters]
-    end
-
-    subgraph coreCpp[HarmoniaCore C++]
-      svcCpp[PlaybackService
+    subgraph coreSwift[HarmoniaCore-Swift Package]
+      svc[PlaybackService
 + Ports + Adapters]
     end
 
     fs[(Local File System
-(Audio, artwork, lyrics))]
-    audioApple[(Apple Audio Stack)]
-    audioLinux[(Linux Audio Stack
-(PipeWire / ALSA))]
+Audio, artwork, lyrics)]
+    audioStack[(Apple Audio Stack
+CoreAudio / AVAudioEngine)]
 
-    user --> appApple
-    user --> appLinux
-
-    appApple --> svcSwift
-    appLinux --> svcCpp
-
-    svcSwift --> fs
-    svcCpp --> fs
-
-    svcSwift --> audioApple
-    svcCpp --> audioLinux
+    user --> app
+    app --> svc
+    svc --> fs
+    svc --> audioStack
 ```
 
 The **contract** between HarmoniaPlayer and HarmoniaCore is defined entirely in HarmoniaCore specs (ports, services, error behavior). HarmoniaPlayer code is responsible for:
@@ -153,59 +110,63 @@ The **contract** between HarmoniaPlayer and HarmoniaCore is defined entirely in 
 
 ---
 
-## 5. Detailed Architecture (C4 Level 2) - Apple / Swift
+## 5. Detailed Architecture (C4 Level 2)
 
 ```mermaid
 flowchart TB
     subgraph player[HarmoniaPlayer Application]
       subgraph ui[UI Layer]
         views[SwiftUI Views
-(NowPlayingView, PlaylistView, SettingsView)]
+PlayerView, PlaylistView, ContentView,
+FileInfoView, PaywallView, MiniPlayerView,
+SettingsView, HarmoniaPlayerCommands]
       end
 
       subgraph appLayer[Application Layer]
         appState[AppState
-(@MainActor ObservableObject)]
-        viewModels[ViewModels
-(PlaybackViewModel, etc.)]
+@MainActor ObservableObject
+split: +Playlist, +Playback,
++Navigation, +M3U8]
       end
 
       subgraph integration[Integration Layer]
         coreFactory[CoreFactory
-(constructs Core services)]
+constructs Core services]
         iap[IAPManager
-(Pro unlock, macOS only)]
+Pro unlock via StoreKit 2]
+        adapWrappers[Adapter Wrappers
+HarmoniaPlaybackServiceAdapter
+HarmoniaTagReaderAdapter]
       end
     end
 
     subgraph coreSwift[HarmoniaCore-Swift Package]
-      service[PlaybackService
-(DefaultPlaybackService)]
+      service[DefaultPlaybackService]
       ports[Ports
-(DecoderPort, AudioOutputPort,
-TagReaderPort, ClockPort, LoggerPort,
-FileAccessPort, TagWriterPort)]
+DecoderPort, AudioOutputPort,
+TagReaderPort, TagWriterPort,
+ClockPort, LoggerPort, FileAccessPort]
       adapters[Apple Adapters
-(AVAssetReaderDecoderAdapter,
+AVAssetReaderDecoderAdapter,
 AVAudioEngineOutputAdapter,
 AVMetadataTagReaderAdapter,
+AVMutableTagWriterAdapter,
 MonotonicClockAdapter,
-OSLogAdapter,
-SandboxFileAccessAdapter)]
+OSLogAdapter, NoopLogger,
+SandboxFileAccessAdapter]
     end
 
     fs[(File System)]
     audioStack[(Apple Audio Stack
 CoreAudio / AVAudioEngine)]
 
-    views --> viewModels
-    viewModels --> appState
+    views --> appState
 
     appState --> coreFactory
     appState --> iap
 
-    coreFactory --> service
-    coreFactory -.creates.-> ports
+    coreFactory --> adapWrappers
+    adapWrappers --> service
 
     service --> ports
     ports --> adapters
@@ -218,26 +179,28 @@ CoreAudio / AVAudioEngine)]
 
 **UI Layer (Views):**
 - SwiftUI views that render the interface
-- **May depend on:** AppState, ViewModels
-- **Must not depend on:** HarmoniaCore-Swift directly, Ports, Adapters
+- **May depend on:** AppState (via `@EnvironmentObject`)
+- **Must not depend on:** HarmoniaCore-Swift directly, Ports, Adapters, Services
 
-**Application Layer (AppState, ViewModels):**
-- Central observable state (`AppState`)
-- Presentation logic (ViewModels)
-- **May depend on:** PlaybackService interface, CoreFactory, IAPManager
-- **Must not depend on:** Ports directly, Adapters, platform-specific APIs
+**Application Layer (AppState):**
+- Central observable state (`AppState`, split across 5 files)
+- App-layer service protocols (`PlaybackService`, `TagReaderService`) defined here
+- Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`)
+- **May depend on:** App-layer service protocols, CoreFactory, IAPManager
+- **Must not depend on:** HarmoniaCore-Swift, Ports, Adapters, platform-specific APIs
 
-**Integration Layer (CoreFactory, IAPManager):**
-- Constructs HarmoniaCore-Swift services
-- Wires Ports to Adapters
-- Handles IAP state
-- **May depend on:** HarmoniaCore-Swift (Services, Ports, Adapters), StoreKit
+**Integration Layer (CoreFactory, IAPManager, Adapter Wrappers):**
+- Constructs HarmoniaCore-Swift services via `HarmoniaCoreProvider`
+- Adapter wrappers bridge HarmoniaCore types to app-layer protocols
+- `HarmoniaPlaybackServiceAdapter`: maps `CoreError` → `PlaybackError`, sync → async
+- `HarmoniaTagReaderAdapter`: maps `TagBundle` → `Track`
+- **Only these 3 files may `import HarmoniaCore`:** `HarmoniaCoreProvider.swift`, `HarmoniaPlaybackServiceAdapter.swift`, `HarmoniaTagReaderAdapter.swift`
 - **Must not depend on:** SwiftUI, UI state
 
 **HarmoniaCore-Swift Package:**
-- **Services:** High-level audio services (PlaybackService)
+- **Services:** High-level audio services (`DefaultPlaybackService`)
 - **Ports:** Abstract interfaces (protocols) for audio operations
-- **Adapters:** Platform-specific implementations of Ports
+- **Adapters:** Platform-specific implementations of Ports using AVFoundation
 
 See [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md) for detailed Port & Adapter pattern.
 
@@ -253,17 +216,18 @@ HarmoniaPlayer follows the same Ports & Adapters pattern as HarmoniaCore:
 ┌─────────────────────────────────┐
 │   UI Layer (SwiftUI)            │
 └──────────────┬──────────────────┘
-               │
+               │ @EnvironmentObject
 ┌──────────────▼──────────────────┐
 │   Application Layer             │
-│   (AppState, ViewModels)        │
+│   (AppState)                    │
 └──────────────┬──────────────────┘
-               │
+               │ app-layer protocols
 ┌──────────────▼──────────────────┐
 │   Integration Layer             │
-│   (CoreFactory, IAPManager)     │
+│   (CoreFactory, IAPManager,     │
+│    Adapter Wrappers)            │
 └──────────────┬──────────────────┘
-               │
+               │ import HarmoniaCore
 ┌──────────────▼──────────────────┐
 │   HarmoniaCore-Swift            │
 │   Services → Ports → Adapters   │
@@ -271,10 +235,11 @@ HarmoniaPlayer follows the same Ports & Adapters pattern as HarmoniaCore:
 ```
 
 **Key Principles:**
-1. **UI depends on AppState only** - No direct service access
-2. **AppState uses Services** - Not Ports directly (except for metadata reading)
-3. **CoreFactory constructs Services** - Wires Ports to Adapters
-4. **Adapters contain platform code** - All AVFoundation, StoreKit, etc.
+1. **UI depends on AppState only** — No direct service access, no ViewModels
+2. **AppState uses app-layer service protocols** — `PlaybackService`, `TagReaderService` defined in HarmoniaPlayer
+3. **CoreFactory constructs services** — Wires Ports to Adapters via `CoreServiceProviding`
+4. **Adapter wrappers at the boundary** — `HarmoniaPlaybackServiceAdapter` maps `CoreError` → `PlaybackError`; `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track`
+5. **`import HarmoniaCore` restricted to 3 files** — Everything else uses app-layer abstractions
 
 ### 6.2 Dependency Injection
 
@@ -283,44 +248,58 @@ All services are injected via constructors:
 ```swift
 @MainActor
 final class AppState: ObservableObject {
-    private let playbackService: PlaybackService
+    let playbackService: PlaybackService
+    let tagReaderService: TagReaderService
     private let iapManager: IAPManager
-    
-    init(factory: CoreFactory, iap: IAPManager) {
-        self.iapManager = iap
-        self.playbackService = factory.makePlaybackService(
-            isProUser: iap.isProUser
-        )
+
+    init(iapManager: IAPManager, provider: CoreServiceProviding, ...) {
+        self.iapManager = iapManager
+        let featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        let coreFactory = CoreFactory(featureFlags: featureFlags, provider: provider)
+        self.playbackService = coreFactory.makePlaybackService()
+        self.tagReaderService = coreFactory.makeTagReaderService()
     }
 }
 ```
 
+**Note:** AppState is split across multiple extension files for maintainability:
+`AppState.swift` (properties + init), `AppState+Playlist.swift`, `AppState+Playback.swift`,
+`AppState+Navigation.swift`, `AppState+M3U8.swift`.
+
 This enables:
-- Testing with mocks
-- Runtime configuration (Free vs Pro)
+- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `MockIAPManager`)
+- Runtime configuration (Free vs Pro via `CoreFeatureFlags`)
 - Clear dependency graph
 
-### 6.3 Synchronous Core, Async UI
+### 6.3 Async API
 
-**HarmoniaCore-Swift uses synchronous APIs:**
+**All PlaybackService methods are async:**
 ```swift
-// Synchronous - blocking operations
-try playbackService.load(url: url)
-try playbackService.play()
-let time = playbackService.currentTime()
+// PlaybackService protocol (async)
+func load(url: URL) async throws
+func play() async throws
+func pause() async
+func stop() async
 ```
 
-**AppState wraps in async/await for UI:**
+**AppState calls services with async/await:**
 ```swift
-func play() {
-    Task { @MainActor in
-        do {
-            try playbackService.play()
-            playbackState = .playing
-        } catch {
-            handleError(error)
-        }
+func play() async {
+    do {
+        try await playbackService.play()
+        playbackState = .playing
+    } catch {
+        let mapped = mapToPlaybackError(error)
+        playbackState = .error(mapped)
+        lastError = mapped
     }
+}
+```
+
+**Views dispatch via Task:**
+```swift
+Button("Play") {
+    Task { await appState.play() }
 }
 ```
 
@@ -333,38 +312,36 @@ This separation ensures:
 
 ## 7. Design Principles
 
-HarmoniaPlayer follows the same underlying principles as HarmoniaCore:
-
 1. **Ports & Adapters alignment**
 
    * HarmoniaPlayer does not embed audio logic.
-   * All audio responsibilities are forwarded to HarmoniaCore implementations.
+   * All audio responsibilities are forwarded to HarmoniaCore-Swift.
 
 2. **Never break core contracts**
 
    * HarmoniaPlayer must respect the behavior defined by HarmoniaCore specs.
    * Any audio-related change must be coordinated with HarmoniaCore.
 
-3. **Platform-native UI, shared behavior**
+3. **Clear separation of concerns**
 
-   * Each platform uses its native UI framework.
-   * Behavior (playback flow, error categories, seek semantics) must remain consistent across platforms.
+   * UI layer (views) is kept separate from application logic and integration layers.
+   * Integration layer is the only place that knows how to construct HarmoniaCore services.
+   * `import HarmoniaCore` is restricted to 3 Integration Layer files.
 
-4. **Clear separation of concerns**
+4. **No String payloads across module boundary**
 
-   * UI layer (views, windows) is kept separate from application logic and integration layers.
-   * Integration layers are the only place that know how to construct HarmoniaCore services.
+   * `CoreError` (with String payloads) is mapped to typed `PlaybackError` codes at the Integration Layer.
+   * Technical details stay in HarmoniaCore's logger; UI receives typed error codes only.
 
 5. **Testable and verifiable**
 
-   * HarmoniaPlayer should be testable through unit, integration, and parity tests.
-   * Where possible, the same audio test corpus should be shared between Apple and Linux implementations.
+   * All services are injected via protocols and factory pattern.
+   * Test doubles: `FakeCoreProvider`, `FakePlaybackService`, `FakeTagReaderService`, `MockIAPManager`.
+   * `@MainActor` on test classes using AppState; `nonisolated deinit {}` for Swift 6 compatibility.
 
 ---
 
 ## 8. Document Map
-
-To keep the documentation focused and maintainable, platform-specific details are split into separate files.
 
 * **This document** (`docs/architecture.md`)
 
@@ -372,22 +349,30 @@ To keep the documentation focused and maintainable, platform-specific details ar
   * Repository relationships and system context.
   * C4 Level 1 and Level 2 diagrams.
 
-* **Application API Specification (Apple / Swift)**
+* **API Reference**
 
   * `docs/api_reference.md`
-  * Defines interface contracts for SwiftUI code.
-  * `docs/implementation_guide_swift.md`
-  * Provides Swift-specific implementation patterns.
+  * Complete public interface: all types, properties, methods, protocols.
 
-* **Module Boundaries (Apple / Swift)**
+* **Module Boundaries**
 
   * `docs/module_boundary.md`
   * Defines allowed dependencies and module boundaries for the Swift implementation.
 
+* **Implementation Guide (Swift)**
+
+  * `docs/implementation_guide_swift.md`
+  * Swift-specific implementation patterns, error handling, IAP, testing.
+
 * **Development Guide**
 
   * `docs/development_guide.md`
-  * Setup instructions, IAP integration, code style guidelines.
+  * Setup instructions, HarmoniaCore integration, cross-repo workflow, coding conventions.
+
+* **Workflow**
+
+  * `docs/workflow.md`
+  * SDD → TDD → commit workflow.
 
 * **User Guide**
 
@@ -415,5 +400,3 @@ For detailed specifications of the underlying audio framework:
 **HarmoniaCore-Swift Package:**
 - [Package README](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift/blob/main/README.md)
 - [Implementation Guides](https://github.com/OneOfWolvesBilly/HarmoniaCore/tree/main/docs/impl)
-
-Platform-specific documents follow the same documentation style as the HarmoniaCore specs to keep the overall suite consistent and predictable for contributors.
