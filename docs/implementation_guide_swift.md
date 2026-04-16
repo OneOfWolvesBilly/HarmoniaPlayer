@@ -1,429 +1,496 @@
 # HarmoniaPlayer Implementation Guide (Swift)
 
-> **Platform:** Apple platforms (macOS 13+, iOS 16+)  
-> **Language:** Swift 5.9+  
-> **Framework:** SwiftUI, HarmoniaCore-Swift
+> **Platform:** macOS 15.6+
+> **Language:** Swift 6
+> **Framework:** SwiftUI, HarmoniaCore-Swift (SPM)
 >
 > This guide provides concrete implementation patterns for building HarmoniaPlayer
-> on Apple platforms using Swift and HarmoniaCore-Swift.
->
-> **Note:** This is Swift-specific. C++20 implementation will have different patterns.
+> on macOS using Swift 6 and HarmoniaCore-Swift.
 
 ---
 
 ## 1. Overview
 
 This guide demonstrates:
-- How to implement AppState with dependency injection
-- How to construct HarmoniaCore services via CoreFactory
-- How to integrate IAP management
-- How to handle errors and state updates
-- SwiftUI integration patterns
+- How the Integration Layer bridges HarmoniaCore-Swift to the app
+- How `AppState` is wired with dependency injection
+- How to integrate StoreKit 2 for Pro unlock
+- How errors flow from `CoreError` to `PlaybackError` to the UI
+- SwiftUI view patterns and async/await usage
+- Testing patterns with test doubles
 
 **Prerequisites:**
-- Read [API Reference](api_reference.md) first
+- Read [API Reference](api_reference.md) for the complete interface surface
+- Review [Module Boundaries](module_boundary.md) for dependency rules
 - Understand [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
-- Review [Module Boundaries](module_boundary.md)
+
+**Key mental model:**
+
+```
+[HC] PlaybackService  — synchronous (throws CoreError)
+              ↓ wrapped by
+[HP] HarmoniaPlaybackServiceAdapter  — bridges sync → async, maps CoreError → PlaybackError
+              ↓ conforms to
+[HP] PlaybackService (app-layer protocol)  — async throws PlaybackError
+              ↓ used by
+[HP] AppState  — async methods consumed by SwiftUI Views via Task { await ... }
+```
+
+HarmoniaCore's own APIs are synchronous. The app-layer `PlaybackService`
+protocol defined in HarmoniaPlayer is **async throws**. The Integration Layer
+bridges the two.
 
 ---
 
-## 2. CoreFactory Implementation
+## 2. Integration Layer
 
-CoreFactory constructs HarmoniaCore services by wiring ports to platform adapters.
+The Integration Layer is the **only** place in HarmoniaPlayer where
+`import HarmoniaCore` is allowed. It consists of exactly three files:
+
+1. `HarmoniaCoreProvider.swift` — constructs real HarmoniaCore services
+2. `HarmoniaPlaybackServiceAdapter.swift` — wraps `DefaultPlaybackService`
+3. `HarmoniaTagReaderAdapter.swift` — wraps `TagReaderPort`
+
+### 2.1 HarmoniaCoreProvider
+
+The single production implementation of `CoreServiceProviding`. Constructs
+all platform adapters and wires them into HarmoniaCore services:
 
 ```swift
+import Foundation
 import HarmoniaCore
 
-struct CoreFactory {
-    /// Constructs PlaybackService with Free or Pro configuration
+final class HarmoniaCoreProvider: CoreServiceProviding {
+
     func makePlaybackService(isProUser: Bool) -> PlaybackService {
-        // Create platform adapters
-        let logger = OSLogAdapter()
-        let clock = MonotonicClockAdapter()
+        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+        let clock   = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio = AVAudioEngineOutputAdapter(logger: logger)
-        
-        // Wire adapters into service
-        return DefaultPlaybackService(
+        let audio   = AVAudioEngineOutputAdapter(logger: logger)
+        let core    = DefaultPlaybackService(
             decoder: decoder,
-            audio: audio,
-            clock: clock,
-            logger: logger
+            audio:   audio,
+            clock:   clock,
+            logger:  logger
         )
+        return HarmoniaPlaybackServiceAdapter(core: core)
     }
-    
-    /// Constructs TagReaderPort for metadata extraction
-    func makeTagReader() -> TagReaderPort {
-        let logger = OSLogAdapter()
-        return AVMetadataTagReaderAdapter(logger: logger)
+
+    func makeTagReaderService() -> TagReaderService {
+        HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
     }
 }
 ```
 
-**Key Points:**
-1. **Adapter Construction:** All Apple-specific code (AVFoundation, OSLog) lives here
-2. **Service Wiring:** CoreFactory knows how to wire ports to adapters
-3. **Configuration:** `isProUser` flag can be used for Pro feature selection
-4. **Single Responsibility:** Only constructs services, doesn't use them
+The `isProUser` parameter is forwarded for future Pro-tier decoder selection.
+Currently the same adapter is used for both tiers.
+
+### 2.2 HarmoniaPlaybackServiceAdapter
+
+Bridges synchronous HarmoniaCore to the async app-layer protocol. Handles
+`CoreError` → `PlaybackError` mapping at the module boundary so the app
+never sees `CoreError` directly.
+
+```swift
+import Foundation
+import HarmoniaCore
+
+final class HarmoniaPlaybackServiceAdapter: PlaybackService {
+
+    private let core: HarmoniaCore.PlaybackService
+
+    init(core: HarmoniaCore.PlaybackService) { self.core = core }
+
+    var state: PlaybackState {
+        switch core.state {
+        case .stopped:      return .stopped
+        case .playing:      return .playing
+        case .paused:       return .paused
+        case .buffering:    return .loading
+        case .error(let e): return .error(Self.mapCoreError(e))
+        }
+    }
+
+    func load(url: URL) async throws {
+        do { try core.load(url: url) }
+        catch let error as CoreError { throw Self.mapCoreError(error) }
+    }
+
+    func play() async throws {
+        do { try core.play() }
+        catch let error as CoreError { throw Self.mapCoreError(error) }
+    }
+
+    func pause() async             { core.pause() }
+    func stop() async              { core.stop() }
+    func currentTime() async -> TimeInterval { core.currentTime() }
+    func duration() async -> TimeInterval    { core.duration() }
+    func setVolume(_ volume: Float) async    { core.setVolume(volume) }
+
+    // Boundary: CoreError → PlaybackError.
+    // No String payload crosses the module boundary.
+    static func mapCoreError(_ error: CoreError) -> PlaybackError {
+        switch error {
+        case .notFound:        return .failedToOpenFile
+        case .ioError:         return .failedToOpenFile
+        case .unsupported:     return .unsupportedFormat
+        case .decodeError:     return .failedToDecode
+        case .invalidState:    return .invalidState
+        case .invalidArgument: return .invalidArgument
+        }
+    }
+}
+```
+
+Note the fully-qualified `HarmoniaCore.PlaybackService` — `PlaybackService`
+alone inside HarmoniaPlayer refers to the app-layer protocol.
+
+### 2.3 HarmoniaTagReaderAdapter
+
+Pure value mapping from HarmoniaCore's `TagBundle` to HarmoniaPlayer's `Track`.
+No AVFoundation calls — all metadata reading is done inside HarmoniaCore:
+
+```swift
+import Foundation
+import HarmoniaCore
+
+final class HarmoniaTagReaderAdapter: TagReaderService {
+
+    private let port: TagReaderPort
+
+    init(port: TagReaderPort) { self.port = port }
+
+    var currentSchemaVersion: Int { TagBundle.currentSchemaVersion }
+
+    func readMetadata(for url: URL) async throws -> Track {
+        let bundle = try port.read(url: url)
+        let fileFormat = url.pathExtension.uppercased()
+
+        return Track(
+            url:              url,
+            title:            bundle.title       ?? url.deletingPathExtension().lastPathComponent,
+            artist:           bundle.artist      ?? "",
+            album:            bundle.album       ?? "",
+            duration:         bundle.duration    ?? 0,
+            artworkData:      bundle.artworkData,
+            albumArtist:      bundle.albumArtist ?? "",
+            composer:         bundle.composer    ?? "",
+            genre:            bundle.genre       ?? "",
+            year:             bundle.year,
+            trackNumber:      bundle.trackNumber,
+            trackTotal:       bundle.trackTotal,
+            discNumber:       bundle.discNumber,
+            discTotal:        bundle.discTotal,
+            bpm:              bundle.bpm,
+            replayGainTrack:  bundle.replayGainTrack,
+            replayGainAlbum:  bundle.replayGainAlbum,
+            comment:          bundle.comment     ?? "",
+            bitrate:          bundle.bitrate,
+            sampleRate:       bundle.sampleRate,
+            channels:         bundle.channels,
+            fileSize:         bundle.fileSize,
+            fileFormat:       fileFormat,
+            metadataVersion:  TagBundle.currentSchemaVersion
+        )
+    }
+}
+```
+
+### 2.4 CoreFactory (Application Layer)
+
+`CoreFactory` is in the **Application Layer** — it does **not** import
+HarmoniaCore. It delegates construction to a `CoreServiceProviding`
+implementation, enabling test injection:
+
+```swift
+struct CoreFactory {
+    let featureFlags: CoreFeatureFlags
+    private let provider: CoreServiceProviding
+
+    init(featureFlags: CoreFeatureFlags, provider: CoreServiceProviding) {
+        self.featureFlags = featureFlags
+        self.provider = provider
+    }
+
+    func makePlaybackService() -> PlaybackService {
+        let isProUser = featureFlags.supportsFLAC
+        return provider.makePlaybackService(isProUser: isProUser)
+    }
+
+    func makeTagReaderService() -> TagReaderService {
+        provider.makeTagReaderService()
+    }
+}
+```
+
+Production wiring uses `HarmoniaCoreProvider`; tests use `FakeCoreProvider`.
 
 ---
 
 ## 3. AppState Implementation
 
-AppState is the central observable state for the application.
+`AppState` is the central observable state. It is `@MainActor` and split
+across five files for maintainability:
+
+| File | Responsibility |
+|------|----------------|
+| `AppState.swift` | Properties, init, persistence, display helpers |
+| `AppState+Playlist.swift` | Playlist operations, undo/redo, sort |
+| `AppState+Playback.swift` | Transport controls, volume, ReplayGain, polling |
+| `AppState+Navigation.swift` | Next/previous, track-finished handling |
+| `AppState+M3U8.swift` | M3U8 import/export |
+
+### 3.1 Initialization (Dependency Injection)
 
 ```swift
-import SwiftUI
-import Combine
-import HarmoniaCore
-
 @MainActor
 final class AppState: ObservableObject {
-    // MARK: - Published State
-    
-    @Published private(set) var playbackState: PlaybackState = .idle
-    @Published private(set) var currentTrack: Track?
-    @Published private(set) var currentTime: TimeInterval = 0
-    @Published private(set) var duration: TimeInterval = 0
-    
-    @Published private(set) var playlist: Playlist = Playlist(
-        id: UUID(),
-        name: "Session",
-        tracks: []
-    )
-    
-    @Published var viewPreferences: ViewPreferences = ViewPreferences(
-        isWaveformVisible: true,
-        isPlaylistVisible: true,
-        layoutPreset: .standard
-    )
-    
-    @Published private(set) var lastError: PlaybackError?
-    @Published private(set) var isProUser: Bool = false
-    
-    // MARK: - Services (injected via CoreFactory)
-    
-    private let playbackService: PlaybackService
-    private let tagReader: TagReaderPort
+
+    // Services — internal access, never `private`
+    // (Views access AppState, not services directly — the boundary is
+    //  architectural, not enforced by access control.)
+    let playbackService: PlaybackService
+    let tagReaderService: TagReaderService
+    let fileDropService: FileDropService
+
+    // Dependencies kept private
     private let iapManager: IAPManager
-    
-    // MARK: - State Management
-    
-    private var updateTimer: Timer?
-    
-    // MARK: - Initialization (Dependency Injection)
-    
-    init(factory: CoreFactory, iap: IAPManager) {
-        self.iapManager = iap
-        self.isProUser = iap.isProUser
-        
-        // CoreFactory constructs services based on Pro status
-        self.playbackService = factory.makePlaybackService(
-            isProUser: iap.isProUser
+    private let userDefaults: UserDefaults
+
+    // Derived from IAPManager
+    private(set) var featureFlags: CoreFeatureFlags
+
+    // Published state (excerpt)
+    @Published private(set) var isProUnlocked: Bool
+    @Published var playlists: [Playlist]
+    @Published var activePlaylistIndex: Int = 0
+    @Published var currentTrack: Track?
+    @Published var playbackState: PlaybackState = .idle
+    @Published var lastError: PlaybackError?
+
+    init(
+        iapManager: IAPManager,
+        provider: CoreServiceProviding,
+        userDefaults: UserDefaults = .standard,
+        undoManager: UndoManager? = nil
+    ) {
+        self.iapManager   = iapManager
+        self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
+
+        let coreFactory = CoreFactory(
+            featureFlags: featureFlags,
+            provider:     provider
         )
-        self.tagReader = factory.makeTagReader()
-        
-        // Start observing IAP changes
-        observeIAPChanges()
-        
-        // Start playback position timer
-        startUpdateTimer()
+        self.playbackService  = coreFactory.makePlaybackService()
+        self.tagReaderService = coreFactory.makeTagReaderService()
+        self.fileDropService  = FileDropService()
+
+        self.isProUnlocked  = iapManager.isProUnlocked
+        self.playlists      = [Playlist(name: "Playlist 1")]
+        self.userDefaults   = userDefaults
+        // ... (remaining init: undoManager, languageBundle, restoreState(),
+        //      Combine sinks for replayGainMode/selectedLanguage)
     }
-    
-    // MARK: - Playlist Management
-    
-    func load(urls: [URL]) {
-        for url in urls {
-            do {
-                // Check format requirements
-                let ext = url.pathExtension.lowercased()
-                let requiresPro = ["flac", "dsd", "dsf", "dff"].contains(ext)
-                
-                if requiresPro && !isProUser {
-                    lastError = .unsupportedFormat(
-                        "\(ext.uppercased()) playback requires Pro"
-                    )
-                    continue
-                }
-                
-                // Enrich track with metadata
-                let track = try enrichTrack(url: url)
-                playlist.tracks.append(track)
-                
-            } catch {
-                handleError(error)
+
+    // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
+    // Required on all @MainActor classes deallocated in test contexts.
+    nonisolated deinit {}
+}
+```
+
+**Wiring flow:** `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
+
+### 3.2 Async Playback Methods
+
+All transport methods are `async` because the app-layer `PlaybackService`
+protocol is async. Errors from the Integration Layer arrive already mapped
+to `PlaybackError`:
+
+```swift
+extension AppState {
+
+    // Resumes from current position. If no track loaded, resolves one from
+    // selection or the first track in the active playlist.
+    func play() async {
+        if currentTrack == nil {
+            let tracks = playlists[activePlaylistIndex].tracks
+            if !selectedTrackIDs.isEmpty,
+               let selected = tracks.first(where: { selectedTrackIDs.contains($0.id) }) {
+                await play(trackID: selected.id)
+            } else if let first = tracks.first {
+                await play(trackID: first.id)
             }
+            return
         }
-    }
-    
-    func clearPlaylist() {
-        stop()
-        playlist.tracks.removeAll()
-        currentTrack = nil
-    }
-    
-    func removeTrack(_ trackID: Track.ID) {
-        if currentTrack?.id == trackID {
-            stop()
-        }
-        playlist.tracks.removeAll { $0.id == trackID }
-    }
-    
-    func moveTrack(fromOffsets: IndexSet, toOffset: Int) {
-        playlist.tracks.move(fromOffsets: fromOffsets, toOffset: toOffset)
-    }
-    
-    // MARK: - Playback Control (synchronous, throws on error)
-    
-    func play() throws {
-        guard let track = currentTrack else {
-            throw PlaybackError.coreError("No track selected")
-        }
-        
-        try playbackService.play()
-        playbackState = .playing
-        lastError = nil
-    }
-    
-    func play(trackID: Track.ID) throws {
-        guard let track = playlist.tracks.first(where: { $0.id == trackID }) else {
-            throw PlaybackError.fileNotFound(URL(fileURLWithPath: "/"))
-        }
-        
-        // Stop current playback
-        if playbackState == .playing || playbackState == .paused {
-            stop()
-        }
-        
-        // Load and play new track
-        currentTrack = track
-        playbackState = .loading
-        
+
         do {
-            try playbackService.load(url: track.url)
-            duration = playbackService.duration()
-            
-            try playbackService.play()
+            try await playbackService.play()
             playbackState = .playing
-            lastError = nil
-            
+            startPolling()
         } catch {
-            playbackState = .idle
-            currentTrack = nil
-            throw error
+            let mapped = mapToPlaybackError(error)
+            lastError = mapped
+            playbackState = .error(mapped)
         }
     }
-    
-    func pause() {
-        playbackService.pause()
+
+    func pause() async {
+        await playbackService.pause()
         playbackState = .paused
     }
-    
-    func stop() {
-        playbackService.stop()
+
+    func stop() async {
+        stopPolling()
+        await playbackService.stop()
         playbackState = .stopped
         currentTime = 0
-    }
-    
-    func seek(to time: TimeInterval) throws {
-        try playbackService.seek(to: time)
-        currentTime = time
-    }
-    
-    // MARK: - UI Helpers
-    
-    func toggleWaveformVisibility() {
-        viewPreferences.isWaveformVisible.toggle()
-    }
-    
-    func togglePlaylistVisibility() {
-        viewPreferences.isPlaylistVisible.toggle()
-    }
-    
-    func setLayoutPreset(_ preset: LayoutPreset) {
-        viewPreferences.layoutPreset = preset
-    }
-    
-    // MARK: - Metadata Reading (using TagReaderPort)
-    
-    private func enrichTrack(url: URL) throws -> Track {
-        let tags = try tagReader.readTags(from: url)
-        
-        return Track(
-            id: UUID(),
-            url: url,
-            title: tags["title"] as? String ?? url.lastPathComponent,
-            artist: tags["artist"] as? String ?? "",
-            album: tags["album"] as? String ?? "",
-            duration: tags["duration"] as? TimeInterval,
-            artworkURL: tags["artworkURL"] as? URL
-        )
-    }
-    
-    // MARK: - Error Handling
-    
-    private func handleError(_ error: Error) {
-        if let playbackError = error as? PlaybackError {
-            lastError = playbackError
-        } else {
-            // Map HarmoniaCore errors to UI-friendly errors
-            lastError = mapCoreError(error)
-        }
-    }
-    
-    private func mapCoreError(_ error: Error) -> PlaybackError {
-        // This assumes HarmoniaCore defines a CoreError type
-        // Adjust based on actual HarmoniaCore error types
-        let description = error.localizedDescription
-        
-        if description.contains("not found") {
-            return .fileNotFound(URL(fileURLWithPath: "/"))
-        } else if description.contains("unsupported") {
-            return .unsupportedFormat(description)
-        } else if description.contains("decode") {
-            return .decodingFailed(description)
-        } else if description.contains("output") {
-            return .outputFailed(description)
-        } else {
-            return .coreError(description)
-        }
-    }
-    
-    // MARK: - IAP Observation
-    
-    private func observeIAPChanges() {
-        // Observe IAP state changes
-        // Implementation depends on IAPManager design
-        // This is a placeholder for the pattern
-    }
-    
-    // MARK: - Playback Position Updates
-    
-    private func startUpdateTimer() {
-        updateTimer = Timer.scheduledTimer(
-            withTimeInterval: 0.1,
-            repeats: true
-        ) { [weak self] _ in
-            self?.updatePlaybackPosition()
-        }
-    }
-    
-    private func updatePlaybackPosition() {
-        guard playbackState == .playing else { return }
-        currentTime = playbackService.currentTime()
-    }
-    
-    deinit {
-        updateTimer?.invalidate()
     }
 }
 ```
 
-**Key Implementation Patterns:**
+### 3.3 Fallback Error Mapping
 
-1. **Dependency Injection:**
-   - Services injected via constructor
-   - No direct instantiation of adapters
-   - Clear separation of concerns
+`CoreError` → `PlaybackError` mapping happens in
+`HarmoniaPlaybackServiceAdapter` (Integration Layer). AppState only needs a
+thin fallback for unexpected non-`PlaybackError` errors:
 
-2. **Synchronous Core, Async UI:**
-   - HarmoniaCore methods are synchronous
-   - AppState wraps them for UI consumption
-   - Errors thrown, not returned in state
-
-3. **State Updates:**
-   - All state changes use `@Published`
-   - SwiftUI observes changes automatically
-   - Timer for playback position updates
-
-4. **Error Handling:**
-   - Map core errors to UI-friendly types
-   - Store last error for UI display
-   - Clear errors on successful operations
+```swift
+// In AppState (Application Layer)
+func mapToPlaybackError(_ error: Error) -> PlaybackError {
+    if let playbackError = error as? PlaybackError { return playbackError }
+    // Should not happen if Integration Layer mapping is complete.
+    // Logged as invalidState for diagnostic purposes.
+    return .invalidState
+}
+```
 
 ---
 
 ## 4. IAPManager Implementation
 
-```swift
-import StoreKit
-import Combine
+Three implementations exist, all conforming to the `IAPManager` protocol:
 
-@MainActor
-final class StoreKitIAPManager: IAPManager, ObservableObject {
-    @Published private(set) var isProUser: Bool = false
-    
-    private let productID = "harmoniaplayer.pro"
-    private var updateTask: Task<Void, Never>?
-    
-    init() {
-        // Start listening for transactions
-        updateTask = Task {
-            await listenForTransactions()
-        }
-        
-        // Check current entitlements
-        Task {
-            await refreshEntitlements()
+| Implementation | Use Case |
+|----------------|----------|
+| `StoreKitIAPManager` | Production (StoreKit 2 + UserDefaults cache) |
+| `FreeTierIAPManager` | Free-tier build stub (always `isProUnlocked == false`) |
+| `MockIAPManager` | Tests (deterministic + configurable purchase result) |
+
+### 4.1 StoreKitIAPManager (Production)
+
+Uses StoreKit 2 with a UserDefaults cache so AppState's synchronous init
+can read `isProUnlocked` without awaiting:
+
+```swift
+import Foundation
+import StoreKit
+
+final class StoreKitIAPManager: IAPManager {
+
+    static let productID = "harmoniaplayer.pro"
+    private static let defaultsKey = "hp.isProUnlocked"
+
+    private(set) var isProUnlocked: Bool {
+        didSet {
+            defaults.set(isProUnlocked, forKey: Self.defaultsKey)
         }
     }
-    
-    func refreshEntitlements() async {
-        // Check current entitlements
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result {
-                if transaction.productID == productID {
-                    isProUser = true
-                    return
+
+    private let defaults: UserDefaults
+    private var updatesTask: Task<Void, Never>?
+
+    init(userDefaults: UserDefaults = .standard) {
+        self.defaults = userDefaults
+        self.isProUnlocked = userDefaults.bool(forKey: Self.defaultsKey)
+        // Listen for Transaction.updates for Ask-to-Buy / Family Sharing.
+        updatesTask = Task.detached { [weak self] in
+            for await update in Transaction.updates {
+                if case .verified(let transaction) = update {
+                    await transaction.finish()
+                    await self?.refreshEntitlements()
                 }
             }
         }
-        isProUser = false
     }
-    
+
+    func refreshEntitlements() async {
+        guard let result = await Transaction.currentEntitlement(for: Self.productID)
+        else {
+            isProUnlocked = false
+            return
+        }
+        if case .verified = result {
+            isProUnlocked = true
+        }
+    }
+
     func purchasePro() async throws {
-        guard let product = try await Product.products(for: [productID]).first else {
+        let products = try await Product.products(for: [Self.productID])
+        guard let product = products.first else {
             throw IAPError.productNotFound
         }
-        
         let result = try await product.purchase()
-        
         switch result {
         case .success(let verification):
-            if case .verified(let transaction) = verification {
+            switch verification {
+            case .verified(let transaction):
                 await transaction.finish()
-                await refreshEntitlements()
+                isProUnlocked = true
+            case .unverified:
+                throw IAPError.verificationFailed
             }
         case .userCancelled:
             throw IAPError.userCancelled
         case .pending:
-            throw IAPError.purchasePending
+            throw IAPError.purchaseFailed("pending")
         @unknown default:
-            throw IAPError.unknown
+            throw IAPError.purchaseFailed("unknown")
         }
     }
-    
-    private func listenForTransactions() async {
-        for await result in Transaction.updates {
-            if case .verified(let transaction) = result {
-                await transaction.finish()
-                await refreshEntitlements()
-            }
-        }
-    }
-    
-    deinit {
-        updateTask?.cancel()
-    }
-}
-
-enum IAPError: Error {
-    case productNotFound
-    case userCancelled
-    case purchasePending
-    case unknown
 }
 ```
+
+`IAPError` cases (see `[HP] IAPManager.swift`):
+- `.productNotFound` — product not found in App Store Connect
+- `.verificationFailed` — StoreKit could not verify result
+- `.userCancelled` — user dismissed the purchase sheet
+- `.purchaseFailed(String)` — underlying failure with reason
+- `.notAvailable` — IAP not available (e.g. Free-tier stub)
+
+### 4.2 FreeTierIAPManager (Stub)
+
+For Free-tier builds where IAP is not wired up:
+
+```swift
+final class FreeTierIAPManager: IAPManager {
+    var isProUnlocked: Bool { false }
+    func refreshEntitlements() async { }
+    func purchasePro() async throws {
+        throw IAPError.notAvailable
+    }
+}
+```
+
+### 4.3 AppState IAP Surface
+
+```swift
+extension AppState {
+    func purchasePro() async throws {
+        try await iapManager.purchasePro()
+        isProUnlocked = iapManager.isProUnlocked
+        featureFlags = CoreFeatureFlags(iapManager: iapManager)
+    }
+
+    func refreshEntitlements() async {
+        await iapManager.refreshEntitlements()
+        isProUnlocked = iapManager.isProUnlocked
+        featureFlags = CoreFeatureFlags(iapManager: iapManager)
+    }
+}
+```
+
+Note that `featureFlags` is **rebuilt** after purchase/refresh so downstream
+gating uses the fresh tier info.
 
 ---
 
@@ -431,337 +498,292 @@ enum IAPError: Error {
 
 ### 5.1 App Entry Point
 
+`HarmoniaPlayerApp` builds `AppState` with production dependencies. The
+app entry uses `@StateObject` so AppState survives view redraws:
+
 ```swift
 import SwiftUI
 
 @main
 struct HarmoniaPlayerApp: App {
-    @StateObject private var appState: AppState
-    
+
     init() {
-        // Construct dependencies
-        let factory = CoreFactory()
-        let iapManager = StoreKitIAPManager()
-        
-        // Inject into AppState
-        _appState = StateObject(
-            wrappedValue: AppState(factory: factory, iap: iapManager)
-        )
+        // Resolve UI language from persisted setting before any view loads.
+        let saved = UserDefaults.standard.string(forKey: "hp.selectedLanguage")
+        if let lang = saved, lang != "system" {
+            UserDefaults.standard.set([lang], forKey: "AppleLanguages")
+        } else if saved == nil {
+            UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
+            UserDefaults.standard.set("en", forKey: "hp.selectedLanguage")
+        }
     }
-    
+
+    @StateObject private var appState = AppState(
+        iapManager: StoreKitIAPManager(),
+        provider:   HarmoniaCoreProvider()
+    )
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .focusedSceneObject(appState)
+                .onReceive(NotificationCenter.default.publisher(
+                    for: NSApplication.willTerminateNotification
+                )) { _ in
+                    appState.saveState()
+                }
+        }
+        .commands { HarmoniaPlayerCommands() }
+
+        Window("Mini Player", id: "mini-player") {
+            MiniPlayerView().environmentObject(appState)
+        }
+        .windowResizability(.contentSize)
+
+        Settings {
+            SettingsView().environmentObject(appState)
         }
     }
 }
 ```
 
-### 5.2 View Implementation
+### 5.2 Calling Async AppState Methods from SwiftUI
+
+Every transport method on AppState is `async`. SwiftUI button handlers
+are synchronous, so wrap calls in `Task { await ... }`:
 
 ```swift
-struct PlayerView: View {
+struct TransportControls: View {
     @EnvironmentObject private var appState: AppState
-    @State private var showError = false
-    
+
     var body: some View {
-        VStack(spacing: 0) {
-            // Album art and track info
-            trackInfoView
-            
-            // Waveform (if enabled)
-            if appState.viewPreferences.isWaveformVisible {
-                WaveformView()
-            }
-            
-            // Progress bar
-            progressBar
-            
-            // Transport controls
-            transportControls
-            
-            // Playlist (if visible)
-            if appState.viewPreferences.isPlaylistVisible {
-                PlaylistView()
-            }
-        }
-        .alert(
-            "Playback Error",
-            isPresented: $showError,
-            presenting: appState.lastError
-        ) { _ in
-            Button("OK") {
-                // Error acknowledged
-            }
-        } message: { error in
-            Text(errorMessage(for: error))
-        }
-        .onChange(of: appState.lastError) { error in
-            showError = error != nil
-        }
-    }
-    
-    private var trackInfoView: some View {
-        VStack {
-            if let track = appState.currentTrack {
-                Text(track.title)
-                    .font(.headline)
-                Text(track.artist)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            } else {
-                Text("No Track Playing")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding()
-    }
-    
-    private var progressBar: some View {
         HStack {
-            Text(formatTime(appState.currentTime))
-                .font(.caption)
-                .monospacedDigit()
-            
-            Slider(
-                value: Binding(
-                    get: { appState.currentTime },
-                    set: { newValue in
-                        try? appState.seek(to: newValue)
+            Button {
+                Task { await appState.playPreviousTrack() }
+            } label: { Image(systemName: "backward.fill") }
+
+            Button {
+                Task {
+                    if appState.playbackState == .playing {
+                        await appState.pause()
+                    } else {
+                        await appState.play()
                     }
-                ),
-                in: 0...max(appState.duration, 1)
-            )
-            
-            Text(formatTime(appState.duration))
-                .font(.caption)
-                .monospacedDigit()
-        }
-        .padding(.horizontal)
-    }
-    
-    private var transportControls: some View {
-        HStack(spacing: 20) {
-            Button(action: { /* Previous */ }) {
-                Image(systemName: "backward.fill")
+                }
+            } label: {
+                Image(systemName: appState.playbackState == .playing
+                      ? "pause.fill" : "play.fill")
             }
-            
-            Button(action: togglePlayPause) {
-                Image(systemName: playButtonIcon)
-                    .font(.title)
-            }
-            
-            Button(action: { appState.stop() }) {
-                Image(systemName: "stop.fill")
-            }
-            
-            Button(action: { /* Next */ }) {
-                Image(systemName: "forward.fill")
-            }
-        }
-        .padding()
-    }
-    
-    private var playButtonIcon: String {
-        appState.playbackState == .playing ? "pause.circle.fill" : "play.circle.fill"
-    }
-    
-    private func togglePlayPause() {
-        do {
-            if appState.playbackState == .playing {
-                appState.pause()
-            } else {
-                try appState.play()
-            }
-        } catch {
-            // Error will be shown via alert
-        }
-    }
-    
-    private func formatTime(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", minutes, secs)
-    }
-    
-    private func errorMessage(for error: PlaybackError) -> String {
-        switch error {
-        case .unsupportedFormat(let msg):
-            return msg
-        case .fileNotFound:
-            return "File not found"
-        case .decodingFailed(let msg):
-            return "Failed to decode: \(msg)"
-        case .outputFailed(let msg):
-            return "Audio output error: \(msg)"
-        case .coreError(let msg):
-            return msg
+
+            Button {
+                Task { await appState.stop() }
+            } label: { Image(systemName: "stop.fill") }
+
+            Button {
+                Task { await appState.playNextTrack() }
+            } label: { Image(systemName: "forward.fill") }
         }
     }
 }
 ```
 
-### 5.3 Playlist View
+### 5.3 Seeking from a Slider Binding
+
+Sliders need synchronous getters. Keep a local `@State` for the displayed
+value and dispatch the async seek in the change handler:
+
+```swift
+struct ProgressBar: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        Slider(
+            value: Binding(
+                get: { appState.currentTime },
+                set: { newValue in
+                    Task { await appState.seek(to: newValue) }
+                }
+            ),
+            in: 0...max(appState.duration, 1)
+        )
+    }
+}
+```
+
+### 5.4 Error Presentation
+
+`AppState.lastError` is a `PlaybackError` enum with no String payload. Map
+each case to a localised user-facing message in the View:
+
+```swift
+struct ErrorAlert: ViewModifier {
+    @EnvironmentObject private var appState: AppState
+
+    func body(content: Content) -> some View {
+        content.alert(
+            "Playback Error",
+            isPresented: Binding(
+                get: { appState.lastError != nil },
+                set: { if !$0 { appState.clearLastError() } }
+            ),
+            presenting: appState.lastError
+        ) { _ in
+            Button("OK") { appState.clearLastError() }
+        } message: { error in
+            Text(message(for: error))
+        }
+    }
+
+    private func message(for error: PlaybackError) -> String {
+        switch error {
+        case .unsupportedFormat: return NSLocalizedString("error.unsupported_format", comment: "")
+        case .failedToOpenFile:  return NSLocalizedString("error.file_not_found",     comment: "")
+        case .failedToDecode:    return NSLocalizedString("error.decode_failed",      comment: "")
+        case .outputError:       return NSLocalizedString("error.output",             comment: "")
+        case .invalidState,
+             .invalidArgument:   return NSLocalizedString("error.internal",           comment: "")
+        }
+    }
+}
+```
+
+### 5.5 Drag-and-Drop
+
+Drag-and-drop validation goes through `FileDropService` via
+`AppState.handleFileDrop(urls:)`. Views should never validate URLs or call
+`load(urls:)` directly:
 
 ```swift
 struct PlaylistView: View {
     @EnvironmentObject private var appState: AppState
-    
-    var body: some View {
-        List {
-            ForEach(appState.playlist.tracks) { track in
-                TrackRow(
-                    track: track,
-                    isPlaying: appState.currentTrack?.id == track.id
-                )
-                .onTapGesture {
-                    try? appState.play(trackID: track.id)
-                }
-            }
-            .onDelete { indexSet in
-                for index in indexSet {
-                    let track = appState.playlist.tracks[index]
-                    appState.removeTrack(track.id)
-                }
-            }
-            .onMove { from, to in
-                appState.moveTrack(fromOffsets: from, toOffset: to)
-            }
-        }
-    }
-}
 
-struct TrackRow: View {
-    let track: Track
-    let isPlaying: Bool
-    
     var body: some View {
-        HStack {
-            VStack(alignment: .leading) {
-                Text(track.title)
-                    .font(.headline)
-                Text(track.artist)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            if isPlaying {
-                Image(systemName: "speaker.wave.3.fill")
-                    .foregroundColor(.accentColor)
-            }
-            
-            if let duration = track.duration {
-                Text(formatDuration(duration))
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
+        List(appState.playlist.tracks) { track in
+            TrackRow(track: track)
         }
-    }
-    
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let minutes = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", minutes, secs)
+        .dropDestination(for: AudioFileItem.self) { items, _ in
+            Task {
+                await appState.handleFileDrop(urls: items.map { $0.url })
+            }
+            return true
+        }
     }
 }
 ```
+
+`AudioFileItem` uses `ProxyRepresentation` (not `FileRepresentation`) to
+receive the original file URL — `FileRepresentation` creates a temporary
+copy that is deleted after the callback, breaking playback.
 
 ---
 
 ## 6. Testing Patterns
 
-### 6.1 Mock Services
+### 6.1 Test Doubles
 
-```swift
-final class MockPlaybackService: PlaybackService {
-    var state: PlaybackState = .idle
-    var mockDuration: TimeInterval = 180
-    var mockCurrentTime: TimeInterval = 0
-    
-    func load(url: URL) throws {
-        state = .loading
-        // Simulate successful load
-        state = .idle
-    }
-    
-    func play() throws {
-        state = .playing
-    }
-    
-    func pause() {
-        state = .paused
-    }
-    
-    func stop() {
-        state = .stopped
-        mockCurrentTime = 0
-    }
-    
-    func seek(to seconds: TimeInterval) throws {
-        mockCurrentTime = seconds
-    }
-    
-    func currentTime() -> TimeInterval {
-        return mockCurrentTime
-    }
-    
-    func duration() -> TimeInterval {
-        return mockDuration
-    }
-}
-```
+Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 
-### 6.2 Unit Tests
+| Double | Replaces | Notable features |
+|--------|----------|------------------|
+| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService` and `TagReaderService` stubs |
+| `FakePlaybackService` | `PlaybackService` | Call counts, error stubs, `resetCounts()` for post-setup tests |
+| `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs, per-URL error stubs, configurable schema version |
+| `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, call counts |
+
+### 6.2 @MainActor Test Classes (Swift 6)
+
+`AppState` is `@MainActor`. Test classes that use it must also be
+`@MainActor` — XCTest runs `@MainActor`-isolated classes on the main
+actor automatically, so individual methods don't need `await MainActor.run {}`:
 
 ```swift
 import XCTest
 @testable import HarmoniaPlayer
 
-final class AppStateTests: XCTestCase {
-    func testPlayPauseFlow() throws {
-        // Arrange
-        let mockService = MockPlaybackService()
-        let mockFactory = MockCoreFactory(playbackService: mockService)
-        let mockIAP = MockIAPManager(isProUser: true)
-        let appState = AppState(factory: mockFactory, iap: mockIAP)
-        
-        // Add a test track
-        appState.playlist.tracks.append(Track(
-            id: UUID(),
-            url: URL(fileURLWithPath: "/test.mp3"),
-            title: "Test",
-            artist: "Test Artist",
-            album: "Test Album",
-            duration: 180
-        ))
-        
-        // Act & Assert
-        try appState.play(trackID: appState.playlist.tracks[0].id)
-        XCTAssertEqual(appState.playbackState, .playing)
-        
-        appState.pause()
-        XCTAssertEqual(appState.playbackState, .paused)
-        
-        appState.stop()
-        XCTAssertEqual(appState.playbackState, .stopped)
+@MainActor
+final class AppStatePlaybackControlTests: XCTestCase {
+
+    private var sut: AppState!
+    private var fakePlaybackService: FakePlaybackService!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+        testDefaults = UserDefaults(suiteName: suiteName)!
+        fakePlaybackService = FakePlaybackService()
+        let provider = FakeCoreProvider(playbackService: fakePlaybackService)
+        let iap = MockIAPManager(isProUnlocked: false)
+        sut = AppState(
+            iapManager:   iap,
+            provider:     provider,
+            userDefaults: testDefaults
+        )
     }
-    
-    func testProFormatGating() {
-        // Test that FLAC requires Pro
-        let mockFactory = MockCoreFactory()
-        let mockIAP = MockIAPManager(isProUser: false)
-        let appState = AppState(factory: mockFactory, iap: mockIAP)
-        
-        let flacURL = URL(fileURLWithPath: "/test.flac")
-        appState.load(urls: [flacURL])
-        
-        XCTAssertNotNil(appState.lastError)
-        XCTAssertEqual(appState.playlist.tracks.count, 0)
+
+    override func tearDown() {
+        sut = nil
+        fakePlaybackService = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testPlayCallsServicePlay() async {
+        await seedTracks()
+
+        // Clear call counts set up by seedTracks().
+        fakePlaybackService.resetCounts()
+
+        await sut.play()
+
+        XCTAssertEqual(fakePlaybackService.playCallCount, 1)
+        XCTAssertEqual(sut.playbackState, .playing)
+    }
+
+    // Helper: loads tracks so play() can proceed past the
+    // "no currentTrack / stopped state" guards.
+    private func seedTracks() async {
+        let url = URL(fileURLWithPath: "/tmp/test.mp3")
+        await sut.load(urls: [url])
+        if let first = sut.playlist.tracks.first {
+            await sut.play(trackID: first.id)
+        }
     }
 }
+```
+
+Key points:
+- `@MainActor` on the test class — do not put it on individual methods
+- Use a fresh `UserDefaults(suiteName:)` per test and clean up in `tearDown`
+- Setup helpers like `seedTracks()` should reset call counts so assertions
+  target the operation under test, not the setup
+
+### 6.3 Configuring Fakes
+
+```swift
+// Stub a metadata response
+let fakeTagReader = FakeTagReaderService()
+let url = URL(fileURLWithPath: "/tmp/song.mp3")
+fakeTagReader.stubbedMetadata[url] = Track(
+    url: url, title: "Real Title", artist: "Artist X"
+)
+
+// Stub an error for a specific URL
+fakeTagReader.stubbedErrors[url] = PlaybackError.failedToOpenFile
+
+// Stub a playback error
+let fakePlayback = FakePlaybackService()
+fakePlayback.stubbedPlayError = PlaybackError.outputError
+
+// Mock IAP purchase behavior
+let mockIAP = MockIAPManager(isProUnlocked: false)
+mockIAP.purchaseResult = .success
+// or
+mockIAP.purchaseResult = .failure(.userCancelled)
 ```
 
 ---
@@ -773,58 +795,165 @@ final class AppStateTests: XCTestCase {
 ```
 SwiftUI Views
     ↓ @EnvironmentObject
-AppState
-    ↓ injected via init
-CoreFactory + IAPManager
-    ↓ constructs
-PlaybackService + TagReaderPort
+AppState (@MainActor)
+    ↓ constructor-injected
+CoreFactory (Application Layer)
     ↓ delegates to
-HarmoniaCore Ports & Adapters
+CoreServiceProviding (HarmoniaCoreProvider in prod)
+    ↓ constructs
+HarmoniaPlaybackServiceAdapter, HarmoniaTagReaderAdapter (Integration Layer)
+    ↓ wraps
+DefaultPlaybackService, TagReaderPort (HarmoniaCore-Swift)
     ↓ use
-Apple Frameworks (AVFoundation, CoreAudio)
+AVAssetReaderDecoder, AVAudioEngine, AVMetadataTagReader (AVFoundation)
 ```
 
 ### 7.2 Key Principles
 
-1. **Dependency Injection:**
-   - All services injected via constructors
-   - No singletons (except at app entry point)
-   - Clear dependency graph
+1. **Sync/async boundary at Integration Layer**
+   - HarmoniaCore is synchronous; HarmoniaPlayer's protocols are async
+   - `HarmoniaPlaybackServiceAdapter` does the bridging
 
-2. **Synchronous Core:**
-   - HarmoniaCore uses synchronous APIs
-   - AppState wraps in async when needed
-   - Errors thrown, not returned in state
+2. **Typed errors at the boundary**
+   - `CoreError` (with String payloads) is mapped to `PlaybackError` (no payloads)
+   - Technical details stay in HarmoniaCore's logger, never cross into the app
 
-3. **Observable State:**
-   - All UI state in AppState
-   - Published via @Published
-   - SwiftUI observes changes
+3. **Dependency injection everywhere**
+   - All services injected via constructor
+   - No singletons in services (app entry point creates the graph)
+   - `CoreServiceProviding` protocol enables test swap-in
 
-4. **Module Boundaries:**
-   - Views depend on AppState only
-   - AppState uses service interfaces
-   - CoreFactory constructs implementations
+4. **`import HarmoniaCore` restricted to 3 files**
+   - `HarmoniaCoreProvider`, `HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`
+   - Any other file importing HarmoniaCore is a boundary violation
+
+5. **Views use AppState only**
+   - No ViewModels — AppState is the single observable state
+   - No direct service access from Views
+   - Async AppState methods dispatched via `Task { await ... }`
 
 ---
 
-## 8. Platform-Specific Notes
+## 8. Common Pitfalls
 
-### Swift-Specific Patterns
+### ❌ Don't: Call async AppState methods without `Task`
 
-- **@MainActor:** Ensures UI updates on main thread
-- **Combine:** Used for reactive state updates
-- **SwiftUI:** Declarative UI with @EnvironmentObject
-- **async/await:** Used for IAP operations only
+```swift
+Button("Play") {
+    appState.play()  // ❌ error: async call in sync context
+}
+```
 
-### Differences from C++ Implementation
+### ✅ Do: Wrap in `Task { await ... }`
 
-The C++20 implementation will differ in:
-- **State Management:** No @Published, use observer pattern
-- **UI Framework:** Qt/GTK instead of SwiftUI
-- **Memory Management:** Manual vs automatic reference counting
-- **Threading:** Explicit thread management
-- **Error Handling:** Result types vs exceptions
+```swift
+Button("Play") {
+    Task { await appState.play() }
+}
+```
+
+---
+
+### ❌ Don't: Import HarmoniaCore outside the 3 Integration Layer files
+
+```swift
+// In AppState+Playback.swift
+import HarmoniaCore  // ❌ boundary violation
+```
+
+### ✅ Do: Use app-layer protocols
+
+```swift
+// AppState uses PlaybackService (app-layer protocol)
+// No HarmoniaCore import needed.
+try await playbackService.play()
+```
+
+---
+
+### ❌ Don't: Propagate String payloads from CoreError
+
+```swift
+case .unsupported(let msg):
+    throw PlaybackError.unsupportedFormat(msg)  // ❌ carries String payload
+```
+
+### ✅ Do: Map to typed codes with no payload
+
+```swift
+case .unsupported:
+    return .unsupportedFormat  // ✓ typed code only
+```
+
+---
+
+### ❌ Don't: Use `FileRepresentation` for drag-and-drop import
+
+```swift
+static var transferRepresentation: some TransferRepresentation {
+    FileRepresentation(contentType: .audio) { received in
+        AudioFileItem(url: received.file)  // ❌ received.file is a temporary copy
+    }
+}
+```
+
+### ✅ Do: Use `ProxyRepresentation` via URL
+
+```swift
+static var transferRepresentation: some TransferRepresentation {
+    ProxyRepresentation(
+        exporting: { $0.url },
+        importing: { AudioFileItem(url: $0) }  // ✓ original file URL
+    )
+}
+```
+
+---
+
+### ❌ Don't: Forget to rebuild `featureFlags` after purchase
+
+```swift
+func purchasePro() async throws {
+    try await iapManager.purchasePro()
+    isProUnlocked = iapManager.isProUnlocked
+    // ❌ featureFlags still reflects the old tier
+}
+```
+
+### ✅ Do: Rebuild `featureFlags` from the refreshed manager
+
+```swift
+func purchasePro() async throws {
+    try await iapManager.purchasePro()
+    isProUnlocked = iapManager.isProUnlocked
+    featureFlags = CoreFeatureFlags(iapManager: iapManager)  // ✓
+}
+```
+
+---
+
+### ❌ Don't: Put `@MainActor` on individual test methods
+
+```swift
+final class AppStateTests: XCTestCase {
+    func testSomething() async {
+        await MainActor.run {  // ❌ unnecessary boilerplate
+            sut.doSomething()
+        }
+    }
+}
+```
+
+### ✅ Do: Mark the whole class `@MainActor`
+
+```swift
+@MainActor
+final class AppStateTests: XCTestCase {
+    func testSomething() async {
+        sut.doSomething()  // ✓ automatically on main actor
+    }
+}
+```
 
 ---
 
@@ -833,69 +962,11 @@ The C++20 implementation will differ in:
 **HarmoniaCore Documentation:**
 - [Services Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/04_services_impl.md)
 - [Apple Adapters](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/02_01_apple_adapters_impl.md)
+- [Models (CoreError, TagBundle)](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
 
 **HarmoniaPlayer Documentation:**
-- [API Reference](api_reference.md) - Interface definitions
-- [Architecture](architecture.md) - System design
-- [Module Boundaries](module_boundary.md) - Dependency rules
-- [Development Guide](development_guide.md) - Setup and guidelines
-
----
-
-## 10. Common Pitfalls
-
-### ❌ Don't Do This
-
-```swift
-// ❌ View directly using PlaybackService
-struct PlayerView: View {
-    let playbackService: PlaybackService
-    
-    var body: some View {
-        Button("Play") {
-            try? playbackService.play()
-        }
-    }
-}
-
-// ❌ AppState constructing adapters
-init() {
-    let logger = OSLogAdapter()
-    self.playbackService = DefaultPlaybackService(...)
-}
-
-// ❌ Using async for HarmoniaCore calls
-func play() async throws {
-    try await playbackService.play()  // Wrong! It's synchronous
-}
-```
-
-### ✅ Do This Instead
-
-```swift
-// ✅ View using AppState
-struct PlayerView: View {
-    @EnvironmentObject var appState: AppState
-    
-    var body: some View {
-        Button("Play") {
-            try? appState.play()
-        }
-    }
-}
-
-// ✅ AppState receiving services
-init(factory: CoreFactory, iap: IAPManager) {
-    self.playbackService = factory.makePlaybackService(...)
-}
-
-// ✅ Synchronous calls
-func play() throws {
-    try playbackService.play()
-    playbackState = .playing
-}
-```
-
----
-
-This implementation guide is Swift-specific. Future C++20 implementation will follow similar architectural principles but with platform-appropriate patterns.
+- [API Reference](api_reference.md) — complete interface surface
+- [Architecture](architecture.md) — system design and C4 diagrams
+- [Module Boundaries](module_boundary.md) — dependency rules and enforcement
+- [Development Guide](development_guide.md) — setup and cross-repo workflow
+- [Workflow](workflow.md) — SDD → TDD → commit cycle
