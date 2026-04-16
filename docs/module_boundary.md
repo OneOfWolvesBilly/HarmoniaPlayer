@@ -19,9 +19,7 @@
   consuming HarmoniaCore-Swift.
 - Ensure alignment with [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md).
 
-This document applies to the Apple / Swift implementation only. Linux / C++
-UI implementations will have corresponding module boundary documents in their
-own repositories.
+This document applies to the macOS / Swift implementation.
 
 ---
 
@@ -34,38 +32,33 @@ At a high level, the codebase is divided into the following logical modules.
 
 1. **UI Layer (Views)**
    - SwiftUI views under `Shared/Views/` and platform-specific view wrappers.
-2. **Application Layer (State & ViewModels)**
-   - `AppState` (central observable state)
-   - ViewModels (e.g. `PlaybackViewModel`)
+2. **Application Layer (State & Models)**
+   - `AppState` (central observable state, split across 5 files)
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`, etc.)
-   - App-layer service protocols (`PlaybackService`, `TagReaderService`,
-     `TagWriterService`) — these are defined in the Application Layer so that
-     `AppState` can depend on them without importing HarmoniaCore.
+   - App-layer service protocols (`PlaybackService`, `TagReaderService`) — defined here
+     so that `AppState` can depend on them without importing HarmoniaCore.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`
      (pure Swift utilities with no HarmoniaCore dependency).
-3. **Integration Layer**
-   - `CoreFactory` for constructing services via `CoreServiceProviding`.
-   - `HarmoniaCoreProvider` — the production `CoreServiceProviding` implementation
-     that builds real HarmoniaCore services.
-   - Adapter wrappers that bridge HarmoniaCore ports to app-layer protocols:
-     `HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`,
-     `HarmoniaTagWriterAdapter`.
-   - `IAPManager` (macOS-only Pro unlock handling via StoreKit 2).
-   - **`import HarmoniaCore` is permitted only in Integration Layer files.**
+   - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
+3. **Integration Layer** (`import HarmoniaCore` allowed — only these 3 files)
+   - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
+   - `HarmoniaPlaybackServiceAdapter` — wraps HarmoniaCore `DefaultPlaybackService`,
+     maps `CoreError` → `PlaybackError`.
+   - `HarmoniaTagReaderAdapter` — wraps `TagReaderPort`, maps `TagBundle` → `Track`.
+   - `IAPManager` protocol + `StoreKitIAPManager` (macOS Pro unlock) + `FreeTierIAPManager` (stub).
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
 5. **Ports (HarmoniaCore-Swift)**
-   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`,
-     `TagWriterPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`
+   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`, `TagWriterPort`
 6. **Platform Adapters (HarmoniaCore-Swift)**
    - `AVAssetReaderDecoderAdapter`
    - `AVAudioEngineOutputAdapter`
    - `AVMetadataTagReaderAdapter`
-   - `AVMutableMetadataTagWriterAdapter`
+   - `AVMutableTagWriterAdapter`
    - `MonotonicClockAdapter`
    - `OSLogAdapter`
+   - `NoopLogger`
    - `SandboxFileAccessAdapter`
-   - Future Apple-specific adapters.
 
 HarmoniaCore-Swift and its adapters live in a **separate package**. From the
 HarmoniaPlayer perspective, they are external dependencies.
@@ -85,8 +78,8 @@ flowchart LR
     views[UI Layer
 (SwiftUI Views)]
     app[Application Layer
-(AppState, ViewModels,
-UI models)]
+(AppState, UI models,
+app-layer service protocols)]
     integration[Integration Layer
 (CoreFactory, IAPManager,
 Adapter Wrappers)]
@@ -109,7 +102,7 @@ TagReaderPort, etc.)]
 ### 3.2 Rules
 
 1. **UI Layer** may depend on:
-   - Application Layer (AppState, ViewModels, UI models).
+   - Application Layer (AppState, UI models).
    - Standard Apple frameworks (SwiftUI, Combine, Foundation) for rendering and binding.
 
    UI Layer **must not**:
@@ -119,19 +112,17 @@ TagReaderPort, etc.)]
    - Access any audio-related code.
 
 2. **Application Layer** may depend on:
-   - HarmoniaPlayer UI models and ViewModels.
+   - HarmoniaPlayer UI models.
    - Integration Layer abstractions (`CoreFactory` interface, `IAPManager` interface).
-   - App-layer service protocols (e.g. `PlaybackService`, `TagReaderService`,
-     `TagWriterService`) injected via constructor or environment.
+   - **PlaybackService interface only** (not concrete implementations).
+   - **TagReaderService interface** for metadata reading.
 
    Application Layer **must not**:
-   - Import HarmoniaCore-Swift.
    - Instantiate platform adapters directly.
    - Call AVFoundation APIs directly.
    - Import OSLog, StoreKit, or other Apple-specific frameworks, except through
      small, well-defined interfaces.
    - Directly use HarmoniaCore Ports (DecoderPort, AudioOutputPort, TagReaderPort, etc.).
-   - Use HarmoniaCore model types (e.g. `TagBundle`) directly.
 
 3. **Integration Layer** may depend on:
    - Core service interfaces and their concrete implementations.
@@ -141,14 +132,14 @@ TagReaderPort, etc.)]
    Integration Layer **must not**:
    - Contain UI rendering logic (no SwiftUI views).
    - Manipulate SwiftUI layout or view state directly.
-   - Expose HarmoniaCore Ports, Adapters, or model types to Application Layer.
+   - Expose HarmoniaCore Ports or Adapters to Application Layer.
 
 4. **Core Services (HarmoniaCore-Swift)** may depend on:
    - Ports (protocols) that abstract decoding, audio output, logging, and clocks.
    - Pure Swift utility types.
 
    Core Services **must not**:
-   - Depend on SwiftUI, AppKit, UIKit, or any UI framework.
+   - Depend on SwiftUI, AppKit, or any UI framework.
    - Depend on IAP or licensing logic.
    - Know about Free vs Pro product variants.
 
@@ -158,64 +149,71 @@ TagReaderPort, etc.)]
 
    Platform Adapters **must not**:
    - Import SwiftUI.
-   - Know anything about `AppState` or ViewModels.
+   - Know anything about `AppState` or application state.
    - Embed business decisions about Free vs Pro.
 
 ---
 
 ## 4. Special Cases and Clarifications
 
-### 4.1 App-Layer Service Protocols
+### 4.1 TagReaderService Usage
 
-**AppState uses app-layer service protocols (`PlaybackService`, `TagReaderService`,
-`TagWriterService`), never HarmoniaCore ports or types directly.**
+**AppState uses TagReaderService (not TagReaderPort directly) for metadata reading.**
 
-**Rationale:** The app-layer protocols are defined in the Application Layer using
-app-layer types (e.g. `Track`). Integration Layer adapter wrappers
-(`HarmoniaTagReaderAdapter`, `HarmoniaTagWriterAdapter`) handle the mapping
-between app-layer types and HarmoniaCore types (e.g. `Track ↔ TagBundle`)
-internally.
+**Rationale:** Metadata reading is needed during file import to populate Track models.
+TagReaderService is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
 
 **Usage Pattern:**
 ```swift
+// In AppState
 @MainActor
 final class AppState: ObservableObject {
-    let playbackService: PlaybackService
     let tagReaderService: TagReaderService
-
-    init(iapManager: IAPManager, provider: CoreServiceProviding) {
-        let flags = CoreFeatureFlags(iapManager: iapManager)
-        let factory = CoreFactory(flags: flags, provider: provider)
-        self.playbackService = factory.makePlaybackService()
-        self.tagReaderService = factory.makeTagReaderService()
+    
+    func load(urls: [URL]) async {
+        for url in urls {
+            do {
+                let track = try await tagReaderService.readMetadata(for: url)
+                playlists[activePlaylistIndex].tracks.append(track)
+            } catch {
+                let track = Track(url: url)
+                playlists[activePlaylistIndex].tracks.append(track)
+                lastError = .failedToOpenFile
+            }
+        }
+        saveState()
     }
 }
 ```
 
 **Not allowed:**
 ```swift
-// ❌ AppState must NOT use HarmoniaCore Ports directly
-let tagReader: TagReaderPort = ...  // FORBIDDEN
-
-// ❌ AppState must NOT use HarmoniaCore model types
-let bundle: TagBundle = ...  // FORBIDDEN
+// ❌ AppState must NOT use Ports directly
+let tagReader: TagReaderPort = factory.makeTagReader()  // FORBIDDEN
 ```
 
 ### 4.2 Error Mapping
 
-**Pattern:** Integration Layer adapter wrappers translate HarmoniaCore errors
-to app-layer typed errors. No string payloads cross the module boundary.
+**Pattern:** `HarmoniaPlaybackServiceAdapter` (Integration Layer) maps `CoreError` → `PlaybackError`
+at the boundary. AppState never sees `CoreError` directly.
 
 ```swift
 // In HarmoniaPlaybackServiceAdapter (Integration Layer)
-private func mapCoreError(_ error: CoreError) -> PlaybackError {
+static func mapCoreError(_ error: CoreError) -> PlaybackError {
     switch error {
-    case .notFound:
-        return .invalidArgument
-    case .unsupported:
-        return .invalidState
-    // ... typed mapping, no String payloads
+    case .notFound:         return .failedToOpenFile
+    case .unsupported:      return .unsupportedFormat
+    case .decodeError:      return .failedToDecode
+    case .ioError:          return .failedToOpenFile
+    case .invalidState:     return .invalidState
+    case .invalidArgument:  return .invalidArgument
     }
+}
+
+// In AppState (Application Layer) — simplified fallback only
+func mapToPlaybackError(_ error: Error) -> PlaybackError {
+    if let playbackError = error as? PlaybackError { return playbackError }
+    return .invalidState
 }
 ```
 
@@ -229,12 +227,12 @@ These are examples of **explicitly forbidden** dependencies to keep the
 architecture clean.
 
 1. **Views importing HarmoniaCore-Swift**
-   - ❌ `NowPlayingView` must not call `PlaybackService.play()` directly.
-   - ✅ It should call `AppState.play()` or a ViewModel method.
+   - ❌ `PlayerView` must not call `PlaybackService.play()` directly.
+   - ✅ It should call `appState.play()` via `@EnvironmentObject`.
 
 2. **AppState creating platform adapters**
    - ❌ `AppState` must not create `AVAudioEngineOutputAdapter`.
-   - ✅ `CoreFactory` builds the service graph and injects services.
+   - ✅ `CoreFactory` builds the service graph and injects `PlaybackService`.
 
 3. **Views importing StoreKit or IAPManager**
    - ❌ SwiftUI views must not call StoreKit APIs directly.
@@ -242,17 +240,17 @@ architecture clean.
 
 4. **Core services knowing about Free vs Pro**
    - ❌ `PlaybackService` must not perform product checks.
-   - ✅ `AppState` gates Pro-only actions (e.g. format checks in `play(trackID:)`)
-     based on `featureFlags` derived from `IAPManager`.
+   - ✅ `AppState` decides which `PlaybackService` configuration to use based on
+     `IAPManager.isProUnlocked`.
 
 5. **Adapters accessing SwiftUI state**
    - ❌ `OSLogAdapter` must not depend on any view or `AppState`.
    - ✅ It only logs messages passed by services.
 
-6. **Application Layer importing HarmoniaCore types**
-   - ❌ `AppState` must not use `TagBundle`, `CoreError`, or any HarmoniaCore type.
-   - ✅ Integration Layer adapter wrappers (e.g. `HarmoniaTagWriterAdapter`)
-     handle `Track → TagBundle` mapping internally.
+6. **AppState directly using audio Ports**
+   - ❌ `AppState` must not use `DecoderPort`, `AudioOutputPort`, `ClockPort`, `LoggerPort`, or `TagReaderPort`.
+   - ✅ `AppState` uses `TagReaderService` (application-level abstraction) for metadata reading.
+     `HarmoniaTagReaderAdapter` (Integration Layer) wraps `TagReaderPort`.
 
 7. **Views containing drag-and-drop business logic**
    - ❌ `PlaylistView` must not validate URLs or call `load(urls:)` directly from a drop closure.
@@ -278,9 +276,9 @@ struct PlayerView: View {
             PlaylistView()
             TransportControlsView(
                 isPlaying: appState.playbackState == .playing,
-                onPlay: { appState.play() },
-                onPause: { appState.pause() },
-                onStop: { appState.stop() }
+                onPlay: { Task { await appState.play() } },
+                onPause: { Task { await appState.pause() } },
+                onStop: { Task { await appState.stop() } }
             )
         }
     }
@@ -298,46 +296,80 @@ final class AppState: ObservableObject {
     let playbackService: PlaybackService
     let tagReaderService: TagReaderService
 
-    init(iapManager: IAPManager, provider: CoreServiceProviding) {
-        let flags = CoreFeatureFlags(iapManager: iapManager)
-        let factory = CoreFactory(flags: flags, provider: provider)
-        self.playbackService = factory.makePlaybackService()
-        self.tagReaderService = factory.makeTagReaderService()
+    init(iapManager: IAPManager, provider: CoreServiceProviding, ...) {
+        let featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        let coreFactory = CoreFactory(featureFlags: featureFlags, provider: provider)
+        self.playbackService = coreFactory.makePlaybackService()
+        self.tagReaderService = coreFactory.makeTagReaderService()
+    }
+
+    func play() async {
+        do {
+            try await playbackService.play()
+            playbackState = .playing
+        } catch {
+            let mapped = mapToPlaybackError(error)
+            playbackState = .error(mapped)
+            lastError = mapped
+        }
     }
 }
 ```
 
-- `AppState` does not know **how** services are built, only that they conform
-  to app-layer protocols.
-- `AppState` never imports HarmoniaCore.
+**Note:** AppState is split across multiple files:
+- `AppState.swift` — properties, init, persistence
+- `AppState+Playlist.swift` — playlist operations, management, undo/redo
+- `AppState+Playback.swift` — transport controls, track selection
+- `AppState+Navigation.swift` — next/previous, trackDidFinishPlaying
+- `AppState+M3U8.swift` — M3U8 import/export
 
-### 6.3 CoreFactory -> HarmoniaCore-Swift
+- `AppState` does not know **how** services are built, only that they conform to their interfaces.
+- `AppState` uses `TagReaderService`, not `TagReaderPort` directly.
+
+### 6.3 CoreFactory -> HarmoniaCoreProvider -> HarmoniaCore-Swift
+
+`CoreFactory` delegates to a `CoreServiceProviding` implementation. It does not
+construct adapters directly:
+
+```swift
+struct CoreFactory {
+    let featureFlags: CoreFeatureFlags
+    private let provider: CoreServiceProviding
+
+    func makePlaybackService() -> PlaybackService {
+        let isProUser = featureFlags.supportsFLAC
+        return provider.makePlaybackService(isProUser: isProUser)
+    }
+
+    func makeTagReaderService() -> TagReaderService {
+        return provider.makeTagReaderService()
+    }
+}
+```
+
+`HarmoniaCoreProvider` (Integration Layer) is the only class that constructs
+real HarmoniaCore adapters:
 
 ```swift
 final class HarmoniaCoreProvider: CoreServiceProviding {
     func makePlaybackService(isProUser: Bool) -> PlaybackService {
-        let clock = MonotonicClockAdapter()
-        let decoder = AVAssetReaderDecoderAdapter()
-        let output = AVAudioEngineOutputAdapter()
-
-        let coreService = DefaultPlaybackService(
-            decoder: decoder,
-            audioOutput: output,
-            clock: clock
+        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+        let clock   = MonotonicClockAdapter()
+        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
+        let audio   = AVAudioEngineOutputAdapter(logger: logger)
+        let core    = DefaultPlaybackService(
+            decoder: decoder, audio: audio, clock: clock, logger: logger
         )
-        return HarmoniaPlaybackServiceAdapter(coreService: coreService)
+        return HarmoniaPlaybackServiceAdapter(core: core)
     }
 
     func makeTagReaderService() -> TagReaderService {
-        let tagReaderPort = AVMetadataTagReaderAdapter()
-        return HarmoniaTagReaderAdapter(port: tagReaderPort)
+        HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
     }
 }
 ```
 
 - All platform-specific details are contained here.
-- Adapter wrappers (`HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`)
-  bridge HarmoniaCore services to app-layer protocols.
 - The rest of the app only sees `PlaybackService` and `TagReaderService` interfaces.
 
 ---
@@ -348,11 +380,10 @@ The module boundaries strongly influence how tests should be written.
 
 1. **UI Layer**
    - Tested with SwiftUI snapshot tests or view inspection.
-   - Use mocked `AppState` / ViewModels.
+   - Use mocked `AppState`.
 
 2. **Application Layer**
-   - Tested with unit tests using fake services (`FakePlaybackService`,
-     `FakeTagReaderService`, `FakeTagWriterService`) and `MockIAPManager`.
+   - Tested with unit tests using mocked `PlaybackService`, `TagReaderService`, and `IAPManager`.
    - Ensure business rules (e.g. format gating, playlist operations) are covered.
 
 3. **Integration Layer**
@@ -378,26 +409,26 @@ When reviewing code, check these rules:
 - [ ] Only depends on `AppState` and UI models
 
 **Application Layer:**
-- [ ] No imports of `HarmoniaCore`
-- [ ] Uses app-layer service protocols (`PlaybackService`, `TagReaderService`,
-      `TagWriterService`) only
-- [ ] No direct use of HarmoniaCore Ports or model types (`TagBundle`, `CoreError`)
+- [ ] Uses `PlaybackService` interface only
+- [ ] Uses `TagReaderService` for metadata reading (not `TagReaderPort`)
+- [ ] No direct use of any HarmoniaCore Ports
 - [ ] No AVFoundation, StoreKit, or OSLog imports
-- [ ] Errors are typed (no string payloads across module boundary)
+- [ ] Errors are mapped to `PlaybackError` (typed, no String payloads)
 - [ ] Drag-and-drop URL validation goes through `FileDropService`
 - [ ] `AudioFileItem.transferRepresentation` uses `ProxyRepresentation`, not `FileRepresentation` for import
 
 **Integration Layer:**
 - [ ] No SwiftUI imports
 - [ ] No UI state manipulation
-- [ ] Properly wires Ports to Adapters via adapter wrappers
+- [ ] Properly wires Ports to Adapters
 - [ ] Contains all platform-specific code
-- [ ] `import HarmoniaCore` only appears in this layer
+- [ ] `CoreError` → `PlaybackError` mapping in `HarmoniaPlaybackServiceAdapter`
+- [ ] `TagBundle` → `Track` mapping in `HarmoniaTagReaderAdapter` (no AVFoundation)
 
 **HarmoniaCore-Swift Usage:**
-- [ ] Services are obtained through `CoreFactory` / `CoreServiceProviding`
+- [ ] Services are obtained through `CoreFactory`
 - [ ] No direct adapter instantiation outside Integration Layer
-- [ ] Free vs Pro decisions made in AppState via `featureFlags`, not in Core
+- [ ] Free vs Pro decisions made in AppState, not in Core
 
 ---
 
@@ -428,21 +459,17 @@ struct PlayerView: View {
 
 ## 10. Summary
 
-- **Views** depend on AppState / ViewModels only.
-- **AppState** depends on CoreFactory / IAPManager / app-layer service protocols.
+- **Views** depend on AppState only.
+- **AppState** depends on CoreFactory / IAPManager / PlaybackService interface / TagReaderService interface.
 - **CoreFactory** depends on HarmoniaCore-Swift services, ports, and platform adapters.
 - **Platform adapters** depend on Apple frameworks and HarmoniaCore-Swift port
   protocols.
-- **`import HarmoniaCore`** is restricted to Integration Layer files.
-- **Free vs Pro decisions** live in `AppState` and `featureFlags`, not in the
-  core engine.
-- **No HarmoniaCore types** (e.g. `TagBundle`, `CoreError`) cross into the
-  Application Layer; adapter wrappers handle all mapping.
+- **Free vs Pro decisions** live in the app (AppState + IAPManager), not in the core engine.
+- **TagReaderService** is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
 
 Any pull request that crosses these boundaries (e.g. a view that imports
-HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using
-HarmoniaCore types) should be rejected or refactored to restore the module
-separation.
+HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using audio Ports)
+should be rejected or refactored to restore the module separation.
 
 ---
 
