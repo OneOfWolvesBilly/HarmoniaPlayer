@@ -1,779 +1,623 @@
-# 🎧 HarmoniaPlayer Development Guide
+# HarmoniaPlayer Development Guide
 
-This document explains the development setup, architecture, and IAP integration for HarmoniaPlayer.
-
-> **Note:** This guide reflects the planned architecture. Implementation has not yet begun.
-
----
-
-## 🔗 Understanding the Repository Structure
-
-HarmoniaPlayer is part of the **HarmoniaSuite** ecosystem:
-
-### Main Repositories
-
-1. **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** (Main Specification)
-   - Contains Swift and C++20 implementations
-   - Platform-agnostic specifications
-   - Structure:
-     - `apple-swift/` - Swift implementation
-     - `linux-cpp/` - C++20 implementation (planned)
-     - `docs/specs/` - Platform-neutral specifications
-
-2. **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** (SPM Package)
-   - Subtree extracted from `HarmoniaCore/apple-swift/`
-   - SPM-compatible package
-   - Used as dependency by HarmoniaPlayer
-
-3. **[HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)** (This Repo)
-   - Reference UI application
-   - Validates HarmoniaCore functionality
-   - Demonstrates best practices
-
-### Repository Relationships
-
-```
-HarmoniaCore (Main)
-├── apple-swift/              → Becomes → HarmoniaCore-Swift (SPM)
-├── linux-cpp/                → Future
-└── docs/specs/               → Specifications
-
-HarmoniaPlayer (This Repo)
-└── depends on → HarmoniaCore-Swift (via SPM)
-```
-
-**Key Architectural Documents:**
-- [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
-- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
-- [HarmoniaPlayer Architecture](architecture.md)
+> **Platform:** macOS 15.6+
+> **Language:** Swift 6
+> **Framework:** SwiftUI, HarmoniaCore-Swift (SPM)
+>
+> This guide walks a new contributor through setting up the development
+> environment, understanding the cross-repo structure, and following the
+> established conventions for HarmoniaPlayer.
 
 ---
 
-## 🚀 Setting Up Development Environment
+## 1. Repository Structure
 
-### Prerequisites
+HarmoniaPlayer lives in a three-repo ecosystem:
 
-- macOS 13.0+
-- Xcode 15.0+
-- Swift 5.9+
-- Git
+### 1.1 Three Repositories
 
-### Clone and Setup
+1. **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** — source-of-truth specification and implementation
+   - Contains both `apple-swift/` and `linux-cpp/` (deferred) side by side
+   - Platform-agnostic specifications in `docs/specs/`
+   - This is where Swift audio engine development happens
+
+2. **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** — standalone Swift Package
+   - Created via `git subtree split` from `HarmoniaCore/apple-swift/`
+   - Required because SPM cannot consume a subdirectory of a repository
+   - Tagged releases define what HarmoniaPlayer pins for deployment
+
+3. **[HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)** (this repo) — macOS application
+   - SwiftUI-based UI, application state, integration layer, tests
+   - Depends on HarmoniaCore-Swift via SPM
+
+### 1.2 Layout on disk
+
+For local development, clone HarmoniaPlayer and HarmoniaCore **side by side**:
+
+```
+~/Projects/
+├── HarmoniaCore/                    # Source repo (dev)
+│   ├── apple-swift/                 # ← HarmoniaPlayer's SPM target in dev mode
+│   │   ├── Package.swift
+│   │   ├── Sources/HarmoniaCore/
+│   │   └── Tests/HarmoniaCoreTests/
+│   ├── linux-cpp/                   # (deferred)
+│   └── docs/specs/
+│
+├── HarmoniaCore-Swift/              # Deploy package (only needed if tagging)
+│   └── (subtree split of apple-swift/)
+│
+└── HarmoniaPlayer/                  # This repo
+    └── App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
+```
+
+Xcode resolves the SPM dependency as `../HarmoniaCore/apple-swift` relative
+to `HarmoniaPlayer.xcodeproj`. In deploy mode the package resolves from the
+pinned GitHub tag of HarmoniaCore-Swift — no local clone needed.
+
+---
+
+## 2. Prerequisites
+
+- **macOS 15.6+**
+- **Xcode 26 beta** (the project deployment target is `26.2` for SDK features; macOS runtime target is `15.6`)
+- **Swift 6**
+- **Git**
+
+---
+
+## 3. Setup
+
+### 3.1 Clone
 
 ```bash
-# Clone HarmoniaPlayer
+# Clone both repos side by side under the same parent directory
+mkdir -p ~/Projects && cd ~/Projects
+git clone https://github.com/OneOfWolvesBilly/HarmoniaCore.git
 git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
-cd HarmoniaPlayer
+```
 
-# Open in Xcode (note the correct path)
+### 3.2 Open in Xcode
+
+```bash
+cd ~/Projects/HarmoniaPlayer
 open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
-
-# HarmoniaCore-Swift will be automatically fetched via SPM
 ```
 
-### Manual SPM Setup (if needed)
+The scheme is **`HarmoniaPlayer`**. Build and run with ⌘R.
 
-**In Xcode:**
-1. File → Add Package Dependencies
-2. Enter: `https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git`
-3. Version: `0.1.0` or later
-4. Add to target: `HarmoniaPlayer-macOS-Free`
+### 3.3 Verify HarmoniaCore is wired correctly
 
-**Verify Dependency:**
+Build the project once. If HarmoniaCore cannot be resolved:
+
+1. Xcode → File → Packages → Reset Package Caches
+2. If still failing: Project settings → Package Dependencies → remove the broken entry → Add Local → navigate to `../HarmoniaCore/apple-swift`
+
+Sanity check inside one of the Integration Layer files:
+
 ```swift
-import HarmoniaCore  // Should import without errors
+// [HP] Shared/Services/HarmoniaCoreProvider.swift
+import HarmoniaCore
 
-let logger = OSLogAdapter()
-let clock = MonotonicClockAdapter()
-// If this compiles, dependency is working
+// These types should resolve:
+let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+let clock   = MonotonicClockAdapter()
+let decoder = AVAssetReaderDecoderAdapter(logger: logger)
 ```
+
+If this compiles, the SPM link is good.
 
 ---
 
-## 📂 Project Structure
+## 4. Project Structure
 
 ```
-HARMONIAPLAYER/                   # Repository root
+HarmoniaPlayer/
 ├── App/
-│   └── HarmoniaPlayer/           # Xcode project directory
-│       ├── HarmoniaPlayer/       # Main app target (source code)
-│       │   ├── Shared/           # Cross-platform UI code (90%)
-│       │   │   ├── Models/       # UI-level data models
-│       │   │   │   ├── Track.swift
-│       │   │   │   ├── Playlist.swift
-│       │   │   │   ├── PlaybackState.swift
-│       │   │   │   ├── PlaybackError.swift
-│       │   │   │   ├── ViewPreferences.swift
-│       │   │   │   └── AppState.swift
-│       │   │   ├── Views/        # SwiftUI views
-│       │   │   │   ├── PlayerView.swift
-│       │   │   │   ├── PlaylistView.swift
-│       │   │   │   └── TrackRow.swift
-│       │   │   └── Services/
-│       │   │       ├── CoreFactory.swift   # HarmoniaCore service construction
-│       │   │       └── IAPManager.swift    # IAP management (macOS Pro)
+│   └── HarmoniaPlayer/
+│       ├── HarmoniaPlayer.storekit               # StoreKit configuration (testing)
+│       ├── HarmoniaPlayer.xcodeproj/
+│       ├── HarmoniaPlayer/                       # Main app target
+│       │   ├── Shared/                           # Platform-independent code
+│       │   │   ├── Models/
+│       │   │   │   ├── AppState.swift               # Properties, init, persistence
+│       │   │   │   ├── AppState+Playlist.swift      # Playlist ops, undo/redo
+│       │   │   │   ├── AppState+Playback.swift      # Transport, volume, ReplayGain
+│       │   │   │   ├── AppState+Navigation.swift    # Next/previous, track-finish
+│       │   │   │   ├── AppState+M3U8.swift          # M3U8 import/export
+│       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable
+│       │   │   │   ├── CoreFeatureFlags.swift       # Free/Pro feature flags
+│       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
+│       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
+│       │   │   │   ├── Playlist.swift               # Playlist model + sort state
+│       │   │   │   ├── RepeatMode.swift             # off/all/one
+│       │   │   │   ├── ReplayGainMode.swift         # off/track/album
+│       │   │   │   ├── ShuffleMode.swift            # off/on
+│       │   │   │   ├── Track.swift                  # Track model (Codable, Sendable)
+│       │   │   │   └── ViewPreferences.swift        # Layout preferences
+│       │   │   ├── Services/
+│       │   │   │   ├── CoreFactory.swift                     # (App Layer) factory
+│       │   │   │   ├── CoreServiceProviding.swift            # (App Layer) provider protocol
+│       │   │   │   ├── ExtendedAttributeService.swift        # xattr for kMDItemWhereFroms
+│       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
+│       │   │   │   ├── FreeTierIAPManager.swift              # Stub IAP (Free tier)
+│       │   │   │   ├── HarmoniaCoreProvider.swift            # ⚠ Integration Layer
+│       │   │   │   ├── HarmoniaPlaybackServiceAdapter.swift  # ⚠ Integration Layer
+│       │   │   │   ├── HarmoniaTagReaderAdapter.swift        # ⚠ Integration Layer
+│       │   │   │   ├── IAPManager.swift                      # IAPManager protocol + IAPError
+│       │   │   │   ├── M3U8Service.swift                     # M3U8 parse/export
+│       │   │   │   ├── PlaybackService.swift                 # App-layer protocol (async)
+│       │   │   │   ├── StoreKitIAPManager.swift              # StoreKit 2 implementation
+│       │   │   │   └── TagReaderService.swift                # App-layer protocol (async)
+│       │   │   └── Views/
+│       │   │       ├── ContentView.swift                     # Root view
+│       │   │       ├── FileInfoView.swift                    # File Info panel
+│       │   │       ├── PaywallView.swift                     # Pro paywall sheet
+│       │   │       ├── PlaybackFocusedValues.swift           # FocusedValue for Commands
+│       │   │       ├── PlayerView.swift                      # Main player
+│       │   │       └── PlaylistView.swift                    # Playlist table + tab bar
 │       │   ├── macOS/
-│       │   │   └── Free/         # macOS Free app
-│       │   │       ├── HarmoniaPlayerApp.swift
-│       │   │       └── ContentView.swift
-│       │   ├── iOS/              # iOS apps (future)
-│       │   └── Assets.xcassets
-│       ├── HarmoniaPlayerTests/  # Test target (Xcode default location)
-│       │   └── SharedTests/      # Shared test code
-│       │       ├── MockIAPManager.swift
-│       │       └── IAPManagerTests.swift
-│       └── HarmoniaPlayer.xcodeproj/
-├── docs/                         # Documentation
-│   ├── architecture.md
+│       │   │   └── Free/
+│       │   │       ├── HarmoniaPlayerApp.swift               # @main entry
+│       │   │       └── Views/
+│       │   │           ├── HarmoniaPlayerCommands.swift
+│       │   │           ├── MarqueeText.swift
+│       │   │           ├── MiniPlayerView.swift
+│       │   │           └── SettingsView.swift
+│       │   ├── Assets.xcassets
+│       │   ├── en.lproj/Localizable.strings
+│       │   ├── zh-Hant.lproj/Localizable.strings
+│       │   └── ja.lproj/Localizable.strings
+│       ├── HarmoniaPlayerTests/
+│       │   ├── FakeInfrastructure/
+│       │   │   ├── FakeCoreProvider.swift                    # CoreServiceProviding double
+│       │   │   ├── FakeTagReaderService.swift                # TagReaderService double
+│       │   │   └── MockIAPManager.swift                      # IAPManager double
+│       │   └── SharedTests/                                  # Unit tests (one per SUT)
+│       └── HarmoniaPlayerUITests/
+├── docs/
 │   ├── api_reference.md
+│   ├── architecture.md
+│   ├── development_guide.md           ← this file
+│   ├── documentation_strategy.md
 │   ├── implementation_guide_swift.md
 │   ├── module_boundary.md
-│   ├── development_guide.md
 │   ├── user_guide.md
-│   └── ...
-├── CHANGELOG.md
-├── LICENSE
-└── README.md
+│   ├── workflow.md
+│   └── slice/
+│       ├── HarmoniaPlayer_development_plan.md
+│       └── slice_NN_micro.md
+├── README.md
+└── LICENSE
 ```
 
-**Key Principles:**
-- 90% of code in `Shared/` (cross-platform)
-- 10% in `macOS/` or `iOS/` (platform-specific)
-- HarmoniaCore provides all audio functionality
-- Documentation lives in repo root for easy access
+**Key rules:**
+- `import HarmoniaCore` is **only** allowed in 3 files in `Shared/Services/` (marked ⚠ Integration Layer)
+- `Shared/` contains all cross-platform code; `macOS/Free/` contains the entry point and macOS-only views
+- Test doubles live in `FakeInfrastructure/`; test cases in `SharedTests/` (one file per system under test)
 
-**See:** [Module Boundaries](module_boundary.md) for dependency rules.
+See [Module Boundaries](module_boundary.md) for enforcement rules.
 
 ---
 
-## 📄 HarmoniaCore Integration
+## 5. HarmoniaCore Integration
 
-### Adding HarmoniaCore Dependency
+### 5.1 The 3-file rule
 
-**In Package.swift:**
-```swift
-// swift-tools-version: 5.9
-import PackageDescription
+Only these three files may `import HarmoniaCore`. Everything else in the app
+depends on app-layer protocols:
 
-let package = Package(
-    name: "HarmoniaPlayer",
-    platforms: [.macOS(.v13), .iOS(.v16)],
-    dependencies: [
-        .package(
-            url: "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git",
-            from: "0.1.0"
-        )
-    ],
-    targets: [
-        .target(
-            name: "HarmoniaPlayer",
-            dependencies: [
-                .product(name: "HarmoniaCore", package: "HarmoniaCore-Swift")
-            ]
-        )
-    ]
-)
-```
+| File | Purpose |
+|------|---------|
+| `[HP] HarmoniaCoreProvider.swift` | Constructs real HarmoniaCore services and platform adapters |
+| `[HP] HarmoniaPlaybackServiceAdapter.swift` | Wraps `[HC] DefaultPlaybackService`; maps `CoreError` → `PlaybackError`; sync → async |
+| `[HP] HarmoniaTagReaderAdapter.swift` | Wraps `[HC] TagReaderPort`; maps `TagBundle` → `Track` |
 
-### Architecture Pattern: Dependency Injection
+Any other file importing HarmoniaCore is a boundary violation.
 
-HarmoniaPlayer follows a clean Ports & Adapters architecture:
+### 5.2 Dependency flow
 
 ```
-Views → AppState → CoreFactory → HarmoniaCore Services
-                 ↘ IAPManager
+SwiftUI Views
+    ↓ @EnvironmentObject
+AppState (@MainActor, ObservableObject)
+    ↓ constructor-injected via CoreFactory
+PlaybackService, TagReaderService   (app-layer protocols)
+    ↓ implemented by
+HarmoniaPlaybackServiceAdapter, HarmoniaTagReaderAdapter   (Integration Layer)
+    ↓ wraps
+DefaultPlaybackService, TagReaderPort   (HarmoniaCore-Swift)
+    ↓ use
+AVAssetReader, AVAudioEngine, AVMetadata*   (AVFoundation)
 ```
 
-**Key Points:**
-- **Views** depend on AppState only
-- **AppState** receives services via dependency injection
-- **CoreFactory** constructs all HarmoniaCore services
-- **IAPManager** handles IAP state independently
+### 5.3 AppState wiring
 
-### Example: CoreFactory
+AppState does **not** import HarmoniaCore. The `HarmoniaPlayerApp` entry point
+constructs production dependencies and passes them into AppState's init:
 
 ```swift
-import HarmoniaCore
-
-struct CoreFactory {
-    /// Constructs PlaybackService with appropriate configuration
-    func makePlaybackService(isProUser: Bool) -> PlaybackService {
-        let logger = OSLogAdapter()
-        let clock = MonotonicClockAdapter()
-        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio = AVAudioEngineOutputAdapter(logger: logger)
-        
-        return DefaultPlaybackService(
-            decoder: decoder,
-            audio: audio,
-            clock: clock,
-            logger: logger
-        )
-    }
-    
-    /// Constructs TagReaderService for metadata reading
-    func makeTagReaderService() -> TagReaderService {
-        let logger = OSLogAdapter()
-        let tagReaderPort = AVMetadataTagReaderAdapter(logger: logger)
-        return DefaultTagReaderService(tagReaderPort: tagReaderPort)
-    }
+// [HP] HarmoniaPlayerApp.swift
+@main
+struct HarmoniaPlayerApp: App {
+    @StateObject private var appState = AppState(
+        iapManager: StoreKitIAPManager(),
+        provider:   HarmoniaCoreProvider()
+    )
+    // ...
 }
 ```
 
-### Example: AppState Integration
-
-**IMPORTANT:** AppState does NOT construct services directly. Services are injected via CoreFactory.
+Inside AppState:
 
 ```swift
-import HarmoniaCore
-
 @MainActor
 final class AppState: ObservableObject {
-    // MARK: - Published State
-    @Published private(set) var playbackState: PlaybackState = .idle
-    @Published private(set) var currentTrack: Track?
-    @Published private(set) var currentTime: TimeInterval = 0
-    @Published private(set) var duration: TimeInterval = 0
-    
-    @Published private(set) var playlist: Playlist = Playlist(
-        id: UUID(),
-        name: "Session",
-        tracks: []
-    )
-    
-    @Published var viewPreferences: ViewPreferences = ViewPreferences(
-        isWaveformVisible: true,
-        isPlaylistVisible: true,
-        layoutPreset: .standard
-    )
-    
-    @Published private(set) var lastError: PlaybackError?
-    @Published private(set) var isProUser: Bool = false
-    
-    // MARK: - Services (injected via CoreFactory)
-    private let playbackService: PlaybackService
-    private let tagReaderService: TagReaderService
+    let playbackService: PlaybackService        // app-layer protocol
+    let tagReaderService: TagReaderService      // app-layer protocol
+    let fileDropService: FileDropService
+
     private let iapManager: IAPManager
-    
-    // MARK: - Initialization (Dependency Injection)
-    init(factory: CoreFactory, iap: IAPManager) {
-        self.iapManager = iap
-        self.isProUser = iap.isProUser
-        
-        // CoreFactory constructs services based on Pro status
-        self.playbackService = factory.makePlaybackService(
-            isProUser: iap.isProUser
+    private(set) var featureFlags: CoreFeatureFlags
+
+    @Published private(set) var isProUnlocked: Bool
+    @Published var playlists: [Playlist]
+    @Published var currentTrack: Track?
+    @Published var playbackState: PlaybackState = .idle
+    @Published var lastError: PlaybackError?
+
+    init(
+        iapManager: IAPManager,
+        provider: CoreServiceProviding,
+        userDefaults: UserDefaults = .standard,
+        undoManager: UndoManager? = nil
+    ) {
+        self.iapManager   = iapManager
+        self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
+
+        let coreFactory = CoreFactory(
+            featureFlags: featureFlags,
+            provider:     provider
         )
-        self.tagReaderService = factory.makeTagReaderService()
-    }
-    
-    // MARK: - Playback Control (synchronous, throws on error)
-    func play() throws {
-        try playbackService.play()
-        playbackState = .playing
-        lastError = nil
-    }
-    
-    func pause() {
-        playbackService.pause()
-        playbackState = .paused
-    }
-    
-    func stop() {
-        playbackService.stop()
-        playbackState = .stopped
-        currentTrack = nil
-    }
-    
-    func seek(to time: TimeInterval) throws {
-        try playbackService.seek(to: time)
-        currentTime = time
-    }
-    
-    // MARK: - File Loading with Metadata
-    func loadFiles(urls: [URL]) {
-        for url in urls {
-            do {
-                let track = try tagReaderService.readMetadata(for: url)
-                playlist.tracks.append(track)
-            } catch {
-                handleError(error)
-            }
-        }
-    }
-    
-    // MARK: - Error Handling
-    private func handleError(_ error: Error) {
-        if let coreError = error as? CoreError {
-            switch coreError {
-            case .notFound(let msg):
-                lastError = .fileNotFound(URL(string: msg) ?? URL(fileURLWithPath: "/"))
-            case .unsupported(let msg):
-                lastError = .unsupportedFormat(msg)
-            default:
-                lastError = .coreError(coreError.description)
-            }
-        } else {
-            lastError = .coreError(error.localizedDescription)
-        }
+        self.playbackService  = coreFactory.makePlaybackService()
+        self.tagReaderService = coreFactory.makeTagReaderService()
+        self.fileDropService  = FileDropService()
+        self.isProUnlocked    = iapManager.isProUnlocked
+        // ... rest of init
     }
 }
 ```
 
-**Key Architectural Points:**
-1. **Synchronous Core:** All HarmoniaCore methods are synchronous (no `async`)
-2. **Dependency Injection:** Services come from CoreFactory, not constructed in AppState
-3. **Error Handling:** Errors are thrown and mapped to UI-friendly types
-4. **Service Abstraction:** TagReaderService wraps HarmoniaCore's TagReaderPort for application use
-
-**See:**
-- [API Reference](api_reference.md) for interface definitions
-- [Implementation Guide (Swift)](implementation_guide_swift.md) for complete implementation examples
-- [Module Boundaries](module_boundary.md) for dependency rules
-- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) for service contracts
-
-### Updating HarmoniaCore Dependency
-
-When HarmoniaCore-Swift releases a new version:
-
-```bash
-# In Xcode
-File → Packages → Update to Latest Package Versions
-
-# Or via command line
-swift package update
-```
+For the full adapter and provider implementations, see
+[Implementation Guide (Swift)](implementation_guide_swift.md).
 
 ---
 
-## 🧪 Testing with Local HarmoniaCore
+## 6. Cross-Repo Workflow
 
-If you're developing both HarmoniaCore and HarmoniaPlayer simultaneously:
+HarmoniaPlayer and HarmoniaCore are separate repos with their own commit
+histories. Changes that span both repos must be coordinated.
 
-### Option 1: Local Package Override (Recommended)
+### 6.1 Development mode: local path reference
 
-**In Xcode:**
-1. File → Packages → Resolve Package Versions
-2. Right-click `HarmoniaCore-Swift` in project navigator
-3. Select "Use Local Package..."
-4. Choose local folder: `../HarmoniaCore-Swift`
+For day-to-day development, the Xcode project references
+`../HarmoniaCore/apple-swift` as a local SPM. This means:
 
-### Option 2: Package.swift Override
+- Editing a file in `HarmoniaCore/apple-swift/Sources/` and rebuilding
+  HarmoniaPlayer picks up the change immediately — no re-resolve needed
+- You can run HarmoniaCore's own `swift test` against `apple-swift/` while
+  HarmoniaPlayer's tests run against the same working copy
 
-```swift
-// For local development only
-dependencies: [
-    .package(path: "../HarmoniaCore-Swift")
-]
+### 6.2 Deploy mode: GitHub tag
+
+For release builds, the SPM dependency is pinned to a tagged version of the
+**HarmoniaCore-Swift** repo (not HarmoniaCore). The workflow is:
+
+1. Commit + push changes in `HarmoniaCore`
+2. Cut a tag on `HarmoniaCore` (e.g. `v0.3.0`)
+3. `git subtree split` the `apple-swift/` directory into HarmoniaCore-Swift
+4. Push the subtree-split branch + tag to HarmoniaCore-Swift
+5. In HarmoniaPlayer, update the SPM pin to the new tag
+6. Commit the updated `Package.resolved` in HarmoniaPlayer
+
+This two-step tag flow (HarmoniaCore → HarmoniaCore-Swift) exists because
+SPM cannot consume a subdirectory of a repository — HarmoniaCore-Swift is
+the valid Package.swift root needed for remote resolution.
+
+### 6.3 When to make a cross-repo change
+
+A typical cross-repo fix flow:
+
+1. Reproduce the issue in HarmoniaPlayer (usually surfaced by a failing test)
+2. Trace through the Integration Layer adapter to locate the root cause —
+   is it in `[HP]` adapter code or in `[HC]` service/adapter code?
+3. If root cause is in HarmoniaCore: fix + test in HarmoniaCore first
+4. Back in HarmoniaPlayer: add a test that verifies the adapter behaviour
+   with the fixed core
+5. Commit both repos separately (HarmoniaCore first, then HarmoniaPlayer)
+6. If the change is release-blocking, follow the deploy workflow in 6.2
+
+### 6.4 Commit formats
+
+Both repos use conventional commits, but with repo-specific scopes:
+
+**HarmoniaPlayer** (`type(scope): description`):
 ```
-
-⚠️ **Don't commit this!** Revert before pushing:
-```swift
-// Revert to remote before committing
-dependencies: [
-    .package(url: "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git", from: "0.1.0")
-]
+feat(slice 9-B): add tag editor basic fields
+fix(slice 7): remove duplicate format gate in load(urls:)
 ```
+- Scope is always the active slice
+- Bullet points use `-` only; no prose paragraphs
+- Spec commit precedes code commit (separate commits)
+
+**HarmoniaCore** (standard conventional commits):
+```
+feat(ports): add TagWriterPort
+fix(adapters): handle nil duration from AVURLAsset
+refactor(services): rename PlaybackState.buffering to .loading
+```
+- Scope is the module (ports, adapters, services, models)
 
 ---
 
-## 🔒 IAP Integration (macOS Pro)
+## 7. Testing
 
-### Overview
+### 7.1 Test doubles
 
-HarmoniaPlayer follows a clean separation for IAP:
+All test infrastructure lives in
+`HarmoniaPlayerTests/FakeInfrastructure/`:
 
-```
-UI Layer (Views)
-    ↓ observes isProUser
-Application Layer (AppState)
-    ↓ uses
-Integration Layer (IAPManager)
-    ↓ manages
-StoreKit 2
-```
+| Double | Replaces | Key features |
+|--------|----------|--------------|
+| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService` and `TagReaderService` stubs; records `makePlaybackService` / `makeTagReaderService` call counts |
+| `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
+| `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
+| `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
 
-### IAPManager Interface
+### 7.2 Test class conventions (Swift 6)
 
-```swift
-protocol IAPManager: AnyObject {
-    var isProUser: Bool { get }
-    
-    func refreshEntitlements() async
-    func purchasePro() async throws
-}
-```
+AppState is `@MainActor`, so test classes that use it must also be
+`@MainActor` — XCTest runs `@MainActor`-isolated classes on the main actor
+automatically, so individual test methods don't need `await MainActor.run {}`.
 
-### Implementation Example
+Per-test `UserDefaults` must use a unique `suiteName` to avoid cross-test
+contamination, and must be cleaned up in `tearDown`:
 
 ```swift
-import StoreKit
-
 @MainActor
-final class StoreKitIAPManager: IAPManager, ObservableObject {
-    @Published private(set) var isProUser: Bool = false
-    
-    private let productID = "harmoniaplayer.pro"
-    
-    init() {
-        Task {
-            await refreshEntitlements()
-        }
-    }
-    
-    func refreshEntitlements() async {
-        // Check current entitlements
-        for await result in Transaction.currentEntitlements {
-            if case .verified(let transaction) = result {
-                if transaction.productID == productID {
-                    isProUser = true
-                    return
-                }
-            }
-        }
-        isProUser = false
-    }
-    
-    func purchasePro() async throws {
-        guard let product = try await Product.products(for: [productID]).first else {
-            throw IAPError.productNotFound
-        }
-        
-        let result = try await product.purchase()
-        
-        switch result {
-        case .success(let verification):
-            if case .verified(_) = verification {
-                await refreshEntitlements()
-            }
-        case .userCancelled:
-            throw IAPError.userCancelled
-        case .pending:
-            throw IAPError.purchasePending
-        @unknown default:
-            throw IAPError.unknown
-        }
-    }
-}
-```
+final class AppStatePlaybackControlTests: XCTestCase {
 
-### Format Gating Pattern
+    private var sut: AppState!
+    private var fakePlaybackService: FakePlaybackService!
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
 
-Pro features are gated at the AppState level, not in HarmoniaCore:
+    override func setUp() {
+        super.setUp()
+        suiteName = "hp-test-\(UUID().uuidString)"
+        testDefaults = UserDefaults(suiteName: suiteName)!
+        fakePlaybackService = FakePlaybackService()
+        let provider = FakeCoreProvider(playbackService: fakePlaybackService)
+        let iap = MockIAPManager(isProUnlocked: false)
+        sut = AppState(
+            iapManager:   iap,
+            provider:     provider,
+            userDefaults: testDefaults
+        )
+    }
 
-```swift
-func load(urls: [URL]) {
-    for url in urls {
-        // Check format requirements
-        let ext = url.pathExtension.lowercased()
-        let requiresPro = ["flac", "dsd", "dsf", "dff"].contains(ext)
-        
-        if requiresPro && !isProUser {
-            // Show paywall or skip
-            lastError = .unsupportedFormat("FLAC/DSD playback requires Pro")
-            continue
-        }
-        
-        // Proceed with loading
-        do {
-            let track = try enrichTrack(url: url)
-            playlist.tracks.append(track)
-        } catch {
-            handleError(error)
+    override func tearDown() {
+        sut = nil
+        fakePlaybackService = nil
+        testDefaults.removePersistentDomain(forName: suiteName)
+        testDefaults = nil
+        suiteName = nil
+        super.tearDown()
+    }
+
+    func testPlayCallsServicePlay() async {
+        // Seed a track (this calls play(trackID:) internally and bumps counts)
+        await seedTracks()
+
+        // Reset counts before the operation under test
+        fakePlaybackService.resetCounts()
+
+        await sut.play()
+
+        XCTAssertEqual(fakePlaybackService.playCallCount, 1)
+        XCTAssertEqual(sut.playbackState, .playing)
+    }
+
+    private func seedTracks() async {
+        let url = URL(fileURLWithPath: "/tmp/test.mp3")
+        await sut.load(urls: [url])
+        if let first = sut.playlist.tracks.first {
+            await sut.play(trackID: first.id)
         }
     }
 }
 ```
 
-### UI Integration
+Rules:
+- One operation per test — setup helpers call `resetCounts()` before the
+  assertion target so the count reflects the operation under test only
+- Use `await` for every async AppState call — `play`, `pause`, `stop`,
+  `seek`, `load`, `play(trackID:)`, `playNextTrack`, `playPreviousTrack`
+- `final class` and unique `suiteName` per test
+
+### 7.3 Running tests
+
+```
+Xcode: Product → Test (⌘U)
+```
+
+The Xcode project is not an SPM package, so `swift test` does not apply.
+
+---
+
+## 8. Coding Conventions
+
+### 8.1 Swift 6 requirements
+
+- `@MainActor` on `AppState`, all test classes that use AppState, and any
+  UI-facing types
+- `nonisolated deinit {}` on `@MainActor` classes deallocated in test
+  contexts (Xcode 26 beta workaround for `TaskLocal::StopLookupScope` crash)
+- `Sendable` on all models crossing actor boundaries (`Track`, `Playlist`,
+  `PlaybackState`, `PlaybackError`, `ViewPreferences`, `CoreFeatureFlags`)
+
+### 8.2 Access control
+
+- Services on AppState are `let` (internal), not `private let` — Views
+  access AppState, not the services directly, but the boundary is
+  architectural, not enforced by Swift access modifiers
+- `@Published` properties are `var` by default; use `private(set)` only
+  when the View should never write (e.g. `isProUnlocked`)
+
+### 8.3 SwiftUI patterns
+
+- Views use `@EnvironmentObject private var appState: AppState`
+- Button handlers wrap async AppState calls: `Task { await appState.play() }`
+- Never inject services directly into a View
 
 ```swift
+// ✓ Correct
 struct PlayerView: View {
-    @EnvironmentObject var appState: AppState
-    
-    var body: some View {
-        VStack {
-            if !appState.isProUser {
-                proFeatureBanner
-            }
-            playlistView
-            transportControls
-        }
-    }
-    
-    private var proFeatureBanner: some View {
-        HStack {
-            Text("Upgrade to Pro for FLAC/DSD support")
-            Button("Upgrade") {
-                Task {
-                    try? await appState.iapManager.purchasePro()
-                }
-            }
-        }
-    }
+    @EnvironmentObject private var appState: AppState
+}
+
+// ✗ Incorrect — boundary violation
+struct PlayerView: View {
+    let playbackService: PlaybackService
 }
 ```
 
-**Important IAP Rules:**
-- ❌ Never construct services based on IAP inside HarmoniaCore
-- ✅ CoreFactory receives `isProUser` flag and chooses configuration
-- ✅ AppState enforces format restrictions before loading
-- ✅ UI shows upgrade prompts for Pro features
+### 8.4 Error handling
 
----
+The boundary does the mapping. AppState only sees `PlaybackError`:
 
-## 🎯 Development Workflow
+```swift
+// Inside [HP] HarmoniaPlaybackServiceAdapter (Integration Layer)
+static func mapCoreError(_ error: CoreError) -> PlaybackError {
+    switch error {
+    case .notFound:        return .failedToOpenFile
+    case .ioError:         return .failedToOpenFile
+    case .unsupported:     return .unsupportedFormat
+    case .decodeError:     return .failedToDecode
+    case .invalidState:    return .invalidState
+    case .invalidArgument: return .invalidArgument
+    }
+}
 
-### Adding a New Feature
+// Inside AppState — only sees PlaybackError, never CoreError
+func play() async {
+    do {
+        try await playbackService.play()
+        playbackState = .playing
+    } catch {
+        let mapped = mapToPlaybackError(error)
+        lastError = mapped
+        playbackState = .error(mapped)
+    }
+}
 
-1. **Define model in `Shared/Models/`**
-   ```swift
-   // Shared/Models/PlaybackSpeed.swift
-   enum PlaybackSpeed: Double, CaseIterable {
-       case slow = 0.5
-       case normal = 1.0
-       case fast = 1.5
-   }
-   ```
-
-2. **Add to AppState**
-   ```swift
-   @Published var playbackSpeed: PlaybackSpeed = .normal
-   
-   func setPlaybackSpeed(_ speed: PlaybackSpeed) {
-       self.playbackSpeed = speed
-       // Update playback service if needed
-   }
-   ```
-
-3. **Create UI in `Shared/Views/`**
-   ```swift
-   // Shared/Views/SpeedControlView.swift
-   struct SpeedControlView: View {
-       @EnvironmentObject var appState: AppState
-       
-       var body: some View {
-           Picker("Speed", selection: $appState.playbackSpeed) {
-               ForEach(PlaybackSpeed.allCases, id: \.self) { speed in
-                   Text("\(speed.rawValue)x").tag(speed)
-               }
-           }
-       }
-   }
-   ```
-
-4. **Write tests**
-   ```swift
-   // HarmoniaPlayerTests/SharedTests/AppStateTests.swift
-   func testPlaybackSpeedChange() {
-       let factory = CoreFactory()
-       let iap = MockIAPManager()
-       let appState = AppState(factory: factory, iap: iap)
-       
-       appState.setPlaybackSpeed(.fast)
-       
-       XCTAssertEqual(appState.playbackSpeed, .fast)
-   }
-   ```
-
-### Running Tests
-
-```bash
-# Run all tests
-swift test
-
-# Or in Xcode
-Product > Test (⌘U)
+func mapToPlaybackError(_ error: Error) -> PlaybackError {
+    if let playbackError = error as? PlaybackError { return playbackError }
+    return .invalidState   // fallback for unexpected errors
+}
 ```
 
+No `String` payload crosses the module boundary. `PlaybackError` cases
+are all pure typed codes.
+
+### 8.5 Language rules
+
+- Explanations, chat discussion: Traditional Chinese
+- All Swift code, comments, commit messages, documentation: **English only**
+- No competitor brand names anywhere in docs
+
 ---
 
-## 📚 Documentation References
+## 9. Workflow
 
-### HarmoniaPlayer Docs (This Repo)
-- [Architecture](architecture.md) - System architecture
-- [API Reference](api_reference.md) - Interface definitions
-- [Implementation Guide (Swift)](implementation_guide_swift.md) - Swift-specific patterns
-- [Module Boundaries](module_boundary.md) - Dependency rules
-- [User Guide](user_guide.md) - How to use the app
-- [Documentation Strategy](documentation_strategy.md) - Documentation policy
+The project follows SDD → TDD red → confirm → TDD green → commit. The
+detailed workflow and commit atomicity rules are in [Workflow](workflow.md).
 
-### HarmoniaCore Specs (Main Repository)
+### 9.1 Adding a feature (summary)
 
-**Platform-Agnostic Specifications:**
-- [Architecture Overview](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md) - Ports & Adapters pattern
-- [Adapters Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/02_adapters.md) - Platform adapters
-- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md) - Port interfaces
-- [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) - Service contracts
-- [Models Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md) - Data models
+1. **Write the spec first** — `docs/slice/slice_NN_micro.md` with Goal,
+   Scope, Files, API, TDD plan, Commit plan
+2. **Commit the spec** separately from any code
+3. **Write the failing tests** for the first commit in the plan
+4. **Run tests — confirm red**
+5. **Implement** — minimal code to make the tests pass
+6. **Run tests — confirm green**
+7. **Commit** with the format `feat(slice X-Y): description`
+8. Repeat for each commit in the plan
 
-**Implementation Guides:**
-- [Apple Adapters Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/02_01_apple_adapters_impl.md)
-- [Ports Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/03_ports_impl.md)
-- [Services Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/04_services_impl.md)
+Spec and code commits are always separate. One logical change per commit.
 
-### HarmoniaCore-Swift (Package)
+### 9.2 Debugging
+
+- Logs: `OSLogAdapter` in HarmoniaCore emits to OSLog subsystem
+  `HarmoniaPlayer` / category `Playback`. View in Console.app or Xcode Console.
+- Useful breakpoints: `AppState.play()`, `AppState.play(trackID:)`,
+  `AppState.load(urls:)`, `HarmoniaPlaybackServiceAdapter.mapCoreError`
+- StoreKit: use `HarmoniaPlayer.storekit` configuration file for local IAP
+  testing (Scheme → Edit Scheme → Run → Options → StoreKit Configuration)
+
+### 9.3 Common issues
+
+| Symptom | Likely cause |
+|---------|--------------|
+| "Cannot find type 'PlaybackService'" | Missing the import or confusing app-layer with `[HC]` — check file header |
+| SPM resolution fails | HarmoniaCore not cloned side by side; reset package caches |
+| Test crashes on deinit | Missing `nonisolated deinit {}` on a `@MainActor` class |
+| `@MainActor` error in test | Add `@MainActor` to the whole test class, not individual methods |
+| Duplicate state after purchase | Forgot to rebuild `featureFlags = CoreFeatureFlags(iapManager:)` |
+
+---
+
+## 10. Documentation References
+
+### HarmoniaPlayer (this repo)
+
+- [README](../README.md) — project overview
+- [Architecture](architecture.md) — system design and C4 diagrams
+- [API Reference](api_reference.md) — complete interface surface
+- [Module Boundaries](module_boundary.md) — dependency rules
+- [Implementation Guide (Swift)](implementation_guide_swift.md) — patterns and complete code examples
+- [Workflow](workflow.md) — SDD → TDD → commit cycle
+- [Documentation Strategy](documentation_strategy.md) — doc naming and update rules
+- [User Guide](user_guide.md) — end-user feature documentation
+
+### HarmoniaCore
+
+- [Architecture Overview](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
+- [Adapters Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/02_adapters.md)
+- [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
+- [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+- [Models Specification (CoreError, TagBundle)](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
+
+### HarmoniaCore-Swift
+
 - [Swift Package README](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift/blob/main/README.md)
 
 ---
 
-## 🧱 Code Style Guidelines
-
-### SwiftUI Views
-
-- Use `@EnvironmentObject` for AppState
-- Extract reusable components
-- Keep view bodies small and readable
-
-**Good:**
-```swift
-struct PlayerView: View {
-    @EnvironmentObject var appState: AppState
-    
-    var body: some View {
-        VStack {
-            albumArtView
-            progressBar
-            transportControls
-        }
-    }
-    
-    private var albumArtView: some View {
-        // Implementation
-    }
-}
-```
-
-**Bad:**
-```swift
-struct PlayerView: View {
-    let playbackService: PlaybackService  // ❌ Don't inject services directly
-}
-```
-
-### State Management
-
-- Use `@Published` for UI-observable state
-- Keep business logic in AppState
-- Use `@MainActor` for UI updates
-
-**Good:**
-```swift
-@MainActor
-final class AppState: ObservableObject {
-    @Published private(set) var playbackState: PlaybackState
-    
-    func play() throws {
-        try playbackService.play()
-        playbackState = .playing
-    }
-}
-```
-
-### Error Handling
-
-- Always handle errors from HarmoniaCore
-- Map to UI-friendly error types
-- Log for debugging
-
-```swift
-func play() {
-    do {
-        try playbackService.play()
-        playbackState = .playing
-        lastError = nil
-    } catch {
-        handleError(error)
-    }
-}
-
-private func handleError(_ error: Error) {
-    if let coreError = error as? CoreError {
-        switch coreError {
-        case .notFound(let msg):
-            lastError = .fileNotFound(URL(string: msg) ?? URL(fileURLWithPath: "/"))
-        case .unsupported(let msg):
-            lastError = .unsupportedFormat(msg)
-        default:
-            lastError = .coreError(coreError.description)
-        }
-    } else {
-        lastError = .coreError(error.localizedDescription)
-    }
-}
-```
-
----
-
-## 🐛 Debugging
-
-### Logging
-
-HarmoniaCore uses `OSLog`:
-
-```swift
-import OSLog
-
-let logger = Logger(subsystem: "HarmoniaPlayer", category: "Debug")
-logger.info("Playback started")
-logger.error("Failed to load: \(error)")
-```
-
-View logs in Console.app or Xcode Console.
-
-### Breakpoints
-
-Set breakpoints in:
-- `AppState.play()` - Playback control
-- `AppState.load(urls:)` - File loading
-- `PlayerView.body` - UI updates
-
-### Common Issues
-
-**Issue:** Service methods not found
-- **Solution:** Verify HarmoniaCore-Swift package is up to date
-
-**Issue:** "Cannot find type 'PlaybackService'"
-- **Solution:** Check `import HarmoniaCore` is present
-
-**Issue:** IAP not working in debug
-- **Solution:** Use StoreKit Configuration file for testing
-
----
-
-## ⚠️ App Store Review Considerations
+## 11. App Store Review Considerations
 
 | Phase | Recommendation |
 |-------|----------------|
-| **Initial submission** | Include only core functionality (Free). Keep Pro code present but not visually exposed until IAP is approved. |
-| **After IAP approval** | Enable visible Paywall and Pro feature entry points. |
-| **External payments** | ❌ Never include PayPal or Buy Me a Coffee links inside the app. Such links belong only in GitHub/README. |
+| Initial submission | Ship Free functionality only. Paywall UI hidden in v0.1; Pro code paths reserved for v0.2. |
+| After IAP approval | Enable visible Paywall and Pro feature entry points. |
+| External payments | Never include external payment links (PayPal, Buy Me a Coffee) inside the app. Such links belong only in GitHub/README. |
 
 ---
 
-## ✅ Summary
-
-- **Dependency Injection**: Services injected via CoreFactory and IAPManager
-- **Synchronous Core**: HarmoniaCore uses synchronous APIs
-- **Module Boundaries**: Clear separation between UI, App, and Integration layers
-- **IAP Gating**: Format restrictions enforced in AppState, not in HarmoniaCore
-- **Cross-platform**: 90% shared code between macOS/iOS
-- **Testing**: Unit tests with mocked services
-
-**Key Architectural Principles:**
-1. Views depend on AppState only
-2. AppState receives services via dependency injection
-3. CoreFactory constructs all HarmoniaCore services
-4. IAPManager manages purchase state independently
-5. Error handling through exceptions, not state
-
----
-
-## 📧 Contact
+## 12. Contact
 
 For questions about HarmoniaPlayer development or the Harmonia Suite:
 
 - **Email**: [harmonia.audio.project@gmail.com](mailto:harmonia.audio.project@gmail.com)
 - **GitHub**: [@OneOfWolvesBilly](https://github.com/OneOfWolvesBilly)
-
-Please use the email for technical discussions, bug reports, or contribution inquiries.
