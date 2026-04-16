@@ -1,8 +1,8 @@
 # HarmoniaPlayer
 
 [![Swift](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org)
-[![Platform](https://img.shields.io/badge/Platform-macOS%2015+-lightgrey.svg)](https://developer.apple.com)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE.md)
+[![Platform](https://img.shields.io/badge/Platform-macOS%2015.6+-lightgrey.svg)](https://developer.apple.com)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Development](https://img.shields.io/badge/Status-In%20Development-yellow.svg)]()
 
 Reference music player application built with [HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore).
@@ -24,42 +24,50 @@ It serves as:
 ```
 ┌─────────────────────────────────┐
 │  HarmoniaPlayer (this repo)     │  ← UI Application
-│  SwiftUI + AppKit/UIKit         │
+│  SwiftUI (macOS)                │
 └──────────────┬──────────────────┘
-               │ uses via SPM
+               │ SPM dependency
+               │ (dev: local ../HarmoniaCore/apple-swift)
+               │ (deploy: GitHub tag from HarmoniaCore-Swift)
 ┌──────────────▼──────────────────┐
-│  HarmoniaCore-Swift (package)   │  ← Swift Package
-│  Subtree from HarmoniaCore      │
+│  HarmoniaCore-Swift             │  ← Swift Package
+│  Audio engine + platform        │
+│  adapters (AVFoundation)        │
+│  (subtree split from            │
+│   HarmoniaCore/apple-swift)     │
 └──────────────┬──────────────────┘
-               │ extracted from
+               │ implements spec from
 ┌──────────────▼──────────────────┐
-│  HarmoniaCore (main spec)       │  ← Main Repository
+│  HarmoniaCore                   │  ← Specification + Source Repository
+│  Architecture, Ports, Models    │
 │  apple-swift/ + linux-cpp/      │
+│  (linux-cpp/ deferred)          │
 └─────────────────────────────────┘
 ```
 
-**HarmoniaPlayer** provides the user interface.  
-**HarmoniaCore-Swift** provides the audio engine (SPM package).  
-**HarmoniaCore** contains specifications and implementations.
+**HarmoniaPlayer** provides the user interface and application logic (playlists, IAP, persistence).  
+**HarmoniaCore-Swift** is a standalone Swift Package containing the audio engine and platform adapters. It is created by tagging a release in HarmoniaCore and using `git subtree split` to extract the `apple-swift/` directory into its own repository. HarmoniaPlayer references this package for deployment, pinning to a specific tagged version.  
+**HarmoniaCore** is the source-of-truth repository where both Swift and C++ implementations live side by side. Because SPM cannot consume a subdirectory of a repository directly, the subtree split into HarmoniaCore-Swift is necessary to produce a valid Swift Package. During development, HarmoniaPlayer uses a local path reference (`../HarmoniaCore/apple-swift`) for rapid iteration.
 
 ## Features
 
-### Current Development Status (2026-03-25)
+### v0.1 Free (current target)
 
-**✅ Completed:**
-- Slices 1–6: core architecture, audio playback, SwiftUI UI, menu bar, keyboard shortcuts
+- Playlist-based audio playback (MP3, AAC, ALAC, WAV, AIFF)
+- Multiple playlists with drag reorder, M3U8 import/export
+- File and directory drag-and-drop with recursive scanning
+- Mini Player, ReplayGain, shuffle, repeat modes
+- File Info panel, keyboard shortcuts, macOS menu bar integration
+- Persistence (playlists, settings survive relaunch)
+- Localisation: English, 繁體中文, 日本語
 
-**🚧 In Active Development:**
-- Slice 7: persistence, multiple playlists, M3U8 import/export, volume control,
-  column customization, File Info Panel, UI localisation (24 languages)
+### v0.2 Pro (planned)
 
-**Planned:**
-- Slice 8 (v0.1): UndoManager, Mini Player, ReplayGain
-- Slice 9 (v0.2 Pro): StoreKit 2 IAP, Tag Editor, FLAC/DSD unlock
-
-**Supported formats:**
-- Free: MP3, AAC, ALAC, WAV, AIFF
-- Pro (v0.2): all Free formats + FLAC, DSD
+- FLAC / DSD playback
+- Tag Editor (ID3 / MP4 metadata editing)
+- LRC synchronised lyrics
+- Gapless playback
+- StoreKit 2 In-App Purchase
 
 ## Installation
 
@@ -77,16 +85,16 @@ cd HarmoniaPlayer
 # Open in Xcode
 open App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 
-# Select scheme: HarmoniaPlayer-macOS-Free
+# Select scheme: HarmoniaPlayer
 # Product > Run (⌘R)
 ```
 
 **Requirements:**
-- macOS 15.0+ (Sequoia)
+- macOS 15.6+
 - Xcode 26 beta
 - Swift 6
 
-HarmoniaCore-Swift dependency is automatically fetched via SPM.
+HarmoniaCore-Swift dependency: development uses local path (`../HarmoniaCore/apple-swift`); deployment uses a tagged GitHub release from [HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift).
 
 ## Quick Start
 
@@ -102,11 +110,13 @@ See [User Guide](docs/user_guide.md) for full feature documentation.
 
 ### Architecture & Specifications
 - **[Architecture](docs/architecture.md)** - System design and C4 diagrams
-- **[API Specification](docs/api_spec_apple_swift.md)** - Application-facing API
+- **[API Reference](docs/api_reference.md)** - Complete public interface reference
 - **[Module Boundaries](docs/module_boundary.md)** - Dependency rules and constraints
 
 ### Development
 - **[Development Guide](docs/development_guide.md)** - Setup and contribution guide
+- **[Implementation Guide (Swift)](docs/implementation_guide_swift.md)** - Swift implementation patterns
+- **[Workflow](docs/workflow.md)** - SDD → TDD → commit workflow
 - **[Documentation Strategy](docs/documentation_strategy.md)** - Documentation policy
 
 ### User Documentation
@@ -117,28 +127,16 @@ See [User Guide](docs/user_guide.md) for full feature documentation.
 ### Repository Structure
 
 ```
-HARMONIAPLAYER/
-├── App/
-│   └── HarmoniaPlayer/
-│       ├── HarmoniaPlayer/        # Source files
-│       │   ├── Shared/            # Cross-platform code (90%)
-│       │   │   ├── Models/        # Data models
-│       │   │   ├── Views/         # SwiftUI views
-│       │   │   └── Services/      # HarmoniaCore integration
-│       │   │       └── HarmoniaCoreProvider.swift
-│       │   ├── macOS/             # macOS-specific code
-│       │   │   └── Free/          # macOS Free version
-│       │   ├── iOS/               # iOS-specific code (future)
-│       │   ├── Assets.xcassets
-│       │   ├── ContentView.swift
-│       │   └── HarmoniaPlayerApp.swift
-│       ├── Tests/                 # Unit and UI tests
-│       └── HarmoniaPlayer.xcodeproj/
-├── docs/                          # Documentation
-├── README.md
-├── CHANGELOG.md
-└── LICENSE
+App/HarmoniaPlayer/HarmoniaPlayer/
+├── Shared/Models/        # AppState (split into 5 files), Track, Playlist, PlaybackError, ...
+├── Shared/Services/      # Integration Layer (3 files), FileDropService, M3U8Service, IAP, ...
+├── Shared/Views/         # ContentView, PlayerView, PlaylistView, FileInfoView, ...
+├── macOS/Free/           # HarmoniaPlayerApp, HarmoniaPlayerCommands, MiniPlayer, Settings
+├── en/zh-Hant/ja.lproj/  # Localisation (3 languages)
+└── Assets.xcassets
 ```
+
+For the complete file listing, see [Development Guide](docs/development_guide.md#project-structure).
 
 ### Contributing
 
@@ -150,29 +148,25 @@ See [Development Guide](docs/development_guide.md) for:
 
 ### Milestones
 
-- **v0.1** — Free tier feature complete (Slices 1–8)
-- **v0.2** — Pro tier: Tag Editor + FLAC/DSD via App Store IAP (Slice 9)
+- **v0.1** — Free tier feature complete → App Store
+- **v0.2** — Pro tier via In-App Purchase
 
-For the full slice breakdown and scope evolution, see
-[Development Plan](docs/slice/HarmoniaPlayer_development_plan.md).
+For detailed planning, see [Development Plan](docs/slice/HarmoniaPlayer_development_plan.md).
 
 ## Related Projects
 
-- **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** - Main specification repository
-  - Contains Swift and C++20 implementations
-  - Platform-agnostic specifications
-  - Cross-platform behavior documentation
+- **[HarmoniaCore](https://github.com/OneOfWolvesBilly/HarmoniaCore)** - Specification and source repository (Swift + C++ side by side)
+  - `apple-swift/` — Swift implementation of the audio engine
+  - `linux-cpp/` — C++ implementation (deferred)
+  - Contains Ports & Adapters architecture, platform-agnostic specifications
   - **Key Specs:**
     - [Architecture (Ports & Adapters)](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
     - [Ports Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
     - [Services Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
     - [Models & Error Handling](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
-
-
-- **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** - Swift package
-  - Extracted from `HarmoniaCore/apple-swift/`
-  - Used as dependency in this project
-  - Supports macOS 13+ and iOS 16+
+- **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** - Standalone Swift Package (subtree split from HarmoniaCore `apple-swift/`)
+  - Tagged releases define the version HarmoniaPlayer pins for deployment
+  - Audio engine, platform adapters (AVFoundation), and port protocols
 
 ## License
 
