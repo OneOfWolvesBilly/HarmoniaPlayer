@@ -1,6 +1,6 @@
 # HarmoniaPlayer User Guide
 
-Complete guide for using HarmoniaPlayer music player.
+Complete guide for using HarmoniaPlayer on macOS.
 
 ---
 
@@ -10,26 +10,28 @@ Complete guide for using HarmoniaPlayer music player.
 2. [Getting Started](#getting-started)
 3. [Adding Music](#adding-music)
 4. [Playback Control](#playback-control)
-5. [Keyboard Shortcuts](#keyboard-shortcuts)
-6. [Playlist Management](#playlist-management)
-7. [Troubleshooting](#troubleshooting)
-8. [FAQ](#faq)
+5. [Playlists](#playlists)
+6. [File Info](#file-info)
+7. [Mini Player](#mini-player)
+8. [Settings](#settings)
+9. [Keyboard Shortcuts](#keyboard-shortcuts)
+10. [Troubleshooting](#troubleshooting)
+11. [FAQ](#faq)
+12. [Getting Help](#getting-help)
 
 ---
 
 ## Installation
 
-### Download Pre-Built App
+### Requirements
 
-*(Pre-built downloads coming in v0.1 release)*
+- macOS 15.6 or later
+- ~100 MB free disk space
 
-### Build from Source
+### Install
 
-See [README.md](../README.md#build-from-source) for build instructions.
-
-**Requirements:**
-- macOS 13.0 or later
-- 100 MB free disk space
+Pre-built downloads will be available with the v0.1 release. Until then, see
+[README.md](../README.md#build-from-source) for build-from-source instructions.
 
 ---
 
@@ -37,446 +39,393 @@ See [README.md](../README.md#build-from-source) for build instructions.
 
 ### First Launch
 
-1. **Open HarmoniaPlayer**
-   - Double-click the app icon
-   - If you see a security warning:
-     - Open **System Settings** → **Privacy & Security**
-     - Click **"Open Anyway"**
+1. Open HarmoniaPlayer
+2. If you see a security warning:
+   - Open **System Settings → Privacy & Security**
+   - Click **"Open Anyway"** next to HarmoniaPlayer
 
-2. **Main Interface**
+### Main Window
 
 ```
-┌──────────────────────────────────────────────┐
-│  File  Edit  Playback  Window  Help          │
-├──────────────────────────────────────────────┤
-│  [⏮] [▶️] [⏭] [⏹]                          │
-├──────────────┬───────────────────────────────┤
-│              │                               │
-│  Playlist    │   Now Playing                 │
-│              │                               │
-│  (empty)     │   🎵 Album Art Placeholder    │
-│              │                               │
-│  Drag files  │   No Track Loaded             │
-│  here or     │                               │
-│  click +     │   [━━━━━━━━━━━━━━━] 0:00      │
-│              │                               │
-│              │   Status: Stopped             │
-│              │                               │
-└──────────────┴───────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│ File   Edit   Playback   Window   Help                      │
+├─────────────────────────────────────────────────────────────┤
+│  Playlist 1  │  Playlist 2  │  +                            │  ← playlist tabs
+├─────────────────────────────────────────────────────────────┤
+│  [Album Art]   Track Title — Artist                         │
+│                Album Name                                    │
+│                ━━━━━●━━━━━━━━━━━━ 1:23 / 3:45                │
+│                [⏮] [▶] [⏹] [⏭]   🔀  🔁   🔊 ─────●────      │
+├─────────────────────────────────────────────────────────────┤
+│  #  Title          Artist        Album       Duration  ...  │
+│  1  Song A         Artist X      Album Y     3:45           │
+│  2  Song B         Artist Z      Album W     2:58           │
+│     ...                                                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Interface Overview
+### Interface overview
 
-HarmoniaPlayer uses a **customizable 3-column layout**. You can show/hide panels via the **View** menu.
-
-**Toolbar (Top):**
-- ⏮ Previous Track
-- ▶️ Play / ⏸ Pause
-- ⏭ Next Track
-- ⏹ Stop
-- **[View]** - Toggle panel visibility
-- **[Settings]** - Open preferences
-
-**Left Panel - Playlist** (always visible):
-- List of tracks in queue
-- Click `+` to add files
-- Drag and drop to add files
-
-**Center Panel - Waveform Display** (optional):
-- Visual representation of audio waveform
-- Shows amplitude over time
-- Current position indicator (playhead)
-- Click anywhere to seek to that position
-- Zoom controls (+ / - buttons)
-- **Toggle**: View → Show Waveform (⌘W)
-
-**Right Panel - Now Playing** (optional):
-- Album art (placeholder in current version)
-- Track title and artist
-- Progress bar with time (0:42 / 3:45)
-- Playback status
-- Volume control
-- **Toggle**: View → Show Now Playing (⌘I)
-
-### View Presets
-
-You can quickly switch between different layouts to suit your needs:
-
-**1. Minimal View** (⌘1) - Playlist only
-- Perfect for distraction-free listening
-- Shows only essential controls and playlist
-- Smallest window size
-
-**2. Standard View** (⌘2) - Playlist + Now Playing
-- Balanced layout for everyday use
-- Shows track info and album art
-- Good for casual listening
-
-**3. Full View** (⌘3) - All panels (default)
-- Complete audio workstation experience
-- Shows waveform, playlist, and track info
-- Ideal for audio editing or detailed playback control
-
-**How to switch:**
-- Menu: View → Presets → [Select preset]
-- Keyboard: ⌘1 (Minimal), ⌘2 (Standard), ⌘3 (Full)
-
-Your layout preference is automatically saved and restored on next launch.
+- **Playlist tabs (top):** switch between playlists; click `+` to create a new one
+- **Now Playing area:** album artwork, track info, progress bar, transport controls, shuffle/repeat, volume
+- **Playlist table (bottom):** your tracks with customisable columns; drag rows to reorder, click column headers to sort
 
 ---
 
 ## Adding Music
 
-### Method 1: Drag and Drop
+### Drag and drop
 
-1. Open **Finder**
-2. Navigate to your music folder
-3. Select audio files
-4. **Drag** files onto the **Playlist** area
-5. Files appear in the list
+Drag files or entire folders from Finder into the playlist area. Directories
+are scanned recursively — all supported audio files inside are added.
 
-### Method 2: File Menu
+### File menu / shortcut
 
-1. Click the **`+`** button in playlist header
-   - Or use menu: **File → Add to Playlist**
-2. Browse and select audio files
-3. Click **"Open"**
-4. Files appear in the playlist
+- **File → Add Files…** or press **`⌘O`**
+- Select one or more files, click **Open**
 
-### Method 3: Keyboard Shortcut
+### Supported formats (v0.1 Free)
 
-1. Press **`⌘O`** (Command-O)
-2. Select files
-3. Click **"Open"**
+HarmoniaPlayer v0.1 supports these audio formats:
 
-### Supported Formats
+- **MP3** — MPEG-1/2 Layer 3
+- **AAC / M4A** — Advanced Audio Coding
+- **ALAC** — Apple Lossless
+- **WAV** — Waveform Audio
+- **AIFF** — Audio Interchange File Format
 
-**Free Version:**
-- ✅ **MP3** - MPEG-1/2 Layer 3
-- ✅ **AAC** - Advanced Audio Coding (M4A)
-- ✅ **ALAC** - Apple Lossless (M4A)
-- ✅ **WAV** - Waveform Audio File
-- ✅ **AIFF** - Audio Interchange File Format
+Files in other formats (including FLAC, DSF, DFF) are skipped at import time
+and listed in the "Unsupported Format" alert. Support for FLAC and DSD is
+planned for v0.2 (Pro).
 
-**Pro Version (v0.2+):**
-- All Free formats
-- ✅ **FLAC** - Free Lossless Audio Codec
-- ✅ **DSD** - Direct Stream Digital (DSF/DFF)
+### Duplicate handling
+
+By default, dropping a file that is already in the current playlist shows an
+"Already in Playlist" alert listing the skipped files. You can allow
+duplicates in **Settings → Playlist** if you prefer.
 
 ---
 
 ## Playback Control
 
-### Play a Track
+### Playing a track
 
-**Method 1: Double-click**
-- Double-click any track in the playlist
+- **Double-click** any track in the playlist, or
+- Select a track and press **`Space`** / click **Play**
 
-**Method 2: Select and play**
-1. Click to select a track
-2. Press **`Space`** or click **Play** button
+### Transport controls
 
-### Basic Controls
+| Control | Action | Shortcut |
+|---------|--------|----------|
+| ⏮ | Previous track | `⌘←` |
+| ▶ / ⏸ | Play / Pause | `Space` |
+| ⏹ | Stop | `⌘.` |
+| ⏭ | Next track | `⌘→` |
+| — | Seek forward 5 s | `→` |
+| — | Seek backward 5 s | `←` |
 
-| Button | Action | Keyboard |
-|--------|--------|----------|
-| ▶️ Play | Start playback | `Space` |
-| ⏸️ Pause | Pause playback | `Space` |
-| ⏹️ Stop | Stop and reset | `⌘.` |
-| ⏮️ Previous | Go to previous track | `⌘←` |
-| ⏭️ Next | Go to next track | `⌘→` |
-| 🔁 Repeat | Cycle repeat mode (Off → All → One) | `⌘R` |
+When a track ends, behaviour depends on the current repeat mode.
 
-### Progress Bar
+### Repeat & Shuffle
 
-**Seek to Position:**
-1. Click anywhere on the progress bar
-2. Playback jumps to that position
+- **Repeat** (`⌘R`) cycles through three modes:
+  - **Off:** advance to next track; stop after the last track
+  - **Repeat All:** advance; loop from last to first
+  - **Repeat One:** replay the current track indefinitely
+- **Shuffle** (`⌘S`) toggles random-order playback within the active playlist
 
-**Scrub Through Track:**
-1. Click and hold on the playhead
-2. Drag left or right
-3. Release to play from new position
+The current mode is shown on the transport bar.
 
-**Time Display:**
-- Left side: Current position (e.g., `1:23`)
-- Right side: Total duration (e.g., `3:45`)
-- Format: `minutes:seconds`
+### Progress bar
 
-### Playback Behavior
+Click or drag the progress bar to seek. The time on the left is the current
+position; the time on the right is the total duration.
 
-**Auto-Advance:**
-- When a track finishes, behavior depends on repeat mode (see below)
+### Volume
 
-**Repeat Modes:**
-- **Off** (default): When a track finishes, plays next track. If on last track, playback stops
-- **Repeat All** 🔁: When last track finishes, loops back to the first track
-- **Repeat One** 🔂: Current track repeats indefinitely
+Use the volume slider in the Now Playing area (or drag it) to adjust output
+level. A percentage label appears while you drag. Volume is saved across
+app launches.
 
-Cycle through modes by clicking the Repeat button or pressing `⌘R`.
+### ReplayGain
 
-**Resume Playback:**
-- If you pause, playback resumes from same position
-- If you stop, next play starts from beginning
+If your files have ReplayGain tags embedded, HarmoniaPlayer can apply them
+to normalise loudness between tracks or albums. Choose the mode in
+**Settings → ReplayGain:**
+
+- **Off** — no adjustment (default)
+- **Track** — apply per-track gain
+- **Album** — apply album-level gain for consistent album playback
+
+---
+
+## Playlists
+
+HarmoniaPlayer supports **multiple playlists** shown as tabs at the top
+of the window. All playlists are saved automatically on quit and restored
+on next launch.
+
+### Create, rename, delete
+
+- **New playlist:** click `+` in the tab bar, or **File → New Playlist**
+- **Rename:** double-click the tab name, or **File → Rename Playlist**
+- **Delete:** right-click the tab → Delete, or **File → Delete Playlist**
+
+### Track operations
+
+Right-click a track for the context menu:
+
+- **Play** — start playback from this track
+- **Play Next** — move this track to play right after the current one
+- **Get Info** — open the File Info panel (⌘I)
+- **Remove from Playlist** — delete the track from this playlist
+
+Or use keyboard:
+
+- **`Delete`** — remove selected tracks
+- **Drag** rows to reorder
+
+### Sorting columns
+
+Click a column header to sort. Click again to reverse. A "Restore order"
+button in the toolbar returns the playlist to the order you added files.
+
+Available columns: Title, Artist, Album, Album Artist, Year, Track #,
+Disc #, Genre, Composer, BPM, Comment, Bitrate, Sample Rate, Channels,
+File Size, File Format, Duration.
+
+Columns can be shown/hidden and reordered via the column header menu.
+
+### Undo / Redo
+
+Playlist operations (add, remove, move) support undo:
+
+- **`⌘Z`** — undo
+- **`⌘⇧Z`** — redo
+
+Up to the most recent 10 operations are remembered.
+
+### M3U8 import / export
+
+- **File → Export Playlist…** saves the active playlist as an `.m3u8` file.
+  You can choose between absolute or relative paths when exporting.
+- **File → Import Playlist…** loads an `.m3u8` file as a new playlist tab.
+  Files that no longer exist at the referenced path are skipped with a
+  warning alert.
+
+---
+
+## File Info
+
+Select a track and press **`⌘I`** (or right-click → Get Info) to open the
+File Info panel, showing:
+
+- **Artwork:** embedded album artwork, with pixel dimensions
+- **Tags:** Title, Artist, Album, Album Artist, Composer, Genre, Year,
+  Track / Disc numbers, BPM, Comment, ReplayGain values
+- **Technical info:** bitrate, sample rate, channel count, file size,
+  file format
+- **Source URLs:** files downloaded from the web have their
+  `kMDItemWhereFroms` source URL shown; you can edit or clear this
+
+---
+
+## Mini Player
+
+Open a compact floating player window via **Window → Mini Player**
+(**`⌘M`**). The Mini Player:
+
+- Shows the current track title and artist with a marquee scroll for long names
+- Provides previous / play / pause / next controls
+- Can be set to float above other windows (**Settings → Mini Player → Always on Top**)
+- Has adjustable scroll speed and pause length for the marquee text
+
+Close the Mini Player to return focus to the main window.
+
+---
+
+## Settings
+
+Open via **HarmoniaPlayer → Settings…** or **`⌘,`**.
+
+### Playlist
+
+- **Allow duplicate tracks** — by default, dropping a file already in the
+  playlist is skipped. Enable to allow duplicates.
+
+### Mini Player
+
+- **Always on top** — floating window stays above other apps
+- **Marquee speed / pause** — adjust how fast the track title scrolls
+  when it's too long to fit
+
+### ReplayGain
+
+- Choose **Off / Track / Album** (see [Playback Control](#playback-control))
+
+### Language
+
+Choose the UI language: **System (follow macOS)**, **English**, **繁體中文**,
+or **日本語**. Changing the language requires a restart.
 
 ---
 
 ## Keyboard Shortcuts
 
-### Essential Shortcuts
+### Playback
 
 | Shortcut | Action |
 |----------|--------|
 | `Space` | Play / Pause |
 | `⌘.` | Stop |
-| `⌘→` | Next Track |
-| `⌘←` | Previous Track |
-| `→` | Seek Forward 5 seconds |
-| `←` | Seek Backward 5 seconds |
-| `⌘R` | Cycle Repeat Mode (Off → All → One) |
-| `⌘O` | Add Files to Playlist |
+| `⌘→` | Next track |
+| `⌘←` | Previous track |
+| `→` | Seek forward 5 s |
+| `←` | Seek backward 5 s |
+| `⌘R` | Cycle repeat mode |
+| `⌘S` | Toggle shuffle |
 
-### Playlist Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `⌘A` | Select All Tracks |
-| `Delete` | Remove Selected Track(s) |
-| `↑` / `↓` | Navigate Playlist |
-| `Enter` | Play Selected Track |
-
-### Window Shortcuts
+### Playlist & File
 
 | Shortcut | Action |
 |----------|--------|
-| `⌘W` | Toggle Waveform Display |
-| `⌘I` | Toggle Now Playing Panel |
-| `⌘1` | Minimal View Preset |
-| `⌘2` | Standard View Preset |
-| `⌘3` | Full View Preset |
+| `⌘O` | Add files |
+| `⌘I` | Show File Info for selected track |
+| `Delete` | Remove selected tracks |
+| `⌘Z` | Undo |
+| `⌘⇧Z` | Redo |
+
+### Window
+
+| Shortcut | Action |
+|----------|--------|
+| `⌘M` | Open Mini Player |
 | `⌘,` | Open Settings |
-| `⌘Q` | Quit HarmoniaPlayer |
-
----
-
-## Playlist Management
-
-### Reorder Tracks
-
-1. Click and hold on a track
-2. Drag to new position
-3. Drop to move
-
-### Remove Tracks
-
-**Method 1: Delete Key**
-1. Select track(s)
-2. Press `Delete` key
-
-**Method 2: Context Menu**
-1. Right-click on track
-2. Select **"Remove from Playlist"**
-
-### Clear Entire Playlist
-
-1. Select all tracks (`⌘A`)
-2. Press `Delete`
-
-### Current Limitations (v0.1)
-
-- ❌ Cannot save playlists
-- ❌ Cannot create multiple playlists
-- ❌ Cannot edit track metadata
-
-*These features are planned for future versions.*
+| `⌘Q` | Quit |
 
 ---
 
 ## Troubleshooting
 
-### "File not found" Error
+### "File not found" alert at launch
 
-**Cause:** File was moved or deleted after being added to playlist
+A file in your saved playlist has been moved, renamed, or deleted since it
+was added. The inaccessible track stays in the playlist but is marked as
+unavailable — remove it, or put the file back at its original location.
 
-**Solution:**
-1. Remove the track from playlist
-2. Re-add the file from its new location
+### "Unsupported Format" alert when adding files
 
-### "Format not supported" Error
+The file's format is not supported in v0.1. Free formats are MP3, AAC,
+ALAC, WAV, AIFF. Formats like FLAC and DSD are planned for v0.2 (Pro).
+Convert the file to a supported format, or wait for Pro.
 
-**Cause:** Audio file format is not supported by current version
+### "Already in Playlist" alert
 
-**Solutions:**
-- **Free version:** Only supports MP3, AAC, ALAC, WAV, AIFF
-- **For FLAC/DSD:** Upgrade to Pro version (v0.2+)
-- **Alternative:** Convert file to supported format using:
-  - iTunes / Music app (for AAC/ALAC)
-  - Online converters (for MP3)
+The dropped file is already in the current playlist. Either:
+- Accept the skip (default behaviour), or
+- Enable **Settings → Playlist → Allow duplicate tracks** if you want the
+  file added again
 
-### No Sound
+### No sound
 
-**Check these:**
+Check in order:
 
-1. **System volume not muted**
-   - Check volume in menu bar
-   - Press `F12` to increase volume
+1. **System volume** — click the speaker in the menu bar; make sure it's
+   not muted
+2. **Output device** — System Settings → Sound → Output; select the correct
+   device
+3. **HarmoniaPlayer volume** — the slider in the Now Playing area might be
+   at zero
+4. **Try a different file** — if only one file is silent, that file may be
+   corrupted
 
-2. **Correct output device selected**
-   - Open **System Settings** → **Sound**
-   - Check **Output** tab
-   - Select correct speakers/headphones
+### Playback stutters or cracks
 
-3. **HarmoniaPlayer not paused**
-   - Check playback state in app
-   - Click Play button
+1. **High CPU load** — close other apps; check Activity Monitor
+2. **Very high sample rate** — 192 kHz files may struggle on older Macs;
+   try 44.1 or 48 kHz files
+3. **External drive** — slow drives can cause dropouts; try copying the
+   file to the internal drive
 
-4. **Audio file not corrupted**
-   - Try playing a different file
-   - Try opening file in another app
+### App won't open due to macOS security
 
-### Playback Stuttering
+If you see *"HarmoniaPlayer cannot be opened because it is from an
+unidentified developer"*:
 
-**Possible causes:**
+1. Open **System Settings → Privacy & Security**
+2. Scroll to the **Security** section
+3. Click **"Open Anyway"** next to the HarmoniaPlayer message
+4. Confirm **Open** in the dialog
 
-1. **High CPU usage**
-   - Open **Activity Monitor**
-   - Check if CPU is overloaded
-   - Close other applications
+### Playlists didn't restore
 
-2. **Very high sample rate files**
-   - 192kHz files may stutter on older Macs
-   - Try 44.1kHz or 48kHz files instead
-
-3. **External drive slow**
-   - If playing from external USB drive
-   - Try copying file to internal drive
-
-### App Won't Open (macOS Security)
-
-**If you see:** _"HarmoniaPlayer cannot be opened because it is from an unidentified developer"_
-
-**Solution:**
-1. Open **System Settings**
-2. Go to **Privacy & Security**
-3. Scroll to **Security** section
-4. Click **"Open Anyway"** next to HarmoniaPlayer message
-5. Click **"Open"** in confirmation dialog
-
-### Playlist Empty After Restarting App
-
-**Current behavior (v0.1):**
-- Playlists are **not** saved when you quit
-- This is expected in v0.1
-
-**Workaround:**
-- Keep app running (minimize instead of quit)
-
-**Future:**
-- Playlist persistence coming in v0.3
+Playlists and settings are saved when you quit (⌘Q) or when macOS shuts
+down normally. If the app was force-quit or crashed, some recent changes
+may not have been saved. The data is stored via macOS bookmarks so it
+survives relaunch even if the files move — as long as macOS can still
+resolve the bookmark.
 
 ---
 
 ## FAQ
 
-### General Questions
+**Is HarmoniaPlayer free?**
+Yes. v0.1 (Free tier) is free and open source (MIT). v0.2 will add a Pro
+tier via a one-time in-app purchase for additional formats and features.
 
-**Q: Is HarmoniaPlayer free?**  
-**A:** Yes, the Free version is completely free and open source (MIT License).
+**What's the difference between Free and Pro?**
+- **Free (v0.1):** MP3, AAC, ALAC, WAV, AIFF + all playback, playlist,
+  metadata-reading, and UI features
+- **Pro (v0.2, planned):** adds FLAC and DSD playback, tag editing,
+  synchronised lyrics, gapless playback
 
-**Q: What's the difference between Free and Pro?**  
-**A:**
-- **Free:** MP3, AAC, ALAC, WAV, AIFF
-- **Pro (v0.2+):** All Free formats + FLAC + DSD
+**Is my music uploaded anywhere?**
+No. HarmoniaPlayer is completely offline. All music stays on your Mac.
+The app does not make any network calls for audio content.
 
-**Q: How do I upgrade to Pro?**  
-**A:** Pro version will be available via in-app purchase in v0.2 (Q1 2026).
+**Can I edit tags?**
+Not in v0.1 — tags are read-only. Tag editing is planned for v0.2.
 
-**Q: Is my music uploaded anywhere?**  
-**A:** No. HarmoniaPlayer is **completely offline**. All music stays on your Mac.
+**Does it support synchronised lyrics?**
+Not in v0.1. LRC / synchronised lyrics are planned for v0.2 (Pro).
 
-### Features
+**Does it support gapless playback?**
+Not in v0.1. Gapless playback is planned for v0.2 (Pro).
 
-**Q: Can I edit metadata (tags)?**  
-**A:** Not in v0.1. Metadata editing is planned for v0.2 (Pro).
+**Does it support streaming services?**
+No. HarmoniaPlayer plays local files only.
 
-**Q: Can I see album art?**  
-**A:** Not in v0.1. Album art display is planned for v0.2.
+**Where does HarmoniaPlayer store my data?**
+Playlists, settings, language, volume, and similar preferences are stored
+in macOS UserDefaults (standard app preferences storage). Audio files
+themselves stay wherever you put them — HarmoniaPlayer just remembers
+where they are via macOS security-scoped bookmarks.
 
-**Q: Does it support repeat / loop playback?**  
-**A:** Yes. Use the Repeat button or `⌘R` to cycle through Off, Repeat All, and Repeat One modes.
-
-**Q: Does it support gapless playback?**  
-**A:** Not yet. Gapless playback is planned for a future version.
-
-**Q: Can I create multiple playlists?**  
-**A:** Not in v0.1. Multiple playlists are planned for v0.3.
-
-**Q: Can I save my playlists?**  
-**A:** Not in v0.1. Playlist persistence is planned for v0.3.
-
-### Platform Support
-
-**Q: Is there an iOS version?**  
-**A:** Not yet. iOS support is planned for v0.3 (Q2 2026).
-
-**Q: Does it work on Windows or Linux?**  
-**A:** No. HarmoniaPlayer is macOS/iOS only. However, the underlying framework (HarmoniaCore) will support Linux in the future.
-
-**Q: What macOS version do I need?**  
-**A:** macOS 13.0 (Ventura) or later.
-
-### Technical
-
-**Q: Where does HarmoniaPlayer store its data?**  
-**A:** Currently, no data is stored (v0.1 has no persistence).
-
-**Q: Can I use this with my DAW?**  
-**A:** HarmoniaPlayer is designed as a music player, not a production tool. Use your DAW's built-in players for production.
-
-**Q: Does it support streaming services?**  
-**A:** No. HarmoniaPlayer only plays local files.
+**What macOS version do I need?**
+macOS 15.6 or later.
 
 ---
 
 ## Getting Help
 
-### Report a Bug
+### Report a bug
 
 1. Visit [GitHub Issues](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/issues)
-2. Click **"New Issue"**
-3. Describe the problem:
+2. Click **New Issue**
+3. Include:
    - What you did
-   - What happened
-   - What you expected
+   - What happened vs what you expected
    - macOS version
    - HarmoniaPlayer version
 
-### Request a Feature
+### Request a feature
 
 1. Visit [GitHub Discussions](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/discussions)
-2. Click **"New Discussion"**
-3. Category: **Ideas**
-4. Describe your feature request
+2. Click **New Discussion** → **Ideas**
+3. Describe what you'd like
 
-### Additional Resources
+### Contact
 
-- **Documentation**: [GitHub Docs](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/tree/main/docs)
-- **Architecture**: [architecture.md](architecture.md)
-- **Development**: [DEVELOPMENT_GUIDE.md](DEVELOPMENT_GUIDE.md)
-- **Changelog**: [CHANGELOG.md](../CHANGELOG.md)
-
----
-
-## What's Next?
-
-For development plans and upcoming features, see the [Project Roadmap](../README.md#milestones-non-binding).
-
----
-
-## 📧 Need Help?
-
-For questions, bug reports, or feature requests:
-
-- **Email**: [harmonia.audio.project@gmail.com](mailto:harmonia.audio.project@gmail.com)
-- **GitHub Issues**: [HarmoniaPlayer Issues](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/issues)
-- **Documentation**: [GitHub Docs](https://github.com/OneOfWolvesBilly/HarmoniaPlayer/tree/main/docs)
+- **Email:** [harmonia.audio.project@gmail.com](mailto:harmonia.audio.project@gmail.com)
+- **GitHub:** [@OneOfWolvesBilly](https://github.com/OneOfWolvesBilly)
+- **Repository:** [HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)
