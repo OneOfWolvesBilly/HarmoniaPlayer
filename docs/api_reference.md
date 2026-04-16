@@ -1,423 +1,651 @@
 # HarmoniaPlayer API Reference
 
-> This document defines the **application-facing API** for HarmoniaPlayer.
+> Complete interface reference for HarmoniaPlayer.
+> Generated from source code as of 2026-04-15.
 >
-> It specifies the interfaces, types, and contracts that application code uses,
-> without implementation details.
+> For architecture overview, see [Architecture](architecture.md).
+> For dependency rules, see [Module Boundaries](module_boundary.md).
 
 ---
 
-## 1. Scope
+## 1. Data Models
 
-This API reference covers:
+### 1.1 Track
 
-- **AppState** - Central application state interface
-- **PlaybackService** - Audio playback interface (from HarmoniaCore)
-- **IAPManager** - In-app purchase management
-- **CoreFactory** - Service construction interface
-- **UI Models** - Data types used across the application
-
-**Cross-References:**
-- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) - Core audio service contracts
-- [HarmoniaCore Ports](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md) - Port interfaces
-- [Implementation Guide (Swift)](implementation_guide_swift.md) - Platform-specific implementation patterns
-
----
-
-## 2. UI Models
-
-### 2.1 PlaybackState
+Audio track model representing a single audio file in the playlist.
 
 ```swift
-enum PlaybackState: Equatable {
-    case idle
-    case loading
-    case playing
-    case paused
-    case stopped
-}
-```
+struct Track: Identifiable, Equatable, Sendable, Codable {
 
-**Note:** Errors are handled through exceptions, not through state.
-
-### 2.2 PlaybackError
-
-```swift
-enum PlaybackError: Error, Equatable {
-    case unsupportedFormat(String)
-    case fileNotFound(URL)
-    case decodingFailed(String)
-    case outputFailed(String)
-    case coreError(String)
-}
-```
-
-### 2.3 Track
-
-```swift
-struct Track: Identifiable, Equatable {
+    // Core
     let id: UUID
     let url: URL
     var title: String
     var artist: String
     var album: String
-    var duration: TimeInterval?
-    var artworkURL: URL?
+    var duration: TimeInterval
+    var artworkData: Data?
+
+    // Extended tags (Group A)
+    var albumArtist: String
+    var composer: String
+    var genre: String
+    var year: Int?
+    var trackNumber: Int?
+    var trackTotal: Int?
+    var discNumber: Int?
+    var discTotal: Int?
+    var bpm: Int?
+
+    // Replay Gain (Group B)
+    var replayGainTrack: Double?
+    var replayGainAlbum: Double?
+
+    // Comment (Group C)
+    var comment: String
+
+    // Technical info (Group D)
+    var bitrate: Int?           // kbps
+    var sampleRate: Double?     // Hz
+    var channels: Int?
+    var fileSize: Int?          // bytes
+    var fileFormat: String      // e.g. "MP3", "AAC"
+
+    // Playback statistics (Group E — reserved, no UI yet)
+    var playCount: Int
+    var lastPlayedAt: Date?
+    var rating: Double?
+
+    // Metadata version (matches TagBundle.currentSchemaVersion)
+    var metadataVersion: Int
+
+    // Runtime-only (not persisted via Codable)
+    var isAccessible: Bool      // false if file missing or in Trash
+    var originalPath: String    // path at encode time, for Trash detection
+
+    // Sort helpers (nil maps to -1 for SwiftUI Table Comparable requirement)
+    var sortYear: Int
+    var sortTrackNumber: Int
+    var sortDiscNumber: Int
+    var sortBpm: Int
+    var sortBitrate: Int
+    var sortSampleRate: Double
+    var sortChannels: Int
+    var sortFileSize: Int
+
+    // Initializers
+    init(url: URL, title: String, artist: String = "", album: String = "",
+         duration: TimeInterval = 0, artworkData: Data? = nil, ...)
+    init(url: URL)  // derives title from filename
 }
 ```
 
-### 2.4 Playlist
+Persistence: encoded with URL bookmark (`minimalBookmark`) for file access across launches. Decoding resolves bookmark, then urlPath, then legacy URL key.
+
+### 1.2 Playlist
 
 ```swift
-struct Playlist: Identifiable, Equatable {
+enum PlaylistSortKey: String, Equatable, Sendable, Codable {
+    case none
+    case title, artist, album, duration
+    case albumArtist, composer, genre, year
+    case trackNumber, discNumber, bpm
+    case bitrate, sampleRate, channels, fileSize, fileFormat
+}
+
+struct Playlist: Identifiable, Equatable, Sendable, Codable {
     let id: UUID
     var name: String
     var tracks: [Track]
-    
+    var sortKey: PlaylistSortKey = .none
+    var sortAscending: Bool = true
+    var insertionOrder: [Track.ID] = []
+
     var isEmpty: Bool { tracks.isEmpty }
+    var count: Int    { tracks.count }
 }
 ```
 
-### 2.5 ViewPreferences
+### 1.3 PlaybackState
 
 ```swift
-struct ViewPreferences: Equatable {
-    var isWaveformVisible: Bool
-    var isPlaylistVisible: Bool
-    var layoutPreset: LayoutPreset
+enum PlaybackState: Equatable, Sendable {
+    case idle
+    case loading
+    case playing
+    case paused
+    case stopped
+    case error(PlaybackError)
 }
+```
 
-enum LayoutPreset: String, CaseIterable {
+### 1.4 PlaybackError
+
+Typed error codes with no String payloads. View layer maps each case to a localised message.
+
+```swift
+enum PlaybackError: Error, Equatable, Sendable {
+    case unsupportedFormat
+    case failedToOpenFile
+    case failedToDecode
+    case outputError
+    case invalidState
+    case invalidArgument
+}
+```
+
+### 1.5 RepeatMode
+
+```swift
+enum RepeatMode: String, Equatable, Sendable, Codable {
+    case off
+    case all
+    case one
+}
+```
+
+### 1.6 ShuffleMode
+
+```swift
+typealias ShuffleMode = Bool
+
+extension ShuffleMode {
+    static let off: ShuffleMode = false
+    static let on: ShuffleMode = true
+}
+```
+
+### 1.7 ReplayGainMode
+
+```swift
+enum ReplayGainMode: String, CaseIterable, Codable {
+    case off
+    case track
+    case album
+}
+```
+
+### 1.8 ViewPreferences
+
+```swift
+enum LayoutPreset: String, CaseIterable, Equatable, Sendable {
     case compact
     case standard
     case waveformFocused
 }
-```
 
----
+struct ViewPreferences: Equatable, Sendable {
+    var isWaveformVisible: Bool
+    var isPlaylistVisible: Bool
+    var layoutPreset: LayoutPreset
 
-## 3. AppState Interface
-
-Central application state observable by SwiftUI views.
-
-```swift
-@MainActor
-final class AppState: ObservableObject {
-    // MARK: - Observable State
-    @Published private(set) var playbackState: PlaybackState
-    @Published private(set) var currentTrack: Track?
-    @Published private(set) var currentTime: TimeInterval
-    @Published private(set) var duration: TimeInterval
-    @Published private(set) var playlists: [Playlist]
-    @Published var activePlaylistIndex: Int
-    var playlist: Playlist { playlists[activePlaylistIndex] }
-    @Published var viewPreferences: ViewPreferences
-    @Published private(set) var lastError: PlaybackError?
-    @Published private(set) var isProUnlocked: Bool
-    @Published private(set) var repeatMode: RepeatMode
-    @Published private(set) var isShuffled: ShuffleMode
-    @Published var volume: Float
-    @Published var allowDuplicateTracks: Bool
-    @Published var replayGainMode: ReplayGainMode
-
-    // MARK: - Blocking Operation (v0.1)
-    /// True during batch load/import operations.
-    /// Menu items (Add Files, Import M3U8, Undo, Redo) are disabled.
-    /// Drop destinations reject drops. Not persisted.
-    @Published private(set) var isPerformingBlockingOperation: Bool
-
-    // MARK: - Error / Alert State
-    @Published private(set) var failedTrackName: String?
-    @Published var showFileNotFoundAlert: Bool
-    @Published var skippedInaccessibleNames: [String]
-    @Published var skippedDuplicateURLs: [URL]
-    @Published var skippedImportURLs: [URL]
-    @Published var skippedUnsupportedURLs: [URL]
-
-    // MARK: - Paywall (v0.1: hidden, code retained for v0.2)
-    @Published var showPaywall: Bool
-    @Published var paywallDismissedThisSession: Bool
-
-    // MARK: - File Info Panel
-    @Published var fileInfoTrack: Track?
-
-    // MARK: - Format Classification
-    static let freeFormats: Set<String>     // ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
-    static let proOnlyFormats: Set<String>  // ["flac", "dsf", "dff"]
-    /// v0.1: returns freeFormats only. v0.2: restore Pro check.
-    static var allowedFormats: Set<String>
-
-    // MARK: - UndoManager
-    /// Injected at init for testability. Production uses UndoManager().
-    /// levelsOfUndo = 10: retains 10 most recent track operations.
-    /// Scope: load / removeTrack / moveTrack only.
-    /// Cleared automatically on playlist context change.
-    let undoManager: UndoManager
-
-    // MARK: - Init
-    init(
-        iapManager: IAPManager,
-        provider: CoreServiceProviding,
-        userDefaults: UserDefaults = .standard,
-        undoManager: UndoManager? = nil   // nil → creates UndoManager() inside @MainActor body
-    )
-
-    // MARK: - Playlist Operations
-    func load(urls: [URL]) async       // sub-batch save every 5 tracks
-    func handleFileDrop(urls: [URL]) async  // validates via FileDropService then calls load
-    func clearPlaylist()
-    func removeTrack(_ trackID: Track.ID)
-    func moveTrack(fromOffsets: IndexSet, toOffset: Int)
-    func playNext(_ trackID: Track.ID)
-
-    // MARK: - Playlist Management
-    func newPlaylist(name: String)
-    func renamePlaylist(at index: Int, name: String)
-    func deletePlaylist(at index: Int)
-    func switchPlaylist(to index: Int)
-
-    // MARK: - Mini Player
-    func switchMiniPlayerPlaylist(to index: Int) async
-
-    // MARK: - Playback Control
-    func play() async
-    func play(trackID: Track.ID) async
-    func pause() async
-    func stop() async
-    func seek(to seconds: TimeInterval) async
-    func setVolume(_ volume: Float) async
-    func playNextTrack() async
-    func playPreviousTrack() async
-    func cycleRepeatMode()
-    func toggleShuffle()
-
-    // MARK: - Persistence
-    func saveState()
-    func restoreState()
-
-    // MARK: - Undo / Redo
-    var canUndo: Bool
-    var canRedo: Bool
-    func undo()
-    func redo()
-
-    // MARK: - M3U8 Import / Export
-    func writeExport(to url: URL, pathStyle: M3U8PathStyle) throws
-    func importPlaylist(from url: URL) async  // format gate + sub-batch save + final saveState
-
-    // MARK: - IAP / Paywall
-    @discardableResult func showPaywallIfNeeded() -> Bool
-    func purchasePro() async throws
-    func refreshEntitlements() async
-
-    // MARK: - File Info
-    func showFileInfo(trackID: Track.ID)
+    static let defaultPreferences: ViewPreferences
 }
 ```
 
-**UndoManager scope:**
-- ✅ `load(urls:)`, `removeTrack(_:)`, `moveTrack(fromOffsets:toOffset:)`
-- ❌ All playback controls, volume, shuffle, repeat, playlist create/delete
-- Stack is cleared (`removeAllActions()`) when: `clearPlaylist()`, `newPlaylist()`,
-  `deletePlaylist()`, `switchMiniPlayerPlaylist()`, playlist tab switch
+### 1.9 AudioFileItem
 
-**Key Behaviors:**
-- All async methods dispatch onto `@MainActor`
-- Errors mapped to `PlaybackError` and published via `lastError`
-- State updates trigger SwiftUI re-render automatically
+Transferable type for drag-and-drop. Uses `ProxyRepresentation` (not `FileRepresentation`) to receive original file URLs.
 
-**See:** [Implementation Guide (Swift)](implementation_guide_swift.md) for concrete implementation.
+```swift
+struct AudioFileItem: Transferable {
+    let url: URL
+    static var transferRepresentation: some TransferRepresentation
+}
+```
+
+### 1.10 CoreFeatureFlags
+
+Derived from `IAPManager.isProUnlocked`. Determines which formats and features are available.
+
+```swift
+struct CoreFeatureFlags: Sendable {
+    let supportsMP3: Bool               // always true
+    let supportsAAC: Bool               // always true
+    let supportsALAC: Bool              // always true
+    let supportsWAV: Bool               // always true
+    let supportsAIFF: Bool              // always true
+    let supportsFLAC: Bool              // Pro only
+    let supportsDSD: Bool               // Pro only
+    let supportsGaplessPlayback: Bool   // Pro only
+    let supportsMetadataEditing: Bool   // Pro only
+    let supportsBitPerfectOutput: Bool  // Pro only
+
+    init(isPro: Bool)
+    init(iapManager: IAPManager)
+}
+```
 
 ---
 
-## 4. Service Interfaces
+## 2. Error Types
+
+### 2.1 PlaybackError
+
+See [1.4 PlaybackError](#14-playbackerror).
+
+### 2.2 IAPError
+
+```swift
+enum IAPError: Error, Equatable {
+    case productNotFound
+    case verificationFailed
+    case userCancelled
+    case purchaseFailed(String)
+    case notAvailable
+}
+```
+
+### 2.3 ExtendedAttributeError
+
+```swift
+enum ExtendedAttributeError: Error, LocalizedError {
+    case plistSerializationFailed(Error)
+    case writeFailed(Int32)
+    case removeFailed(Int32)
+}
+```
+
+---
+
+## 3. AppState
+
+Central application state. `@MainActor`, `ObservableObject`.
+
+Split across 5 files: `AppState.swift` (properties, init, persistence), `AppState+Playlist.swift`, `AppState+Playback.swift`, `AppState+Navigation.swift`, `AppState+M3U8.swift`.
+
+### 3.1 Initialization
+
+```swift
+init(
+    iapManager: IAPManager,
+    provider: CoreServiceProviding,
+    userDefaults: UserDefaults = .standard,
+    undoManager: UndoManager? = nil
+)
+```
+
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
+
+### 3.2 Services (injected)
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `playbackService` | `PlaybackService` | Audio playback |
+| `tagReaderService` | `TagReaderService` | Metadata reading |
+| `fileDropService` | `FileDropService` | URL validation + directory expansion |
+
+### 3.3 Published Properties
+
+#### IAP / Feature State
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `isProUnlocked` | `Bool` | read | Pro features unlocked |
+| `featureFlags` | `CoreFeatureFlags` | read | Tier-specific capabilities |
+
+#### Playlist State
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `playlists` | `[Playlist]` | read | All playlists |
+| `activePlaylistIndex` | `Int` | read/write | Currently visible playlist |
+| `playlist` | `Playlist` | computed | `playlists[activePlaylistIndex]` |
+| `currentTrack` | `Track?` | read | Currently selected/playing track |
+| `selectedTrackIDs` | `Set<Track.ID>` | read/write | Multi-selection in PlaylistView |
+
+#### Playback State
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `playbackState` | `PlaybackState` | read | Current playback state |
+| `playingPlaylistID` | `Playlist.ID?` | read | Playlist owning the playing track |
+| `currentTime` | `TimeInterval` | read | Current position in seconds |
+| `duration` | `TimeInterval` | read | Track duration in seconds |
+
+#### Error / Alert State
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `lastError` | `PlaybackError?` | read | Most recent error |
+| `failedTrackName` | `String?` | read | Display name of failed track |
+| `showFileNotFoundAlert` | `Bool` | read/write | File-not-found alert binding |
+| `skippedInaccessibleNames` | `[String]` | read/write | Tracks skipped during auto-play |
+| `skippedDuplicateURLs` | `[URL]` | read/write | Duplicates skipped during load |
+| `skippedImportURLs` | `[URL]` | read/write | Files skipped during M3U8 import |
+| `skippedUnsupportedURLs` | `[URL]` | read/write | Unsupported formats skipped during load |
+
+#### Blocking Operation
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `isPerformingBlockingOperation` | `Bool` | read | True during batch load/import |
+
+#### UI State
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `viewPreferences` | `ViewPreferences` | read/write | Layout preferences |
+| `fileInfoTrack` | `Track?` | read/write | Track shown in File Info panel |
+| `showPaywall` | `Bool` | read/write | Paywall sheet binding (v0.1: hidden) |
+| `paywallDismissedThisSession` | `Bool` | read/write | Session-only skip flag |
+
+#### Settings
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `allowDuplicateTracks` | `Bool` | read/write | Allow duplicate URLs in playlist |
+| `volume` | `Float` | read/write | Output volume 0.0–1.0 |
+| `selectedLanguage` | `String` | read/write | BCP-47 tag or "system" |
+| `repeatMode` | `RepeatMode` | read | off/all/one |
+| `isShuffled` | `ShuffleMode` | read | off/on |
+| `replayGainMode` | `ReplayGainMode` | read/write | off/track/album |
+
+#### Format Classification (static)
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `freeFormats` | `Set<String>` | `["mp3", "aac", "m4a", "wav", "aiff", "alac"]` |
+| `proOnlyFormats` | `Set<String>` | `["flac", "dsf", "dff"]` |
+| `allowedFormats` | `Set<String>` (computed) | v0.1: `freeFormats`. v0.2: includes Pro check |
+
+#### Other
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `undoManager` | `UndoManager` | Injected; `levelsOfUndo = 10` |
+| `languageBundle` | `Bundle` | Resolved at launch for `NSLocalizedString` |
+| `pendingSeekTime` | `TimeInterval` | Seek position buffered while stopped/paused |
+| `lastPlayedTrackID` | `Track.ID?` | Last successfully played track ID |
+| `shuffleQueue` | `[Track.ID]` | Pre-shuffled order |
+| `shuffleQueueIndex` | `Int` | Current position in shuffle queue |
+| `pollingTask` | `Task<Void, Never>?` | Polling loop task for playback state |
+| `saveBatchSize` | `Int` (static) | Incremental save interval during batch load (5) |
+
+### 3.4 Methods — Playlist Operations (`AppState+Playlist.swift`)
+
+| Method | Description |
+|--------|-------------|
+| `handleFileDrop(urls:) async` | Validates via FileDropService, then calls `load(urls:)` |
+| `load(urls:) async` | Adds tracks; sub-batch save every 5; format gate via `allowedFormats` |
+| `clearPlaylist()` | Removes all tracks, clears undo stack |
+| `removeTrack(_:)` | Removes single track by ID, registers undo |
+| `moveTrack(fromOffsets:toOffset:)` | Reorders tracks, registers undo |
+| `playNext(_:)` | Moves track to position after currentTrack |
+| `applySort(_:key:ascending:)` | Applies column sort to playlist |
+| `restoreInsertionOrder()` | Restores original insertion order |
+| `newPlaylist(name:)` | Creates new playlist tab |
+| `renamePlaylist(at:name:)` | Renames playlist at index |
+| `deletePlaylist(at:)` | Deletes playlist at index; auto-inserts if last |
+| `switchPlaylist(to:)` | Switches active tab without affecting playback |
+| `undo()` | Calls `undoManager.undo()` |
+| `redo()` | Calls `undoManager.redo()` |
+| `canUndo: Bool` | Whether undo stack has actions |
+| `canRedo: Bool` | Whether redo stack has actions |
+
+### 3.5 Methods — Playback (`AppState+Playback.swift`)
+
+| Method | Description |
+|--------|-------------|
+| `play() async` | Resumes playback from current position |
+| `pause() async` | Pauses playback, preserves position |
+| `stop() async` | Stops playback, resets position to 0 |
+| `seek(to:) async` | Seeks to absolute position in seconds |
+| `setVolume(_:) async` | Sets output volume 0.0–1.0 |
+| `play(trackID:) async` | Loads and plays a specific track by ID |
+| `cycleRepeatMode()` | Cycles off → all → one → off |
+| `toggleShuffle()` | Toggles shuffle on/off, rebuilds queue |
+| `buildShuffleQueue(startingWith:)` | Rebuilds shuffle queue |
+| `mapToPlaybackError(_:) -> PlaybackError` | Fallback error mapping |
+| `applyReplayGainVolume(for:requiresActivePlayback:) async` | Applies ReplayGain adjustment to volume |
+
+### 3.6 Methods — Navigation (`AppState+Navigation.swift`)
+
+| Method | Description |
+|--------|-------------|
+| `playNextTrack() async` | Plays next track (respects shuffle/repeat) |
+| `playPreviousTrack() async` | Plays previous track (respects shuffle/repeat) |
+| `trackDidFinishPlaying() async` | Called by polling loop on natural completion |
+| `switchMiniPlayerPlaylist(to:) async` | Switches playlist from Mini Player |
+
+### 3.7 Methods — M3U8 (`AppState+M3U8.swift`)
+
+| Method | Description |
+|--------|-------------|
+| `writeExport(to:pathStyle:) throws` | Exports active playlist to M3U8 file |
+| `importPlaylist(from:) async` | Imports M3U8 into new playlist tab; format gate + sub-batch save |
+
+### 3.8 Methods — Main File (`AppState.swift`)
+
+| Method | Description |
+|--------|-------------|
+| `saveState()` | Persists playlists, settings to UserDefaults |
+| `restoreState()` | Restores state from UserDefaults; triggers metadata refresh |
+| `displayName(for:) -> String` | Returns "Title - Artist" or filename |
+| `clearLastError()` | Clears lastError and failedTrackName |
+| `showFileInfo(trackID:)` | Sets fileInfoTrack for File Info panel |
+| `showPaywallIfNeeded() -> Bool` | Sets showPaywall if Free tier; returns true if blocked |
+| `purchasePro() async throws` | Initiates purchase via IAPManager |
+| `refreshEntitlements() async` | Refreshes Pro status from App Store |
+
+---
+
+## 4. Service Protocols
 
 ### 4.1 PlaybackService
 
 ```swift
-protocol PlaybackService {
-    // Load and prepare a track for playback
-    func load(url: URL) throws
-    
-    // Start playback
-    func play() throws
-    
-    // Pause playback
-    func pause()
-    
-    // Stop playback and release resources
-    func stop()
-    
-    // Seek to absolute time
-    func seek(to seconds: TimeInterval) throws
-    
-    // Query playback position and duration
-    func currentTime() -> TimeInterval
-    func duration() -> TimeInterval
-    
-    // Current playback state
+protocol PlaybackService: AnyObject {
+    func load(url: URL) async throws
+    func play() async throws
+    func pause() async
+    func stop() async
+    func seek(to seconds: TimeInterval) async throws
+    func currentTime() async -> TimeInterval
+    func duration() async -> TimeInterval
+    func setVolume(_ volume: Float) async
     var state: PlaybackState { get }
 }
 ```
 
-**Source:** [HarmoniaCore Services Spec](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+Implementations: `HarmoniaPlaybackServiceAdapter` (production), `FakePlaybackService` (test).
 
-**Key Behaviors:**
-- All operations are synchronous
-- `play()` starts from current position
-- `pause()` preserves playback position
-- `stop()` resets position to beginning
+### 4.2 TagReaderService
 
-### 4.2 IAPManager
+```swift
+protocol TagReaderService: AnyObject {
+    func readMetadata(for url: URL) async throws -> Track
+    var currentSchemaVersion: Int { get }
+}
+```
+
+Implementations: `HarmoniaTagReaderAdapter` (production), `FakeTagReaderService` (test).
+
+### 4.3 IAPManager
 
 ```swift
 protocol IAPManager: AnyObject {
-    var isProUser: Bool { get }
-    
+    var isProUnlocked: Bool { get }
     func refreshEntitlements() async
-    func purchasePro() async throws
+    func purchasePro() async throws  // throws IAPError
 }
 ```
 
-**Responsibilities:**
-- Manage Pro feature unlock state
-- Handle purchase transactions
-- Persist entitlement state
+Implementations: `StoreKitIAPManager` (production), `FreeTierIAPManager` (stub), `MockIAPManager` (test).
 
-### 4.3 CoreFactory
+### 4.4 CoreServiceProviding
 
 ```swift
-protocol CoreFactory {
+protocol CoreServiceProviding: AnyObject {
     func makePlaybackService(isProUser: Bool) -> PlaybackService
-    func makeTagReader() -> TagReaderPort
+    func makeTagReaderService() -> TagReaderService
 }
 ```
 
-**Responsibilities:**
-- Construct HarmoniaCore services
-- Wire ports to platform adapters
-- Apply product configuration (Free vs Pro)
+Implementations: `HarmoniaCoreProvider` (production), `FakeCoreProvider` (test).
 
-### 4.4 FileDropService
+---
+
+## 5. Application Services
+
+### 5.1 CoreFactory
+
+Constructs services from `CoreServiceProviding` with `CoreFeatureFlags`.
+
+```swift
+struct CoreFactory {
+    init(featureFlags: CoreFeatureFlags, provider: CoreServiceProviding)
+    func makePlaybackService() -> PlaybackService
+    func makeTagReaderService() -> TagReaderService
+}
+```
+
+### 5.2 FileDropService
+
+Validates drag-and-drop URLs. Recursively expands directories into audio files.
 
 ```swift
 struct FileDropService {
-    /// Returns valid local audio file URLs from the given array.
-    /// Directories are recursively expanded into their contained audio files.
-    /// Non-file URLs and non-audio files are filtered out.
     func validate(_ urls: [URL]) -> [URL]
 }
 ```
 
-**Responsibilities:**
-- Validate drag-and-drop URLs (must be `isFileURL` + `UTType.conforms(to: .audio)`)
-- Recursively expand directories into audio files (skips hidden files)
-- Used by `AppState.handleFileDrop(urls:)` and `PlaylistView.openFilePicker()`
+Criteria: `isFileURL` + `UTType.conforms(to: .audio)`. Directories enumerated recursively (hidden files skipped).
 
----
+### 5.3 M3U8Service
 
-## 5. Port Interfaces
-
-### 5.1 TagReaderPort
+Pure value type for M3U8 serialisation and parsing. No I/O.
 
 ```swift
-protocol TagReaderPort {
-    func readTags(from url: URL) throws -> [String: Any]
+enum M3U8PathStyle {
+    case absolute
+    case relative(to: URL)
+}
+
+struct M3U8Service {
+    func export(playlist: Playlist, pathStyle: M3U8PathStyle) -> String
+    func parse(m3u8: String, baseURL: URL?) -> [URL]
 }
 ```
 
-**Source:** [HarmoniaCore Ports Spec](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md)
+### 5.4 ExtendedAttributeService
 
-**Usage:** Metadata extraction during file import.
-
-**Note:** TagReaderPort is the only port interface directly used by application layer. All other ports are used internally by HarmoniaCore services.
-
----
-
-## 7. Usage Patterns
-
-### 6.1 View Integration
+Reads/writes `kMDItemWhereFroms` extended attribute via Darwin xattr APIs.
 
 ```swift
-struct PlayerView: View {
-    @EnvironmentObject var appState: AppState
-    
-    var body: some View {
-        VStack {
-            PlaylistView()
-            TransportControlsView(
-                isPlaying: appState.playbackState == .playing,
-                onPlay: { try? appState.play() },
-                onPause: { appState.pause() }
-            )
-        }
-    }
-}
-```
-
-### 6.2 Loading Files
-
-```swift
-func handleFileSelection(urls: [URL]) {
-    appState.load(urls: urls)
-}
-```
-
-### 6.3 Error Handling
-
-```swift
-do {
-    try appState.play()
-} catch let error as PlaybackError {
-    showAlert(for: error)
+struct ExtendedAttributeService {
+    static let whereFromsKey: String  // "com.apple.metadata:kMDItemWhereFroms"
+    func readWhereFroms(url: URL) -> [String]
+    func writeWhereFroms(_ sources: [String], url: URL) throws
+    func clearWhereFroms(url: URL) throws
 }
 ```
 
 ---
 
-## 8. Module Boundaries
+## 6. Integration Layer
 
-**Allowed Dependencies:**
+These 3 files are the **only** production files allowed to `import HarmoniaCore`.
 
+### 6.1 HarmoniaCoreProvider
+
+Constructs real HarmoniaCore services with AVFoundation adapters.
+
+```swift
+final class HarmoniaCoreProvider: CoreServiceProviding {
+    func makePlaybackService(isProUser: Bool) -> PlaybackService
+    func makeTagReaderService() -> TagReaderService
+}
 ```
-Views
-  ↓ depend on
-AppState (protocol)
-  ↓ depend on
-CoreFactory, IAPManager, PlaybackService (protocols)
-  ↓ implemented by
-HarmoniaCore-Swift
+
+### 6.2 HarmoniaPlaybackServiceAdapter
+
+Wraps HarmoniaCore `DefaultPlaybackService`. Maps `CoreError` to `PlaybackError`.
+
+```swift
+final class HarmoniaPlaybackServiceAdapter: PlaybackService {
+    // All PlaybackService protocol methods
+    static func mapCoreError(_ error: CoreError) -> PlaybackError
+}
 ```
 
-**Forbidden:**
-- ❌ Views importing HarmoniaCore directly
-- ❌ AppState constructing platform adapters
-- ❌ Views accessing PlaybackService directly
+Error mapping:
 
-**See:** [Module Boundaries](module_boundary.md) for complete rules.
+| CoreError | PlaybackError |
+|-----------|--------------|
+| `.notFound` | `.failedToOpenFile` |
+| `.unsupported` | `.unsupportedFormat` |
+| `.decodeError` | `.failedToDecode` |
+| `.ioError` | `.failedToOpenFile` |
+| `.invalidState` | `.invalidState` |
+| `.invalidArgument` | `.invalidArgument` |
+
+### 6.3 HarmoniaTagReaderAdapter
+
+Wraps HarmoniaCore `TagReaderPort`. Pure `TagBundle` to `Track` mapping. No AVFoundation.
+
+```swift
+final class HarmoniaTagReaderAdapter: TagReaderService {
+    func readMetadata(for url: URL) async throws -> Track
+    var currentSchemaVersion: Int  // forwarded from TagBundle.currentSchemaVersion
+}
+```
 
 ---
 
-## 9. Cross-References
+## 7. Notification Names
 
-**HarmoniaCore Specifications:**
-- [Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md) - Ports & Adapters pattern
-- [Ports](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md) - Port interface contracts
-- [Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md) - Service behavior specifications
-- [Models](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md) - Error types and data models
-
-**HarmoniaPlayer Documentation:**
-- [Architecture](architecture.md) - System architecture
-- [Implementation Guide (Swift)](implementation_guide_swift.md) - Swift-specific implementation
-- [Module Boundaries](module_boundary.md) - Dependency rules
-- [Development Guide](development_guide.md) - Development setup
+```swift
+extension Notification.Name {
+    static let openFilePicker         // "harmoniaPlayer.openFilePicker"
+    static let renameActivePlaylist   // "harmoniaPlayer.renameActivePlaylist"
+    static let bringMainWindowToFront // "harmoniaPlayer.bringMainWindowToFront"
+}
+```
 
 ---
 
-## 10. Version Compatibility
+## 8. Persistence
 
-| HarmoniaCore | HarmoniaPlayer | API Version | Status |
-|--------------|----------------|-------------|--------|
-| v0.1 | v0.1 | 1.0 | Planning |
+Persisted via `UserDefaults` with `hp.` prefix keys.
 
-This API is designed to remain stable across HarmoniaPlayer versions. Breaking changes will be coordinated with HarmoniaCore updates.
+| Key | Type | Persisted by |
+|-----|------|-------------|
+| `hp.playlists` | `[Playlist]` (JSON) | `saveState()` |
+| `hp.activePlaylistIndex` | `Int` | `saveState()` |
+| `hp.allowDuplicateTracks` | `Bool` | `saveState()` |
+| `hp.volume` | `Float` | `saveState()` |
+| `hp.selectedLanguage` | `String` | `saveState()` + Combine sink |
+| `hp.repeatMode` | `RepeatMode` (JSON) | `saveState()` |
+| `hp.isShuffled` | `Bool` | `saveState()` |
+| `hp.replayGainMode` | `String` | `saveState()` + Combine sink |
+| `hp.isProUnlocked` | `Bool` | `StoreKitIAPManager` (didSet) |
+
+Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`.
+
+---
+
+## 9. Module Boundaries Summary
+
+```
+Views -> AppState (only)
+AppState -> PlaybackService, TagReaderService, CoreFactory, IAPManager (protocols)
+CoreFactory -> CoreServiceProviding -> HarmoniaCore (via Integration Layer)
+Integration Layer -> HarmoniaCore ports + adapters (import HarmoniaCore)
+```
+
+`import HarmoniaCore` restricted to: `HarmoniaCoreProvider.swift`, `HarmoniaPlaybackServiceAdapter.swift`, `HarmoniaTagReaderAdapter.swift`.
+
+See [Module Boundaries](module_boundary.md) for complete rules.
+
+---
+
+## 10. Cross-References
+
+- [Architecture](architecture.md)
+- [Module Boundaries](module_boundary.md)
+- [Implementation Guide (Swift)](implementation_guide_swift.md)
+- [Development Guide](development_guide.md)
+- [HarmoniaCore Architecture](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/01_architecture.md)
+- [HarmoniaCore Services](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/04_services.md)
+- [HarmoniaCore Models](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
