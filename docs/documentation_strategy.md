@@ -1,327 +1,329 @@
-# 🧭 Documentation Strategy
+# Documentation Strategy
 
-This document defines how documentation is organized in HarmoniaPlayer.
+This document defines how documentation is organised, named, and maintained
+across the HarmoniaPlayer repository and the broader Harmonia ecosystem.
+The intended audience is documentation maintainers — contributors who
+write, review, or update `.md` files.
 
 ---
 
-## 🌐 HarmoniaSuite Ecosystem
+## 1. Three-Repo Ecosystem
 
-HarmoniaPlayer is part of a multi-repository ecosystem:
+HarmoniaPlayer is one of three repositories. Each has a distinct documentation
+role:
 
 ```
-HarmoniaCore (Main)
-├── apple-swift/              → Becomes → HarmoniaCore-Swift (SPM)
-├── linux-cpp/                → Future
-└── docs/specs/               → Specifications
-
-HarmoniaPlayer (This Repo)
-└── depends on → HarmoniaCore-Swift
+┌─────────────────────────────────┐
+│  HarmoniaPlayer (this repo)     │  App-level docs
+│  SwiftUI macOS application      │  - UI / UX, user guide
+└──────────────┬──────────────────┘  - App architecture, module boundaries
+               │ SPM dependency       - IAP, persistence, platform integration
+               │
+┌──────────────▼──────────────────┐  Deploy-package docs
+│  HarmoniaCore-Swift             │  - SPM usage, version pinning
+│  Swift Package (subtree split)  │  - Adapter catalogue
+└──────────────┬──────────────────┘
+               │ implements spec from
+┌──────────────▼──────────────────┐  Specification docs
+│  HarmoniaCore                   │  - Ports, services, models specs
+│  Source repo (Swift + C++)      │  - Cross-platform contracts
+└─────────────────────────────────┘  - Implementation guides per language
 ```
 
----
+### 1.1 Documentation scope by repo
 
-## 📁 Directory Policy
+Each repo documents only its own concerns. When a topic crosses boundaries,
+link to the source of truth rather than duplicating.
 
-All documentation lives under `/docs/` (except root-level files).
-
-**Root-level files:**
-- `README.md` - Project overview and quick start
-- `CHANGELOG.md` - Version history
-- `LICENSE.md` - MIT License
-
-**Documentation files:**
-- `docs/architecture.md` - System architecture
-- `docs/development_guide.md` - Developer guide
-- `docs/documentation_strategy.md` - This file
-- `docs/user_guide.md` - End-user usage and interaction guide
+| Topic | Documented in |
+|-------|---------------|
+| User-facing features, UI, keyboard shortcuts | **HarmoniaPlayer** |
+| App architecture (AppState, Integration Layer, module boundaries) | **HarmoniaPlayer** |
+| IAP, persistence, SwiftUI patterns | **HarmoniaPlayer** |
+| SPM package setup, version tagging workflow | **HarmoniaCore-Swift** |
+| Port interfaces, service contracts, error types | **HarmoniaCore** |
+| Apple/C++ adapter implementation notes | **HarmoniaCore** (`docs/impl/`) |
 
 ---
 
-## 🧩 Document Categories
+## 2. Directory Policy
 
-| Category | Files | Purpose |
-|----------|-------|---------|
-| **Architecture** | `architecture.md` | System design and structure |
-| **Development** | `development_guide.md` | Setup, workflow, IAP integration |
-| **User Docs** | `user_guide.md` | How to use the app |
-| **Meta** | `documentation_strategy.md` | Documentation policy |
-| **Changelog** | `CHANGELOG.md` | Version history |
+All HarmoniaPlayer documentation lives under `docs/`. Root-level files are
+limited to build/license essentials:
 
----
+**Root level:**
+- `README.md` — project overview, quick start, links
+- `LICENSE` — MIT License (no `.md` extension)
 
-## 📝 Documentation Scope
+**Under `docs/`:**
 
-### This Repository (HarmoniaPlayer)
+| File | Audience | Function |
+|------|----------|----------|
+| `architecture.md` | Anyone understanding the system | C4 diagrams, layer design, design principles |
+| `api_reference.md` | Developers using the API | Complete public interface: types, properties, methods, protocols |
+| `module_boundary.md` | Code reviewers | Allowed/forbidden dependencies, enforcement checklist, boundary examples |
+| `implementation_guide_swift.md` | Developers writing code | Swift patterns, error handling, IAP, testing patterns |
+| `development_guide.md` | New contributors | Setup, HarmoniaCore integration, cross-repo workflow, coding conventions, project structure |
+| `workflow.md` | All contributors | SDD → TDD → commit cycle |
+| `user_guide.md` | End users | Feature walkthrough, shortcuts, troubleshooting |
+| `documentation_strategy.md` | Documentation maintainers | This document — naming and update rules |
 
-Documents **application-level** concerns:
-- ✅ UI/UX architecture
-- ✅ User guides
-- ✅ IAP integration
-- ✅ Platform-specific app logic
-- ✅ Development setup
+**Under `docs/slice/`:**
 
-**Does NOT document:**
-- ❌ Core audio logic → See HarmoniaCore
-- ❌ Port specifications → See HarmoniaCore
-- ❌ Adapter implementations → See HarmoniaCore-Swift
+| File | Purpose |
+|------|---------|
+| `HarmoniaPlayer_development_plan.md` | High-level roadmap across slices |
+| `slice_NN_micro.md` | Per-slice spec — committed to repo |
+| `slice_NN_micro_draft.md` | In-progress draft slice spec |
+| `HarmoniaPlayer_slice_NN_micro.md` | **Local-only** detailed developer version — never pushed to git |
 
-### HarmoniaCore Repository
-
-Documents **framework-level** concerns:
-- Platform-agnostic specifications
-- Port interfaces
-- Service contracts
-- Cross-platform behavior
-
-### HarmoniaCore-Swift Repository
-
-Documents **implementation-level** concerns:
-- Swift-specific implementation notes
-- Apple platform adapters
-- SPM package usage
+See section 5 for the two-spec-file pattern.
 
 ---
 
-## 🔗 Cross-Repository Linking
+## 3. Per-Document Functional Definitions
 
-Always link to the **source of truth**.
+When updating a document, the content must stay within that document's
+functional scope. Don't let `api_reference.md` become a tutorial; don't
+let `development_guide.md` become an API catalogue.
 
-### For Specifications
+- **`README.md`** — project outline, installation, quick start, doc links. No deep technical content.
+- **`api_reference.md`** — exhaustive signatures. Every public type, property, method, protocol must be listed. No tutorials.
+- **`architecture.md`** — system design: C4 diagrams, layer relationships, design principles. No code examples beyond illustrative snippets.
+- **`module_boundary.md`** — dependency rules, boundary examples, enforcement checklist. Reviewer reference.
+- **`implementation_guide_swift.md`** — code-level patterns and working examples. The answer to "how do I implement X following project conventions?"
+- **`development_guide.md`** — new-contributor setup including repo layout, SPM wiring, cross-repo workflow, test doubles, Swift 6 conventions, project tree. This is the broadest document.
+- **`workflow.md`** — SDD → TDD red → confirm → TDD green → commit cycle. Commit atomicity rules.
+- **`user_guide.md`** — end-user feature walkthrough. No developer content.
+- **`documentation_strategy.md`** — this document.
 
-Link to HarmoniaCore main repository:
+---
+
+## 4. Naming Conventions
+
+### 4.1 Filenames
+
+- **Lowercase with underscores:** `development_guide.md`, not `DEVELOPMENT_GUIDE.md` or `development-guide.md`
+- **No date stamps in filenames** (Git tracks history)
+- **Descriptive nouns, not verbs:** `architecture.md`, not `design_the_app.md`
+- **English only** — no Traditional Chinese or romanisation in filenames
+
+### 4.2 Filename prefixes
+
+- **No prefix** for standard documents committed to the repo: `architecture.md`, `api_reference.md`, etc.
+- **`HarmoniaPlayer_` prefix** is reserved for **local-only** detailed developer files (never pushed). This is enforced at the author's side — see section 5.
+
+### 4.3 Document titles
+
+First-line H1 matches the filename's intent:
 
 ```markdown
-[DecoderPort Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md#decoderport)
-```
-
-### For Implementation
-
-Link to HarmoniaCore-Swift repository:
-
-```markdown
-[AVAssetReaderDecoderAdapter](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift/blob/main/Sources/HarmoniaCore/AVAssetReaderDecoderAdapter.swift)
-```
-
-### For SPM Integration
-
-Link to HarmoniaCore-Swift package:
-
-```markdown
-[HarmoniaCore-Swift Package](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)
+# HarmoniaPlayer Architecture        ← architecture.md
+# HarmoniaPlayer API Reference       ← api_reference.md
+# HarmoniaPlayer Module Boundary     ← module_boundary.md
 ```
 
 ---
 
-## 🧠 Maintenance Rules
+## 5. Two-Spec-File Pattern (Slices)
 
-### When to Update Architecture Docs
+Each development slice produces **two spec files**:
 
-Update `architecture.md` when:
-- Adding/removing directories
-- Changing project structure
-- Adding new targets
-- Modifying dependency setup
+| File | Location | Content | Commit? |
+|------|----------|---------|---------|
+| `slice_0X_micro.md` | `docs/slice/` | Concise reference: Goal / Scope / Files / API / TDD plan / Commit plan | **Yes** (committed to repo) |
+| `HarmoniaPlayer_slice_X_micro.md` | Same folder, ignored by git | Detailed developer version with working notes, alternatives considered, rough edges | **No** (local-only) |
 
-**Policy:** Update in the **same commit** as code changes.
+**Why two files:** the committed spec stays minimal and readable for future
+reference; the local file captures details and work-in-progress reasoning
+that would clutter the repo.
 
-**Example commit:**
-```bash
-git commit -m "feat: add iOS target
-
-- Created iOS/Free/ directory
-- Updated architecture.md to reflect new structure"
-```
-
-### When to Update CHANGELOG
-
-Update `CHANGELOG.md` when:
-- Adding new features
-- Fixing bugs
-- Making breaking changes
-- Releasing new versions
-
-**Format:** Follow [Keep a Changelog](https://keepachangelog.com/)
-
-**Example:**
-```markdown
-## [Unreleased]
-
-### ✨ Added
-- iOS Free target support
-- Album art display
-
-### 🐞 Fixed
-- Playback state sync issue
-```
-
-### When to Update User Guide
-
-Update `user_guide.md` when:
-- Changing UI behavior
-- Adding new features
-- Modifying keyboard shortcuts
-- Updating supported formats
-
-### When to Update Development Guide
-
-Update `DEVELOPMENT_GUIDE.md` when:
-- Changing development setup process
-- Adding new dependencies
-- Modifying build configuration
-- Updating IAP integration
+**Enforcement:** the `HarmoniaPlayer_` prefix is in `.gitignore` for slice
+files. Treat any accidentally-tracked `HarmoniaPlayer_slice_*.md` as a
+mistake to be removed.
 
 ---
 
-## 🧾 Commit Convention
+## 6. Language Rules
 
-Use these prefixes for documentation commits:
-
-- `docs:` - General documentation updates
-- `chore(docs):` - Maintenance (sorting, cleanup)
-- `feat(docs):` - New documentation sections
-- `fix(docs):` - Correction of errors
-
-**Examples:**
-```bash
-docs: update architecture.md after HarmoniaCore extraction
-chore(docs): fix typos in DEVELOPMENT_GUIDE.md
-feat(docs): add user_guide.md with keyboard shortcuts
-fix(docs): correct SPM dependency URL in README.md
-```
+- **Document content is English only.** All committed `.md` files in
+  `docs/` must be written in English.
+- **No Chinese text inside English-only documents.** If a discussion
+  happens in Traditional Chinese, translate the conclusions into English
+  before committing them to the doc.
+- **Chat/review discussion** between maintainers can use any language
+  (Traditional Chinese is the project default).
+- **Code, comments, commit messages are all English**, regardless of
+  discussion language.
 
 ---
 
-## 🔄 Synchronization with HarmoniaCore
+## 7. Content Rules
 
-### Avoid Duplication
+### 7.1 No third-party product or competitor brand names
 
-HarmoniaPlayer documentation should:
-- **Link to** HarmoniaCore docs for technical details
-- **Focus on** UI/UX and app-level architecture
-- **Avoid duplicating** HarmoniaCore specifications
+Spec files, architecture docs, and any committed doc must not reference
+competing products by name. If comparison context is needed, describe the
+category ("foobar2000-style playlist UI" is acceptable in commit
+descriptions but not in committed specs; use "tab-based playlist UI"
+instead).
 
-### Example: Audio Format Support
+### 7.2 No manual timestamps
 
-**❌ Bad (duplicates HarmoniaCore spec):**
-```markdown
-## Supported Formats
+Git tracks modification time. Don't add "Last updated: YYYY-MM-DD" to doc
+headers — it goes stale instantly.
 
-### DecoderPort Implementation Details
-The AVAssetReaderDecoderAdapter uses AVFoundation's AVAssetReader...
-(lengthy technical explanation)
-```
-
-**✅ Good (links to source of truth):**
-```markdown
-## Supported Formats
-
-**Free Version:**
-- MP3, AAC, ALAC, WAV, AIFF
-
-**Pro Version (v0.2+):**
-- All Free formats + FLAC, DSD
-
-For technical details on audio decoding, see [HarmoniaCore DecoderPort Specification](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md#decoderport).
-```
-
-### When to Document Locally
-
-Document in HarmoniaPlayer when:
-- Describing **UI-level** behavior (how the app uses HarmoniaCore)
-- Explaining **user-facing** features
-- Detailing **platform-specific** app logic (macOS menu bar, iOS background audio)
-
-Document in HarmoniaCore when:
-- Defining **port interfaces**
-- Specifying **service contracts**
-- Explaining **cross-platform** audio behavior
-
----
-
-## ⏰ Version Tracking
-
-### Do NOT Use Manual Timestamps
-
-❌ **Bad:**
-```markdown
-# Architecture
-
-...
-
-Last updated: 2026-01-15
-```
-
-✅ **Good:**
-```markdown
-# Architecture
-
-...
-
-(No timestamp - Git tracks this automatically)
-```
-
-### Where Time Information Lives
-
-| Requirement | Location |
-|-------------|----------|
-| **Document modification time** | Git commit timestamp |
-| **Feature release time** | `CHANGELOG.md` |
-| **Version correspondence** | Document header (optional) |
-| **Roadmap timeline** | `docs/slice/HarmoniaPlayer_development_plan.md` |
-
-### Optional: Version Tagging
-
-If a document describes a specific version:
+Exception: version-specific documents may include a version header:
 
 ```markdown
 # HarmoniaPlayer Architecture
 
-> This document describes HarmoniaPlayer v0.1 architecture.
-
-...
+> This document describes HarmoniaPlayer v0.1.
 ```
 
-Only use this when:
-- Document is **version-specific** (not updated frequently)
-- Major architectural changes between versions
-- Need to maintain historical documentation
+Use only when the doc is deliberately frozen to a version.
+
+### 7.3 Cross-repo linking
+
+Always link to the **source of truth**, not a copy.
+
+- For HarmoniaCore **specifications**:
+  ```
+  https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/03_ports.md
+  ```
+- For HarmoniaCore **implementation guides**:
+  ```
+  https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/04_services_impl.md
+  ```
+- For HarmoniaCore-Swift package:
+  ```
+  https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift
+  ```
+
+Relative links for in-repo docs:
+```markdown
+See [Module Boundaries](module_boundary.md) for enforcement rules.
+```
+
+### 7.4 Avoid duplicating HarmoniaCore specs
+
+If a topic is already documented in HarmoniaCore, link to it rather than
+copying. HarmoniaPlayer docs should describe **how the app consumes** the
+spec, not re-derive the spec.
 
 ---
 
-## 📋 Documentation Checklist
+## 8. Documentation Audit Rule
+
+When updating a document — especially after any code change — read the
+**full** document line by line and cross-check every claim against the
+actual `.swift` files in the repo. This applies to:
+
+- Every code example — verify type names, method signatures, access
+  levels, parameter labels against the real code
+- Every type mentioned in prose — verify it exists and is public
+- Every file path and filename — verify it matches the repo
+- Every feature described — verify it is actually implemented (or clearly
+  marked as planned)
+
+**Grep-only audits are insufficient.** A keyword search can miss stale
+paragraphs that don't contain the keyword. Read the document start to
+finish.
+
+For `api_reference.md` specifically: every public type, property, and
+method must be listed. Use a directory listing of `Shared/Models/` and
+`Shared/Services/` as the checklist.
+
+---
+
+## 9. Update Triggers
+
+When any of the following happens, the listed documents must be updated
+in the same commit (or in a separate `docs(...)` commit immediately
+following):
+
+| Change | Documents to update |
+|--------|---------------------|
+| Add / remove `.swift` file | `api_reference.md` (if public API), `development_guide.md` project structure tree |
+| Rename / move file | All docs referencing the old path |
+| Change public method signature | `api_reference.md`, `implementation_guide_swift.md` (if in examples) |
+| Change module boundary | `module_boundary.md`, `architecture.md` |
+| Add / remove keyboard shortcut | `user_guide.md` |
+| Change persistence key | `api_reference.md` persistence table |
+| Change cross-repo wiring (SPM, provider) | `development_guide.md`, `implementation_guide_swift.md`, `README.md` |
+
+---
+
+## 10. Commit Conventions for Docs
+
+Documentation commits use conventional-commits prefixes:
+
+- `docs:` — general documentation updates
+- `docs(file):` — updates to a specific file
+- `chore(docs):` — typo fixes, formatting, link repair
+- `feat(docs):` — new documentation sections or files
+- `fix(docs):` — correcting technical errors
+
+**Format rules (project-wide):**
+- Bullet points use `-` only; no `*` or `•`
+- Facts only in bullets; no prose paragraphs in commit bodies
+- Spec commits are separate from code commits
+
+**Examples:**
+
+```
+docs(architecture): remove Linux / C++ platform references
+
+- Remove Section 3.2 Linux / C++ (deferred from HarmoniaCore)
+- Update C4 Level 1 to show only macOS path
+- Update design principles to remove cross-platform language
+
+chore(docs): fix outdated ioError mapping in api_reference
+
+- Correct CoreError.ioError → PlaybackError mapping
+- Old: .outputError
+- New: .failedToOpenFile
+
+feat(docs): add workflow.md for SDD → TDD → commit cycle
+```
+
+---
+
+## 11. Pre-Commit Documentation Checklist
 
 Before committing documentation changes:
 
-- [ ] All cross-repository links are valid
+- [ ] All cross-repo links verified to resolve
+- [ ] All in-repo relative links verified to resolve
 - [ ] No manual timestamps added
-- [ ] CHANGELOG.md updated (if applicable)
-- [ ] architecture.md updated (if structure changed)
+- [ ] Document language is English only
+- [ ] No competitor brand names introduced
+- [ ] All code examples match actual `.swift` files
+- [ ] Type names, method signatures, access levels match code
+- [ ] Filename references match actual filenames (case-sensitive)
 - [ ] Commit message follows convention
-- [ ] No duplication of HarmoniaCore specs
-- [ ] All code examples compile
-- [ ] Markdown formatting is correct
+- [ ] No duplication of HarmoniaCore specs (link instead)
+- [ ] Full document read end-to-end (not grep-only)
 
 ---
 
-## 🎯 Quality Standards
+## 12. Quality Standards
 
-### Clear and Concise
+### Clarity
 
-- Use simple language
-- Short paragraphs (3-5 sentences max)
-- Bullet points for lists
-- Code examples for clarity
+- Short paragraphs (3–5 sentences)
+- Bullet points for enumerations
+- Tables for cross-reference lookup
+- Code blocks for anything a reader might copy
 
-### Accurate
+### Accuracy
 
-- Test all code examples
-- Verify all links
-- Keep synchronized with codebase
-- Update when behavior changes
+- Every code example compiles against the current repo
+- No invented types, methods, or features
+- Planned features clearly marked as such ("v0.2 Pro", "deferred")
 
-### Accessible
+### Navigation
 
-- Use headings for navigation
-- Add table of contents for long docs
-- Include examples
-- Link to related documentation
+- Table of contents for documents over ~200 lines
+- Section numbering consistent within each document
+- Cross-references to other docs use relative paths
