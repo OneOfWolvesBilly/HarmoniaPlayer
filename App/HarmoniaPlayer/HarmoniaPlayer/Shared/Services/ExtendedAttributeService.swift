@@ -40,6 +40,14 @@ enum ExtendedAttributeError: Error, LocalizedError {
 
 /// Service for reading and writing the kMDItemWhereFroms extended attribute.
 ///
+/// Marked `nonisolated` because this service is a pure Darwin xattr syscall
+/// wrapper (`getxattr` / `setxattr` / `removexattr`) with no UI state and no
+/// shared mutable state. Under Default Actor Isolation = MainActor it would
+/// otherwise be inferred as `@MainActor`, which would incorrectly prevent
+/// background use and break `nonisolated` adapters such as
+/// `DarwinFileOriginAdapter` that need to call `ExtendedAttributeService()`
+/// from a nonisolated context.
+///
 /// Usage:
 /// ```swift
 /// let svc = ExtendedAttributeService()
@@ -47,7 +55,7 @@ enum ExtendedAttributeError: Error, LocalizedError {
 /// try svc.writeWhereFroms(["https://example.com"], url: fileURL)
 /// try svc.clearWhereFroms(url: fileURL)
 /// ```
-struct ExtendedAttributeService {
+nonisolated struct ExtendedAttributeService {
 
     // MARK: - Constants
 
