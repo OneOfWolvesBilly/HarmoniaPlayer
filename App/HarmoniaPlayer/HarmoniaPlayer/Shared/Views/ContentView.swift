@@ -62,7 +62,7 @@ struct ContentView: View {
         .focusedValue(\.playbackState, appState.playbackState)
         // File Info panel — presented when appState.fileInfoTrack is set
         .sheet(item: $appState.fileInfoTrack) { track in
-            FileInfoView(track: track)
+            FileInfoView(track: track, languageBundle: appState.languageBundle)
         }
         // Paywall sheet — presented when a Free user triggers a Pro-only action
         .sheet(isPresented: $appState.showPaywall) {

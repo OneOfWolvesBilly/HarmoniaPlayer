@@ -152,3 +152,36 @@
 
 // Slice 9-A fix: Paywall session skip checkbox
 "paywall_skip_session_checkbox" = "For this session, skip paid formats during auto-play without reminding me again.";
+
+// Slice 9-B: FileInfoView read-only + localisation
+"file_info_section_artwork" = "ARTWORK";
+"file_info_section_location" = "LOCATION";
+"file_info_section_tags" = "TAGS";
+"file_info_section_technical" = "TECHNICAL";
+"file_info_section_source" = "SOURCE";
+"file_info_artwork_none" = "No Artwork";
+"file_info_label_file_name" = "File Name";
+"file_info_label_folder" = "Folder";
+"file_info_label_path" = "Path";
+"file_info_label_file_size" = "File Size";
+"file_info_label_modified" = "Modified";
+"file_info_label_created" = "Created";
+"file_info_label_title" = "Title";
+"file_info_label_artist" = "Artist";
+"file_info_label_album" = "Album";
+"file_info_label_album_artist" = "Album Artist";
+"file_info_label_composer" = "Composer";
+"file_info_label_genre" = "Genre";
+"file_info_label_year" = "Year";
+"file_info_label_track" = "Track";
+"file_info_label_disc" = "Disc";
+"file_info_label_bpm" = "BPM";
+"file_info_label_comment" = "Comment";
+"file_info_label_replaygain_track" = "ReplayGain Track";
+"file_info_label_replaygain_album" = "ReplayGain Album";
+"file_info_label_format" = "Format";
+"file_info_label_duration" = "Duration";
+"file_info_label_bit_rate" = "Bit Rate";
+"file_info_label_sample_rate" = "Sample Rate";
+"file_info_label_channels" = "Channels";
+"file_info_source_none" = "(none)";

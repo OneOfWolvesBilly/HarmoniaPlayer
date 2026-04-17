@@ -6,26 +6,26 @@
 //
 //  PURPOSE
 //  -------
-//  Sheet-style "Get Info" panel for a single track.
+//  Sheet-style "Get Info" panel for a single track. Read-only.
 //  Displays five sections:
-//    • Artwork    — embedded cover art image with dimensions, format, size (read-only)
-//    • Location   — fileName, folder, path, fileSize, modified, created (read-only)
+//    • Artwork    — embedded cover art image with dimensions, format, size
+//    • Location   — fileName, folder, path, fileSize, modified, created
 //    • Tags       — title, artist, album, albumArtist, composer, genre, year,
 //                   trackNumber/trackTotal, discNumber/discTotal, bpm, comment,
-//                   replayGainTrack, replayGainAlbum (read-only)
-//    • Technical  — format, duration, bitrate, sampleRate, channels (read-only)
-//    • Source     — kMDItemWhereFroms URLs; supports Edit and Clear (editable)
+//                   replayGainTrack, replayGainAlbum
+//    • Technical  — format, duration, bitrate, sampleRate, channels
+//    • Source     — kMDItemWhereFroms URLs (read-only display)
 //
 //  DESIGN NOTES
 //  ------------
 //  - Presented as a sheet from ContentView via $appState.fileInfoTrack.
-//  - ExtendedAttributeService is called directly inside this view because
-//    it is a pure Darwin utility, not a HarmoniaCore service.
-//    (Architecture rule: "import HarmoniaCore" is restricted to the three
-//    Integration Layer adapters. ExtendedAttributeService has no HarmoniaCore
-//    dependency, so calling it from a view is within bounds.)
-//  - All disk I/O runs synchronously on the calling thread (xattr calls are
-//    cheap; no background queue needed for these payloads).
+//  - Source editing is deferred to the v0.2 Tag Editor. This view does not
+//    write xattrs; it only reads kMDItemWhereFroms for display via
+//    ExtendedAttributeService.
+//  - All disk I/O runs synchronously on the calling thread (xattr and
+//    FileManager attribute calls are cheap).
+//  - Receives `languageBundle` as an init parameter so UI strings resolve
+//    through the user-selected language bundle.
 //  - No import HarmoniaCore.
 //
 
@@ -37,6 +37,7 @@ struct FileInfoView: View {
     // MARK: - Input
 
     let track: Track
+    let languageBundle: Bundle
 
     // MARK: - Environment
 
@@ -47,9 +48,13 @@ struct FileInfoView: View {
     private let xattrService = ExtendedAttributeService()
 
     @State private var whereSources: [String] = []
-    @State private var isEditing: Bool = false
-    @State private var editText: String = ""
     @State private var fileAttributes: FileAttributeInfo = .empty
+
+    // MARK: - Localization helper
+
+    private func L(_ key: String) -> String {
+        NSLocalizedString(key, bundle: languageBundle, comment: "")
+    }
 
     // MARK: - Body
 
@@ -100,7 +105,7 @@ struct FileInfoView: View {
     // MARK: - Artwork Section
 
     private var artworkSection: some View {
-        InfoSection(title: "ARTWORK") {
+        InfoSection(title: L("file_info_section_artwork")) {
             VStack(spacing: 8) {
                 if let data = track.artworkData,
                    let nsImage = NSImage(data: data) {
@@ -131,7 +136,7 @@ struct FileInfoView: View {
                     .font(.system(size: 32))
                     .foregroundStyle(Color.secondary.opacity(0.5))
             }
-            Text("No Artwork")
+            Text(L("file_info_artwork_none"))
                 .font(.caption)
                 .foregroundStyle(Color.secondary)
         }
@@ -200,18 +205,18 @@ struct FileInfoView: View {
     // MARK: - Location Section
 
     private var locationSection: some View {
-        InfoSection(title: "LOCATION") {
-            InfoRow(label: "File Name",
+        InfoSection(title: L("file_info_section_location")) {
+            InfoRow(label: L("file_info_label_file_name"),
                     value: track.url.lastPathComponent)
-            InfoRow(label: "Folder",
+            InfoRow(label: L("file_info_label_folder"),
                     value: track.url.deletingLastPathComponent().path)
-            InfoRow(label: "Path",
+            InfoRow(label: L("file_info_label_path"),
                     value: track.url.path)
-            InfoRow(label: "File Size",
+            InfoRow(label: L("file_info_label_file_size"),
                     value: fileSizeString)
-            InfoRow(label: "Modified",
+            InfoRow(label: L("file_info_label_modified"),
                     value: fileAttributes.modificationDate.map(dateString) ?? "\u{2014}")
-            InfoRow(label: "Created",
+            InfoRow(label: L("file_info_label_created"),
                     value: fileAttributes.creationDate.map(dateString) ?? "\u{2014}")
         }
     }
@@ -219,32 +224,32 @@ struct FileInfoView: View {
     // MARK: - Tags Section
 
     private var tagsSection: some View {
-        InfoSection(title: "TAGS") {
-            InfoRow(label: "Title",
+        InfoSection(title: L("file_info_section_tags")) {
+            InfoRow(label: L("file_info_label_title"),
                     value: track.title.isEmpty ? "\u{2014}" : track.title)
-            InfoRow(label: "Artist",
+            InfoRow(label: L("file_info_label_artist"),
                     value: track.artist.isEmpty ? "\u{2014}" : track.artist)
-            InfoRow(label: "Album",
+            InfoRow(label: L("file_info_label_album"),
                     value: track.album.isEmpty ? "\u{2014}" : track.album)
-            InfoRow(label: "Album Artist",
+            InfoRow(label: L("file_info_label_album_artist"),
                     value: track.albumArtist.isEmpty ? "\u{2014}" : track.albumArtist)
-            InfoRow(label: "Composer",
+            InfoRow(label: L("file_info_label_composer"),
                     value: track.composer.isEmpty ? "\u{2014}" : track.composer)
-            InfoRow(label: "Genre",
+            InfoRow(label: L("file_info_label_genre"),
                     value: track.genre.isEmpty ? "\u{2014}" : track.genre)
-            InfoRow(label: "Year",
+            InfoRow(label: L("file_info_label_year"),
                     value: track.year.map(String.init) ?? "\u{2014}")
-            InfoRow(label: "Track",
+            InfoRow(label: L("file_info_label_track"),
                     value: trackNumberString)
-            InfoRow(label: "Disc",
+            InfoRow(label: L("file_info_label_disc"),
                     value: discNumberString)
-            InfoRow(label: "BPM",
+            InfoRow(label: L("file_info_label_bpm"),
                     value: track.bpm.map(String.init) ?? "\u{2014}")
-            InfoRow(label: "Comment",
+            InfoRow(label: L("file_info_label_comment"),
                     value: track.comment.isEmpty ? "\u{2014}" : track.comment)
-            InfoRow(label: "ReplayGain Track",
+            InfoRow(label: L("file_info_label_replaygain_track"),
                     value: track.replayGainTrack.map { String(format: "%.2f dB", $0) } ?? "\u{2014}")
-            InfoRow(label: "ReplayGain Album",
+            InfoRow(label: L("file_info_label_replaygain_album"),
                     value: track.replayGainAlbum.map { String(format: "%.2f dB", $0) } ?? "\u{2014}")
         }
     }
@@ -252,16 +257,16 @@ struct FileInfoView: View {
     // MARK: - Technical Section
 
     private var technicalSection: some View {
-        InfoSection(title: "TECHNICAL") {
-            InfoRow(label: "Format",
+        InfoSection(title: L("file_info_section_technical")) {
+            InfoRow(label: L("file_info_label_format"),
                     value: track.fileFormat.isEmpty ? "\u{2014}" : track.fileFormat.uppercased())
-            InfoRow(label: "Duration",
+            InfoRow(label: L("file_info_label_duration"),
                     value: durationString(track.duration))
-            InfoRow(label: "Bit Rate",
+            InfoRow(label: L("file_info_label_bit_rate"),
                     value: track.bitrate.map { "\($0) kbps" } ?? "\u{2014}")
-            InfoRow(label: "Sample Rate",
+            InfoRow(label: L("file_info_label_sample_rate"),
                     value: track.sampleRate.map { String(format: "%.0f Hz", $0) } ?? "\u{2014}")
-            InfoRow(label: "Channels",
+            InfoRow(label: L("file_info_label_channels"),
                     value: channelsString(track.channels))
         }
     }
@@ -269,83 +274,25 @@ struct FileInfoView: View {
     // MARK: - Source Section
 
     private var sourceSection: some View {
-        InfoSection(title: "SOURCE") {
-            if isEditing {
-                sourceEditingContent
-            } else {
-                sourceReadOnlyContent
-            }
-        }
-    }
-
-    private var sourceReadOnlyContent: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if whereSources.isEmpty {
-                Text("(none)")
-                    .font(.body)
-                    .foregroundStyle(Color.secondary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 4)
-            } else {
-                ForEach(whereSources, id: \.self) { source in
-                    Text(source)
+        InfoSection(title: L("file_info_section_source")) {
+            VStack(alignment: .leading, spacing: 6) {
+                if whereSources.isEmpty {
+                    Text(L("file_info_source_none"))
                         .font(.body)
-                        .foregroundStyle(Color.primary)
-                        .textSelection(.enabled)
-                        .lineLimit(2)
+                        .foregroundStyle(Color.secondary)
                         .padding(.horizontal, 16)
-                }
-            }
-
-            HStack(spacing: 8) {
-                Button("Edit") {
-                    editText = whereSources.joined(separator: "\n")
-                    isEditing = true
-                }
-                .accessibilityIdentifier("source-edit-button")
-
-                if !whereSources.isEmpty {
-                    Button("Clear", role: .destructive) {
-                        clearSources()
+                        .padding(.top, 4)
+                } else {
+                    ForEach(whereSources, id: \.self) { source in
+                        Text(source)
+                            .font(.body)
+                            .foregroundStyle(Color.primary)
+                            .textSelection(.enabled)
+                            .lineLimit(2)
+                            .padding(.horizontal, 16)
                     }
-                    .accessibilityIdentifier("source-clear-button")
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-        }
-    }
-
-    private var sourceEditingContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Enter one URL per line:")
-                .font(.caption)
-                .foregroundStyle(Color.secondary)
-                .padding(.horizontal, 16)
-
-            TextEditor(text: $editText)
-                .font(.body)
-                .frame(height: 80)
-                .padding(4)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .stroke(Color.accentColor, lineWidth: 1)
-                )
-                .padding(.horizontal, 16)
-                .accessibilityIdentifier("source-edit-texteditor")
-
-            HStack(spacing: 8) {
-                Button("Save") {
-                    saveSources()
-                }
-                .accessibilityIdentifier("source-save-button")
-
-                Button("Cancel") {
-                    isEditing = false
-                }
-                .accessibilityIdentifier("source-cancel-button")
-            }
-            .padding(.horizontal, 16)
         }
     }
 
@@ -361,21 +308,6 @@ struct FileInfoView: View {
             modificationDate: attrs[.modificationDate] as? Date,
             creationDate: attrs[.creationDate] as? Date
         )
-    }
-
-    private func clearSources() {
-        try? xattrService.clearWhereFroms(url: track.url)
-        loadWhereSources()
-    }
-
-    private func saveSources() {
-        let lines = editText
-            .components(separatedBy: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        try? xattrService.writeWhereFroms(lines, url: track.url)
-        isEditing = false
-        loadWhereSources()
     }
 
     // MARK: - Formatting Helpers

@@ -152,3 +152,36 @@
 
 // Slice 9-A fix: Paywall session skip checkbox
 "paywall_skip_session_checkbox" = "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒";
+
+// Slice 9-B: FileInfoView read-only + localisation
+"file_info_section_artwork" = "封面";
+"file_info_section_location" = "位置";
+"file_info_section_tags" = "標籤";
+"file_info_section_technical" = "技術資訊";
+"file_info_section_source" = "來源";
+"file_info_artwork_none" = "沒有封面";
+"file_info_label_file_name" = "檔案名稱";
+"file_info_label_folder" = "資料夾";
+"file_info_label_path" = "路徑";
+"file_info_label_file_size" = "檔案大小";
+"file_info_label_modified" = "修改日期";
+"file_info_label_created" = "建立日期";
+"file_info_label_title" = "標題";
+"file_info_label_artist" = "演出者";
+"file_info_label_album" = "專輯";
+"file_info_label_album_artist" = "專輯演出者";
+"file_info_label_composer" = "作曲者";
+"file_info_label_genre" = "類型";
+"file_info_label_year" = "年份";
+"file_info_label_track" = "曲目編號";
+"file_info_label_disc" = "光碟編號";
+"file_info_label_bpm" = "BPM";
+"file_info_label_comment" = "備註";
+"file_info_label_replaygain_track" = "ReplayGain 曲目";
+"file_info_label_replaygain_album" = "ReplayGain 專輯";
+"file_info_label_format" = "格式";
+"file_info_label_duration" = "時長";
+"file_info_label_bit_rate" = "位元速率";
+"file_info_label_sample_rate" = "取樣率";
+"file_info_label_channels" = "聲道";
+"file_info_source_none" = "（無）";
