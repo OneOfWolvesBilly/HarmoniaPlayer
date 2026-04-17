@@ -2,20 +2,20 @@
 
 ## Purpose
 
-This document defines **Slice 9: Pro Tier — IAP, Tag Editor, Lyrics, Now Playing, Gapless**
+This document defines **Slice 9: StoreKit 2 IAP + v0.1 Free Preparation**
 for HarmoniaPlayer.
 
-Slice 9 implements the full Pro purchase flow via StoreKit 2 and unlocks
-Pro-only features: FLAC/DSD playback (already gated in Slice 5-A), Tag Editor,
-LRC synchronised lyrics, and Gapless playback. Two all-tier features are also
-added in this slice: USLT static lyrics display/edit and MPNowPlayingInfoCenter
-integration.
+Slice 9 builds the StoreKit 2 purchase infrastructure, freezes Pro features
+for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 
 > **Prerequisite:** HarmoniaCore TagBundle patch must be committed before any
 > Slice 9 work begins. The patch adds `composer`, `trackTotal`, `discTotal`,
 > `bpm`, `replayGainTrack`, `replayGainAlbum`, `comment` to `TagBundle` and
-> updates `AVMetadataTagReaderAdapter` accordingly. Without this patch,
-> `HarmoniaTagReaderAdapter` does not compile.
+> updates `AVMetadataTagReaderAdapter` accordingly.
+
+> **Prerequisite (9-B):** HarmoniaCore `AVMutableTagWriterAdapter` bug fix must
+> be committed before 9-B work begins. Replace `removeItem` + `moveItem` with
+> `replaceItemAt` for atomic file replacement.
 
 ---
 
@@ -23,149 +23,145 @@ integration.
 
 ### Sub-slice summary
 
-| Sub-slice | Content | Tier |
-|---|---|---|
-| 9-A | StoreKit 2 IAP + Paywall UI | — |
-| 9-B | Tag Editor — basic fields | Pro |
-| 9-C | Tag Editor — sort fields | Pro |
-| 9-D | Tag Editor — artwork | Pro |
-| 9-E | Lyrics — USLT static display + edit | All tiers |
-| 9-F | Lyrics — LRC synchronised display | Pro |
-| 9-G | MPNowPlayingInfoCenter + MPRemoteCommandCenter | All tiers |
-| 9-H | Gapless playback | Pro |
+| Sub-slice | Content | Tier | Status |
+|---|---|---|---|
+| 9-A | StoreKit 2 IAP infra + Paywall (built, UI hidden) + v0.1 Free load gate | — | ✅ |
+| Post-9-A | v0.1 freeze fixes + architecture cleanup (pre-9-B preparation) | Free | ✅ |
+| 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | Free | v0.1 |
+| 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | Free | v0.1 |
+| 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | v0.1 |
+| 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | v0.1 |
+| 9-F | Multi-artwork support (ID3v2 APIC picture types) | Free | v0.1 |
+| 9-G | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
+| 9-H | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | v0.1 |
+| 9-I | Fix Xcode warnings (cosmetic) | Free | v0.1 |
 
-### Goals
-- Implement real StoreKit 2 purchase flow for Pro unlock
-- Show Paywall UI when user attempts a Pro-only action
-- Unlock FLAC/DSD playback after purchase (format gating already in place)
-- Allow Pro users to edit audio file tags (ID3 / MP4 metadata)
-- Display and edit embedded lyrics (USLT) for all users
-- Synchronised LRC lyrics display for Pro users
-- Integrate macOS Now Playing media control centre for all users
-- Eliminate silence gap between tracks for Pro users (Gapless)
+v0.2 Pro features (Tag Editor editing, Lyrics, Now Playing, Gapless, Equalizer)
+are planned in [Slice 10](slice_10_micro_draft.md). Their priority will be
+evaluated after Free v0.1 ships.
+
+### Goals (v0.1)
+
+- Build StoreKit 2 purchase flow (`StoreKitIAPManager`) ✅
+- Build Paywall sheet (`PaywallView`) — hidden in v0.1 ✅
+- Gate FLAC/DSF/DFF at load time — blocked as unsupported ✅
+- Add batch operation safety (`isPerformingBlockingOperation`, sub-batch save) ✅
+- Add directory drag-and-drop with recursive scanning (`FileDropService`) ✅
+- Fix HarmoniaCore tag writer to preserve xattr on file replacement
+- Make FileInfoView read-only (source editing deferred to v0.2 Tag Editor)
+- Define `FileOriginService` protocol (infrastructure for v0.2)
+- Fix `saveSources()`/`clearSources()` silent `try?` to show error alert
+- Add Codec + Encoding to FileInfoView Technical section
+- Convert FileInfoView from `.sheet` to independent `WindowGroup`
+- Fix polling loop CPU issue (proper `CancellationError` handling)
+- Add multi-artwork support (ID3v2 APIC picture types)
+- Add error reporting Phase 1 (mailto prefilled)
+- Investigate Play/Pause menu label update reliability
+- Fix Xcode warnings in test files
 
 ### Non-goals
-- Tag editor for FLAC / Vorbis Comment (requires HarmoniaCore TagLib support, future)
-- Equalizer / DSP (Slice 10-A)
-- iCloud sync (future)
-- Word-level karaoke / SYLT tag (post-Slice 9 backlog)
+- Pro paywall visible in v0.1 (deferred to v0.2)
+- FLAC/DSD playback (deferred to v0.2)
+- Tag editing UI (deferred to v0.2 — see Slice 10)
 
 ### Constraints
 - `import HarmoniaCore` restricted to Integration Layer files only
-- Tag writing uses `AVMutableMetadataItem` (Apple formats only — MP3, AAC, ALAC, AIFF)
-- Format gating for FLAC/DSD already in `AppState.play(trackID:)` — no changes needed
-- All new Pro-only actions must call `AppState.showPaywallIfNeeded()` before proceeding
+- All Pro UI commented out but code preserved for v0.2 restore
+- File origin (`kMDItemWhereFroms`) is filesystem metadata, not audio metadata —
+  `FileOriginService` lives in Application Layer, not HarmoniaCore
 
 ### Dependencies
 - Requires: Slice 8 complete
 - Requires: HarmoniaCore TagBundle patch committed
+- Requires: HarmoniaCore `AVMutableTagWriterAdapter` replaceItemAt fix (before 9-B)
 - Requires: App Store Connect product ID configured (`harmoniaplayer.pro`)
-- Requires: Slice 7-G Track model (Groups A–E fields already defined)
 
 ---
 
-## Slice 9-A: StoreKit 2 IAP + Paywall UI
+## Slice 9-A: StoreKit 2 IAP Infrastructure + v0.1 Free Load Gate ✅
 
 ### Goal
-Replace `FreeTierIAPManager` with a real StoreKit 2 implementation.
-Show a Paywall sheet when the user attempts a Pro-only action on the Free tier.
+Build the full StoreKit 2 IAP infrastructure and Paywall UI. Then freeze
+all Pro features for v0.1 Free release: FLAC/DSF/DFF blocked at load time,
+Pro UI hidden.
 
 ### Scope
+
+#### StoreKit 2 infrastructure
 - Extend `IAPManager` protocol: add `refreshEntitlements() async` and
   `purchasePro() async throws`
 - Implement `StoreKitIAPManager` conforming to `IAPManager`:
-  - `refreshEntitlements()` — verify existing purchases on launch via
-    `Transaction.currentEntitlements(for:)`
+  - `refreshEntitlements()` — verify existing purchases via
+    `Transaction.currentEntitlement(for:)`
   - `purchasePro()` — StoreKit 2 `Product.purchase()` flow
-  - `isProUnlocked: Bool` — `true` after verified purchase; persisted in
-    `UserDefaults` as a fast-read cache
-  - `Transaction.updates` listener Task started in `init()` — handles
-    Ask to Buy approvals, Family Sharing grants, and purchases completed
-    while the app was in the background; required by Apple for App Store
-    approval; `updatesTask` cancelled in `deinit`
-- `HarmoniaPlayerApp` uses `StoreKitIAPManager` in production;
-  `MockIAPManager` remains for tests
-- New `PaywallView` sheet:
-  - Shown when Free user triggers a Pro-only action
-  - Lists Pro features: FLAC/DSD, Tag Editor, LRC Sync, Gapless
-  - "Unlock Pro" button → calls `iapManager.purchasePro()`
-  - "Restore Purchases" button → calls `iapManager.refreshEntitlements()`
-- Add `AppState.showPaywall: Bool` — set `true` when any Pro action is blocked
-- `AppState.showPaywallIfNeeded() -> Bool` — returns `true` and sets
-  `showPaywall = true` when `!isProUnlocked`; returns `false` otherwise
+  - `isProUnlocked: Bool` — persisted in `UserDefaults` as fast-read cache
+  - `Transaction.updates` listener started in `init()`
+- `HarmoniaPlayerApp` uses `StoreKitIAPManager` in production
 - `AppState.featureFlags` changed to `private(set) var` — rebuilt after
-  `purchasePro()` and `refreshEntitlements()` so play gate reflects updated tier
-- Format handling in `load(urls:)`:
-  - All tiers: FLAC/DSF/DFF added to playlist; PlaylistView shows strikethrough
-    for Free users; `play(trackID:)` presents Paywall when user attempts playback
-  - All tiers: unrecognised formats blocked, `skippedUnsupportedURLs` set, alert shown
-  - `AppState.freeFormats` / `proOnlyFormats` static sets for classification
-- `AppState.paywallDismissedThisSession: Bool` — session-only flag; when `true`,
-  `trackDidFinishPlaying()` silently skips Pro-format tracks during auto-play;
-  manual selection always shows Paywall regardless
-- `AppState.play(trackID:)` format gate: posts `bringMainWindowToFront` notification
-  before `showPaywallIfNeeded()`; does NOT set `lastError` to avoid double modal
-- `PlaylistView`: Pro-format tracks show strikethrough + tertiary colour for Free users
-- `PlaylistView.openFilePicker()`: FLAC/DSF/DFF always visible in Open panel
-- `PaywallView`: add `L()` localisation helper; checkbox
-  "本次使用期間，自動播放遇到付費格式時直接跳過，不再提醒"
-  (default checked); sets `paywallDismissedThisSession` on Maybe Later
-- `MiniPlayerView`: track list popover with lock icon for format-gated tracks;
-  listens for `bringMainWindowToFront` notification to close self so Paywall
-  appears on main window
-- `HarmoniaPlayerCommands`: add `bringMainWindowToFront` `Notification.Name`
-- `HarmoniaPlayerApp`: `.defaultLaunchBehavior(.suppressed)` + `didFinishLaunching`
-  observer to prevent MiniPlayer auto-restoration on launch
-- `ContentView`: unsupported format alert binding
+  `purchasePro()` and `refreshEntitlements()`
+
+#### Paywall UI (built, hidden in v0.1)
+- New `PaywallView` sheet: lists Pro features, "Unlock Pro" button,
+  "Restore Purchases" button, session skip checkbox
+- `AppState.showPaywall: Bool`, `showPaywallIfNeeded() -> Bool`,
+  `paywallDismissedThisSession: Bool`
+- `MiniPlayerView`: track list popover, `bringMainWindowToFront`
+  notification listener to close self before Paywall shows on main window
+- `HarmoniaPlayerApp`: `.defaultLaunchBehavior(.suppressed)` +
+  `didFinishLaunching` observer to prevent MiniPlayer auto-restoration
+
+#### v0.1 Free load gate
+- `AppState.freeFormats` / `proOnlyFormats` static sets for classification
+- New `allowedFormats` computed property: v0.1 returns `freeFormats` only
+- New `isURLSupported(_:)` uses `allowedFormats`
+- `load(urls:)`: FLAC/DSF/DFF rejected, `skippedUnsupportedURLs` alert
+- `importPlaylist(from:)`: `isURLSupported()` check + final `saveState()`
+- Pro format gate in `play(trackID:)` commented out (unreachable)
+- `trackDidFinishPlaying()` Pro format gate commented out (3 places)
+- `openFilePicker` FLAC/DSF/DFF removed (commented out)
+- "Upgrade to Pro" menu commented out
+- Launch `refreshEntitlements` commented out
+
+#### Batch operation safety
+- New `isPerformingBlockingOperation: Bool` — set `true` / `defer false`
+  in `load(urls:)` and `importPlaylist(from:)`
+- Menu items disabled when flag is true; drop closures return `false`
+- Sub-batch save every 5 tracks (`saveBatchSize`) for crash safety
+
+#### Directory drag-and-drop
+- New `FileDropService`: validates URLs, recursively expands directories
+- `openFilePicker`: `canChooseDirectories = true`
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/IAPManager.swift`
-  (modify — add `IAPError`, `refreshEntitlements()`, `purchasePro()`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/FreeTierIAPManager.swift`
-  (modify — add stub `refreshEntitlements()`, `purchasePro()`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/StoreKitIAPManager.swift`
-  (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PaywallView.swift`
-  (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift`
-  (modify — Paywall sheet, unsupported format alert)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
-  (modify — Open panel always includes FLAC/DSF/DFF; strikethrough for
-  Pro-format tracks when Free tier)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/MiniPlayerView.swift`
-  (modify — track list popover with lock icon for format-gated tracks;
-  listen for `bringMainWindowToFront` notification to close self)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
-  (modify — add `bringMainWindowToFront` Notification.Name)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — `showPaywall`, `showPaywallIfNeeded()`, `paywallDismissedThisSession`,
-  `featureFlags` var, `freeFormats`/`proOnlyFormats`, `skippedUnsupportedURLs`,
-  load behaviour in `load(urls:)`, `trackDidFinishPlaying()` silent skip,
-  format gate posts `bringMainWindowToFront`, `purchasePro()`, `refreshEntitlements()`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
-  (modify — use `StoreKitIAPManager` in production; `.defaultLaunchBehavior(.suppressed)`;
-  `didFinishLaunching` observer closes restored MiniPlayer)
-- `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings`
-  (modify — add `alert_unsupported_format_title/body`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/zh-Hant.lproj/Localizable.strings`
-  (modify — add `alert_unsupported_format_title/body`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/ja.lproj/Localizable.strings`
-  (modify — add `alert_unsupported_format_title/body`)
 
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/MockIAPManager.swift`
-  (modify — add stub `refreshEntitlements()`, `purchasePro()`)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/IAPManagerTests.swift`
-  (modify — add `@MainActor`, `bundleURL` helper, Pro unlock flow tests)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateFormatGatingTests.swift`
-  (modify — replace play-gate FLAC+Free tests with load-gate tests)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/IntegrationTests.swift`
-  (modify — update `testIntegration_UnsupportedFormat_Free` for load gate)
+- `Shared/Services/IAPManager.swift` (modify)
+- `Shared/Services/FreeTierIAPManager.swift` (modify)
+- `Shared/Services/StoreKitIAPManager.swift` (new)
+- `Shared/Services/FileDropService.swift` (new)
+- `Shared/Views/PaywallView.swift` (new)
+- `Shared/Views/ContentView.swift` (modify)
+- `Shared/Views/PlaylistView.swift` (modify)
+- `macOS/Free/Views/MiniPlayerView.swift` (modify)
+- `macOS/Free/Views/HarmoniaPlayerCommands.swift` (modify)
+- `Shared/Models/AppState.swift` (modify)
+- `Shared/Models/AppState+Playlist.swift` (modify)
+- `Shared/Models/AppState+M3U8.swift` (modify)
+- `macOS/Free/HarmoniaPlayerApp.swift` (modify)
+- `{en,zh-Hant,ja}.lproj/Localizable.strings` (modify)
+
+Test target:
+- `FakeInfrastructure/MockIAPManager.swift` (modify)
+- `SharedTests/IAPManagerTests.swift` (modify)
+- `SharedTests/AppStateFormatGatingTests.swift` (modify)
+- `SharedTests/IntegrationTests.swift` (modify)
+- `SharedTests/AppStatePlayerlistTests.swift` (modify)
+- `SharedTests/AppStatePersistenceTests.swift` (modify)
+- `SharedTests/FileDropServiceTests.swift` (new)
 
 ### Public API shape
 
 ```swift
-// IAPManager protocol additions
+// IAPManager protocol
 protocol IAPManager: AnyObject {
     var isProUnlocked: Bool { get }
     func refreshEntitlements() async
@@ -174,29 +170,30 @@ protocol IAPManager: AnyObject {
 
 // StoreKitIAPManager
 final class StoreKitIAPManager: IAPManager {
-    private(set) var isProUnlocked: Bool = false
-    private var updatesTask: Task<Void, Never>?   // started in init(), cancelled in deinit
-    func refreshEntitlements() async
-    func purchasePro() async throws
+    private(set) var isProUnlocked: Bool   // didSet → UserDefaults
+    private var updatesTask: Task<Void, Never>?
 }
 
 // AppState additions
 @Published var showPaywall: Bool = false
-@Published var paywallDismissedThisSession: Bool = false   // session-only, not persisted
+@Published var paywallDismissedThisSession: Bool = false
 @Published var skippedUnsupportedURLs: [URL] = []
+@Published var isPerformingBlockingOperation: Bool = false
 
 static let freeFormats: Set<String>    = ["mp3", "aac", "m4a", "wav", "aiff", "alac"]
 static let proOnlyFormats: Set<String> = ["flac", "dsf", "dff"]
+static var allowedFormats: Set<String> { freeFormats }
+static let saveBatchSize = 5
 
 @discardableResult
 func showPaywallIfNeeded() -> Bool
-
-// Notification posted by AppState format gate; MiniPlayerView listens to close self
-extension Notification.Name {
-    static let bringMainWindowToFront = Notification.Name("harmoniaPlayer.bringMainWindowToFront")
-}
 func purchasePro() async throws
 func refreshEntitlements() async
+
+// FileDropService
+struct FileDropService {
+    func validate(_ urls: [URL]) -> [URL]
+}
 ```
 
 ### TDD matrix
@@ -206,656 +203,543 @@ func refreshEntitlements() async
 | `testIsProUnlocked_DefaultIsFalse` | Fresh `MockIAPManager` | read `isProUnlocked` | `false` |
 | `testShowPaywallIfNeeded_ReturnsTrueForFreeUser` | `isProUnlocked == false` | `showPaywallIfNeeded()` | returns `true`, `showPaywall == true` |
 | `testShowPaywallIfNeeded_ReturnsFalseForProUser` | `isProUnlocked == true` | `showPaywallIfNeeded()` | returns `false`, `showPaywall == false` |
-| `testLoad_FLAC_FreeTier_AddsToPlaylist` | `isProUnlocked == false`, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1`, `showPaywall == false` |
-| `testLoad_FLAC_ProTier_AddsToPlaylist` | `isProUnlocked == true`, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
+| `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read | `false` |
 | `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
-| `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
-| `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `fakePlaybackService.loadCallCount == 0` |
-| `testPlayGate_FLAC_FreeTier_DoesNotSetLastError` | Free, FLAC in playlist | `play(trackID:)` | `lastError == nil` |
-| `testPlayGate_FLAC_FreeTier_PostsBringMainWindowToFrontNotification` | Free, FLAC in playlist | `play(trackID:)` | `bringMainWindowToFront` notification received |
-| `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
-| `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, `paywallDismissedThisSession == true`, playlist [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], `showPaywall == false` |
-| `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, `paywallDismissedThisSession == false`, playlist [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
+| `testLoad_FLAC_FreeTier_Blocked` | Free, `.flac` URL | `load(urls:)` | playlist empty |
+| `testIsPerformingBlockingOperation_TrueDuringLoad` | start `load(urls:)` | read flag | `true` |
+| `testIsPerformingBlockingOperation_FalseAfterLoad` | `load(urls:)` completes | read flag | `false` |
+| `testValidate_AudioFile_Accepted` | `.mp3` file URL | `validate([url])` | returns `[url]` |
+| `testValidate_NonAudioFile_Rejected` | `.txt` file URL | `validate([url])` | returns `[]` |
+| `testValidate_Directory_ExpandsRecursively` | directory with nested audio | `validate([dirURL])` | returns all audio files |
+| `testValidate_Directory_SkipsHiddenFiles` | `.hidden.mp3` | `validate([dirURL])` | hidden file not in result |
+
+Pro format gate tests (14 tests commented out, full bodies preserved for v0.2).
 
 ### Done criteria
-- ✅ `StoreKitIAPManager` fetches product and completes purchase via StoreKit 2
-- ✅ `Transaction.updates` listener running throughout app lifecycle; handles Ask to Buy and background purchases
-- ✅ `isProUnlocked` persists across launches after purchase
-- ✅ `featureFlags` rebuilt after purchase/restore so play gate reflects updated tier
-- ✅ FLAC/DSF/DFF visible in Open panel for all tiers; added to playlist for all tiers
-- ✅ Free user drops/imports FLAC → added to playlist with strikethrough
-- ✅ Free user plays FLAC → MiniPlayer closes, Paywall shown on main window, track not played
-- ✅ format gate does not set `lastError`; no double modal
-- ✅ Pro user plays FLAC → plays normally, no Paywall
-- ✅ Unrecognised format → unsupported format alert, track not added
-- ✅ "Restore Purchases" correctly restores prior purchase
-- ✅ PaywallView checkbox sets `paywallDismissedThisSession` on Maybe Later
-- ✅ Auto-play silently skips Pro-format tracks when `paywallDismissedThisSession == true`
-- ✅ MiniPlayerView closes on `bringMainWindowToFront`; track list popover with lock icon
-- ✅ MiniPlayer does not auto-restore on launch
-- ✅ All IAPManagerTests and AppStateFormatGatingTests green
+
+- ✅ `StoreKitIAPManager` builds and conforms to `IAPManager`
+- ✅ `Transaction.updates` listener running throughout app lifecycle
+- ✅ `isProUnlocked` persisted in UserDefaults via didSet
+- ✅ `featureFlags` rebuilt after `purchasePro()` / `refreshEntitlements()`
+- ✅ `PaywallView` built (hidden in v0.1)
+- ✅ FLAC/DSF/DFF blocked at load time via `allowedFormats`
+- ✅ All Pro UI commented out
+- ✅ `isPerformingBlockingOperation` prevents concurrent batch ops
+- ✅ Sub-batch save every 5 tracks
+- ✅ `FileDropService` recursively expands directories
+- ✅ All v0.1 tests green
 - ✅ All Slice 1–8 tests still green
 
-### v0.1 Freeze Addendum
+### Commit message
 
-> **Added after v0.1 freeze commits.** The 9-A spec above describes the
-> original Pro-tier design (load-then-paywall). v0.1 ships as Free-only
-> with all Pro UI hidden. This section documents the exact changes applied
-> and the steps to restore for v0.2.
+```
+feat(slice 9-A): add StoreKit 2 IAP infrastructure and v0.1 Free load gate
 
-#### v0.1 Behaviour Changes
-
-| Area | 9-A Original | v0.1 Frozen |
-|------|-------------|-------------|
-| FLAC/DSF/DFF load | Added to playlist, strikethrough for Free | **Blocked at load time** — treated as unsupported, same as .xyz |
-| `play(trackID:)` format gate | Posts `bringMainWindowToFront`, shows Paywall | **Commented out** — unreachable since FLAC cannot enter playlist |
-| `trackDidFinishPlaying()` format gate | Silently skips Pro formats when `paywallDismissedThisSession` | **Commented out** (3 places) |
-| `openFilePicker` allowedContentTypes | Includes FLAC/DSF/DFF | **Removed** FLAC/DSF/DFF (commented out) |
-| "Upgrade to Pro" menu | Visible when `isProUnlocked == false` | **Commented out** |
-| Launch `refreshEntitlements` | `.task { await appState.refreshEntitlements() }` | **Commented out** |
-| `HarmoniaPlayerApp` IAPManager | `StoreKitIAPManager()` | `StoreKitIAPManager()` (unchanged, but `refreshEntitlements` not called) |
-
-#### v0.1 New Additions (not in original 9-A)
-
-| Feature | Description |
-|---------|-------------|
-| `allowedFormats` | Computed property: v0.1 = `freeFormats` only. v0.2: restore Pro check |
-| `isURLSupported(_:)` | Uses `allowedFormats` instead of `freeFormats ∪ proOnlyFormats` |
-| `isPerformingBlockingOperation` | `@Published` flag, set true/defer false in `load(urls:)` and `importPlaylist(from:)` |
-| Menu disable during blocking | Add Files, Import M3U8, Undo, Redo disabled when `isPerformingBlockingOperation == true` |
-| Drop reject during blocking | Both `PlaylistView.dropDestination` closures return false when blocking |
-| Sub-batch save | `load(urls:)` and `importPlaylist(from:)` call `saveState()` every 5 tracks |
-| `importPlaylist` format gate | `isURLSupported()` check added (was missing in 9-A) |
-| `importPlaylist` final `saveState()` | Added (was missing in 9-A) |
-| Directory drop + selection | `FileDropService` recursively expands directories; `openFilePicker` `canChooseDirectories = true` |
-
-#### v0.1 Test Changes
-
-| Test file | Change |
-|-----------|--------|
-| `AppStateFormatGatingTests` | 14 Pro format gate tests commented out (full body preserved); 3 new v0.1 block tests added |
-| `IAPManagerTests` | 2 FLAC load tests commented out (full body preserved) |
-| `IntegrationTests` | `testIntegration_UnsupportedFormat_Free` updated to test blocked path (original preserved as comment) |
-| `AppStatePlayerlistTests` | 3 new `isPerformingBlockingOperation` tests added |
-| `AppStatePersistenceTests` | 2 new sub-batch save + importPlaylist persistence tests added (from commit #1) |
-| `FileDropServiceTests` | New file: 6 tests for directory expansion |
-
-#### v0.2 Restore Checklist
-
-When restoring Pro features for v0.2:
-
-1. `AppState.allowedFormats` → change to `isProUnlocked ? freeFormats.union(proOnlyFormats) : freeFormats`
-2. Uncomment `play(trackID:)` Step 2b format gate
-3. Uncomment `trackDidFinishPlaying()` format gate (3 places)
-4. Uncomment `openFilePicker` FLAC/DSF/DFF in allowedContentTypes
-5. Uncomment `HarmoniaPlayerApp.swift` `.task { await appState.refreshEntitlements() }`
-6. Uncomment `HarmoniaPlayerCommands.swift` "Upgrade to Pro" `CommandGroup`
-7. Uncomment all 14 + 2 test methods (full bodies preserved)
-8. Update `IntegrationTests.testIntegration_UnsupportedFormat_Free` back to original
-9. Put FLAC/DSF/DFF back in `proFormats` for `PlaylistView` strikethrough rendering
+- Add StoreKitIAPManager with refreshEntitlements, purchasePro, Transaction.updates
+- Add PaywallView sheet (hidden in v0.1)
+- Add showPaywall, showPaywallIfNeeded, paywallDismissedThisSession to AppState
+- Add freeFormats, proOnlyFormats, allowedFormats (v0.1: Free only)
+- Block FLAC/DSF/DFF at load time via allowedFormats
+- Comment out Pro UI: play gate, autoplay gate, Upgrade menu, refreshEntitlements
+- Add isPerformingBlockingOperation with menu and drop disable
+- Add sub-batch save every 5 tracks
+- Add FileDropService with recursive directory expansion
+- Add FileDropServiceTests
+```
 
 ---
 
-## Slice 9-B: Tag Editor — Basic Fields
+## Post-9-A: v0.1 Freeze Fixes + Architecture Cleanup ✅
+
+Preparation fixes committed after 9-A and before 9-B. These address
+architecture issues (Split A/B/C) and bug fixes discovered during v0.1
+freeze testing. They are not part of any sub-slice's SDD scope —
+they are reactive fixes that clean up technical debt before 9-B begins.
+
+### Commits
+
+```
+chore(v0.1-freeze): comment out launch refreshEntitlements
+chore(v0.1-freeze): comment out Upgrade to Pro menu item
+feat(v0.1-freeze): add isPerformingBlockingOperation flag with menu and drop disable
+feat(v0.1): support directory drop and selection in file picker
+feat(v0.1-freeze): dynamic allowedFormats, hide Pro formats from load and import
+docs(v0.1-freeze): update api_reference and slice_09_micro for v0.1 freeze
+refactor: split AppState.swift into 5 extension files
+refactor(slice 9): remove AVFoundation from HarmoniaTagReaderAdapter
+refactor(slice 9): replace string-matching error mapping with typed PlaybackError codes
+fix(slice 9): stop() clears currentTrack
+fix(slice 9): promote selectedTrackIDs to AppState and update play() resolution
+fix(slice 9): add .disabled() conditions to menu items matching PlayerView logic
+feat(free): add artwork display section to FileInfoView
+```
+
+### Summary of changes
+
+- **Split A:** Remove AVFoundation from `HarmoniaTagReaderAdapter` — all metadata
+  reading delegated to HarmoniaCore
+- **Split B:** Remove `PlaybackError.coreError(String)` — replaced with typed
+  `.invalidState` / `.invalidArgument`; `CoreError → PlaybackError` mapping now
+  in `HarmoniaPlaybackServiceAdapter.mapCoreError()`
+- **Split C:** Split `AppState.swift` into 5 extension files for maintainability
+- **Bug fixes:** `stop()` clears `currentTrack`; `selectedTrackIDs` promoted to
+  `AppState` for `play()` selection resolution; menu `.disabled()` conditions
+  aligned with `PlayerView` logic
+- **Feature:** Artwork display added to `FileInfoView` (Free tier, read-only)
+
+---
+
+## Slice 9-B: FileInfoView Read-Only + FileOriginService
 
 ### Goal
-Allow Pro users to edit core audio file tags and write them back to the file.
+Fix HarmoniaCore tag writer to preserve file attributes on write.
+Make FileInfoView read-only (source editing deferred to v0.2 Tag Editor).
+Define `FileOriginService` protocol as infrastructure for v0.2.
 
 ### Scope
-- New `TagWriterService` protocol (Application Layer)
-  - Accepts `Track` (Application Layer type), NOT `TagBundle` (HarmoniaCore type)
-  - `HarmoniaTagWriterAdapter` (Integration Layer) is responsible for converting
-    `Track` fields into `TagBundle` before calling `AVMutableTagWriterAdapter`
-- New `HarmoniaTagWriterAdapter` (Integration Layer — wraps `AVMutableTagWriterAdapter`)
-- New `TagEditorView` sheet (Pro-only, lives in `macOS/Pro/Views/`):
-  - Triggered via right-click context menu → "Edit Tags" or ⌘E
-  - Pro gate: calls `showPaywallIfNeeded()` before opening sheet
-  - Editable fields: title, artist, album, albumArtist, composer, genre,
-    year, trackNumber, trackTotal, discNumber, discTotal, bpm, comment
-- On save: `TagEditorView` calls `AppState.saveTagEdits(trackID:editedTrack:)`,
-  which passes the updated `Track` to `TagWriterService`, then updates
-  `AppState.playlists` immediately — HarmoniaCore types never reach AppState
-- `AppState.saveTagEdits(trackID:editedTrack:)` — coordinates write + model update
+
+#### HarmoniaCore bug fix
+- `AVMutableTagWriterAdapter`: replace `removeItem` + `moveItem` with
+  `replaceItemAt` for atomic file replacement preserving xattr, creation
+  date, ACL, and ownership
+
+#### FileInfoView read-only refactor
+- Remove Source section Edit/Clear buttons and all editing state
+- Add `languageBundle: Bundle` init parameter for L() localisation
+- ContentView sheet call passes `appState.languageBundle`
+
+#### FileOriginService (Application Layer)
+- New `FileOriginService` protocol: `read(url:)`, `write(_:url:)`, `clear(url:)`
+- New `FileOriginError` enum: `.writeFailed(String)`, `.clearFailed(String)`
+- New `DarwinFileOriginAdapter` wraps existing `ExtendedAttributeService`
+- `ExtendedAttributeService` retained as bottom-level Darwin utility
+- `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended
+  with `makeFileOriginService()`
+- `AppState` receives `fileOriginService` dependency via factory
+
+#### Fix saveSources/clearSources error handling
+- Replace silent `try?` in `saveSources()` / `clearSources()` with proper
+  error propagation that shows an alert to the user when xattr write fails
+- Depends on `FileOriginService` being wired into AppState
 
 ### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/TagWriterService.swift`
-  (new — protocol)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagWriterAdapter.swift`
-  (new — Integration Layer, wraps `AVMutableTagWriterAdapter`; converts `Track` → `TagBundle` internally)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
-  (new — Pro-only view)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `showTagEditor`, `tagEditorTrack`, `saveTagEdits(trackID:editedTrack:)`,
-  `showTagEditorIfAllowed(trackID:)`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift`
-  (modify — add right-click "Edit Tags" context menu item)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift`
-  (modify — add ⌘E shortcut, Pro-gated)
 
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/TagWriterServiceTests.swift`
-  (new)
+HarmoniaCore:
+- `Adapters/AVMutableTagWriterAdapter.swift` (modify — `replaceItemAt`)
+- `Tests/AVMutableTagWriterAdapterTests.swift` (modify — xattr + creation date tests)
+
+HarmoniaPlayer:
+- `Shared/Services/FileOriginService.swift` (new — protocol + `FileOriginError`)
+- `Shared/Services/DarwinFileOriginAdapter.swift` (new)
+- `Shared/Services/CoreServiceProviding.swift` (modify — add `makeFileOriginService()`)
+- `Shared/Services/CoreFactory.swift` (modify)
+- `Shared/Services/HarmoniaCoreProvider.swift` (modify)
+- `Shared/Models/AppState.swift` (modify — add `fileOriginService`)
+- `Shared/Views/FileInfoView.swift` (modify — read-only, `languageBundle`)
+- `Shared/Views/ContentView.swift` (modify — pass `languageBundle`)
+
+Test target:
+- `FakeInfrastructure/FakeFileOriginService.swift` (new)
+- `FakeInfrastructure/FakeCoreProvider.swift` (modify — add `fileOriginServiceStub`)
+- `SharedTests/FileOriginServiceTests.swift` (new)
+- `SharedTests/CoreFactoryTests.swift` (modify)
 
 ### Public API shape
 
 ```swift
-// TagWriterService protocol — Application Layer only; no HarmoniaCore types
-protocol TagWriterService: AnyObject {
-    // Accepts Track (Application Layer type).
-    // HarmoniaTagWriterAdapter converts Track → TagBundle internally.
-    func writeTags(from track: Track, to url: URL) async throws
+// FileOriginService protocol — Application Layer
+protocol FileOriginService: AnyObject {
+    func read(url: URL) -> [String]
+    func write(_ sources: [String], url: URL) throws
+    func clear(url: URL) throws
 }
 
-// AppState additions
-@Published var showTagEditor: Bool = false
-@Published var tagEditorTrack: Track? = nil
-
-func showTagEditorIfAllowed(trackID: Track.ID)
-// editedTrack carries the user's edits; AppState passes it to TagWriterService
-// and then overwrites the matching entry in playlists[]
-func saveTagEdits(trackID: Track.ID, editedTrack: Track) async
-```
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testShowTagEditor_Free_ShowsPaywall` | `isProUnlocked == false` | `showTagEditorIfAllowed(trackID:)` | `showPaywall == true`, `showTagEditor == false` |
-| `testShowTagEditor_Pro_OpensEditor` | `isProUnlocked == true`, track in playlist | `showTagEditorIfAllowed(trackID:)` | `showTagEditor == true`, `tagEditorTrack != nil` |
-| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" in playlist | `saveTagEdits(trackID:editedTrack:)` with title "New" | `playlist.tracks[0].title == "New"` |
-| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:editedTrack:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
-
-### Done criteria
-- ✅ Tag Editor sheet opens on right-click or ⌘E for Pro users
-- ✅ Paywall shown when Free user triggers ⌘E or right-click "Edit Tags"
-- ✅ All basic fields editable and saved to file
-- ✅ `Track` in playlist updated immediately after save
-- ✅ TagWriterServiceTests green
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9-C: Tag Editor — Sort Fields
-
-### Goal
-Add sort fields to the Tag Editor.
-
-### Scope
-- Add sort tag fields to `Track` model:
-  `sortTitle`, `sortArtist`, `sortAlbum`, `sortAlbumArtist`, `sortComposer`
-  (all `String`, default `""`)
-- Map sort fields in `HarmoniaTagReaderAdapter` from `TagBundle`
-  (requires HarmoniaCore TagBundle patch to include sort fields)
-- Add "Sorting" tab to `TagEditorView`
-- Write sort fields back to file on save via `TagWriterService`
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Track.swift`
-  (modify — add sort fields)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagReaderAdapter.swift`
-  (modify — map sort fields from `TagBundle`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
-  (modify — add Sorting tab)
-
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/TrackTests.swift`
-  (modify — add sort field tests)
-
-### Public API shape
-
-```swift
-// Track additions
-var sortTitle: String        // TSOT — default ""
-var sortArtist: String       // TSOP — default ""
-var sortAlbum: String        // TSOA — default ""
-var sortAlbumArtist: String  // TSO2 — default ""
-var sortComposer: String     // TSOC — default ""
-```
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTrack_DefaultSortFields_AreAllEmpty` | `Track(url:)` | read all sort fields | all `""` |
-| `testTrack_SortFields_Codable_RoundTrip` | Track with all sort fields set | encode → decode | all sort fields match original |
-| `testSortFields_MappedFromTagBundle` | `TagBundle` with sort fields populated | `HarmoniaTagReaderAdapter.readMetadata` | `Track` sort fields match `TagBundle` values |
-| `testSortFields_DefaultToEmpty_WhenTagBundleNil` | `TagBundle` with sort fields `nil` | `HarmoniaTagReaderAdapter.readMetadata` | `Track` sort fields all `""` |
-
-### Done criteria
-- ✅ Sort fields visible and editable in "Sorting" tab of Tag Editor
-- ✅ Sort fields written to file on save
-- ✅ Sort fields correctly read from files that have them
-- ✅ TrackTests green
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9-D: Tag Editor — Artwork
-
-### Goal
-Allow Pro users to view and replace embedded album artwork in the Tag Editor.
-
-### Scope
-- Add "Artwork" tab to `TagEditorView`:
-  - Displays current embedded artwork (`Track.artworkData`), or a placeholder
-    if absent
-  - "Add Artwork" button → `NSOpenPanel` filters for `.jpg`, `.png`
-  - "Remove Artwork" button → clears `artworkData` in the pending edit bundle
-- Save writes `artworkData` to file via `HarmoniaTagWriterAdapter`
-- `artworkData` already exists in both `Track` and `TagBundle` — no model
-  changes needed
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
-  (modify — add Artwork tab)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagWriterAdapter.swift`
-  (modify — write `artworkData` via `AVMutableMetadataItem`)
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testSaveTagEdits_Artwork_UpdatesTrack` | Track with `artworkData == nil` | `saveTagEdits` with non-nil `artworkData` | `playlist.tracks[0].artworkData != nil` |
-| `testSaveTagEdits_RemoveArtwork_ClearsTrack` | Track with `artworkData` set | `saveTagEdits` with `artworkData == nil` | `playlist.tracks[0].artworkData == nil` |
-
-### Done criteria
-- ✅ Artwork tab shows current embedded image (placeholder if absent)
-- ✅ Add Artwork loads image from disk and previews before save
-- ✅ Remove Artwork clears the embedded image
-- ✅ Save writes artwork correctly to file
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9-E: Lyrics — USLT Static Display + Edit (All Tiers)
-
-### Goal
-Allow all users to view embedded unsynchronised lyrics.
-Allow Pro users to edit lyrics via the Tag Editor.
-
-### Scope
-- Add `lyrics: String?` to `Track` model (default `nil`)
-- Map `USLT` tag in `HarmoniaTagReaderAdapter` from `TagBundle`
-  (requires HarmoniaCore TagBundle patch to include `lyrics`)
-- New `LyricsView`: read-only lyrics panel accessible from `PlayerView`
-  for all users; shows empty state when `Track.lyrics == nil`
-- Add "Lyrics" tab to `TagEditorView`: multiline `TextEditor`
-  for Pro users to edit `lyrics` content
-- Save writes `USLT` tag back to file via `TagWriterService`
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/Track.swift`
-  (modify — add `lyrics: String?`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/HarmoniaTagReaderAdapter.swift`
-  (modify — map `USLT` from `TagBundle`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/LyricsView.swift`
-  (new — read-only static display, all tiers)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Pro/Views/TagEditorView.swift`
-  (modify — add Lyrics tab)
-
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/TrackTests.swift`
-  (modify — add `lyrics` field tests)
-
-### Public API shape
-
-```swift
-// Track addition
-var lyrics: String?   // USLT — default nil
-```
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTrack_DefaultLyrics_IsNil` | `Track(url:)` | read `lyrics` | `nil` |
-| `testTrack_Lyrics_Codable_RoundTrip` | Track with `lyrics` set | encode → decode | `lyrics` matches original |
-| `testLyrics_MappedFromTagBundle` | `TagBundle` with `lyrics` populated | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics` matches `TagBundle.lyrics` |
-| `testLyrics_NilWhenTagBundleNil` | `TagBundle` with `lyrics == nil` | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics == nil` |
-| `testSaveTagEdits_Lyrics_UpdatesTrack` | Track with `lyrics == nil` | `saveTagEdits` with new lyrics string | `playlist.tracks[0].lyrics == new value` |
-
-### Done criteria
-- ✅ `LyricsView` shows USLT lyrics for all users
-- ✅ Empty state shown when `Track.lyrics == nil`
-- ✅ Edit and save via Tag Editor writes USLT back to file (Pro only)
-- ✅ TrackTests green
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9-F: Lyrics — LRC Synchronised Display (Pro)
-
-### Goal
-Display LRC-format synchronised lyrics with line-by-line auto-scrolling,
-highlighting the current line during playback. Pro only.
-
-### Scope
-- New `LRCLine` model: `timestamp: TimeInterval`, `text: String`
-- New `LRCParser`: parses `[mm:ss.xx]` format into `[LRCLine]`
-- LRC data source (priority order):
-  1. Sidecar `.lrc` file at the same path as the audio file
-  2. Embedded SYLT tag (deferred to post-Slice 9 backlog)
-- `AppState` loads sidecar `.lrc` in `play(trackID:)` if present;
-  stores parsed lines in `@Published var lrcLines: [LRCLine]`
-- `LyricsView` extended with synchronised mode: observes `currentTime`,
-  highlights current line, auto-scrolls with `ScrollViewReader`
-- Pro gate: synchronised mode calls `showPaywallIfNeeded()`
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/LRCLine.swift`
-  (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/LRCParser.swift`
-  (new)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/LyricsView.swift`
-  (modify — add synchronised mode)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `lrcLines`, load sidecar `.lrc` in `play(trackID:)`)
-
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/LRCParserTests.swift`
-  (new)
-
-### Public API shape
-
-```swift
-// LRCLine
-struct LRCLine: Equatable, Sendable {
-    let timestamp: TimeInterval
-    let text: String
-}
-
-// LRCParser
-struct LRCParser {
-    func parse(_ content: String) -> [LRCLine]
-}
-
-// AppState addition
-@Published private(set) var lrcLines: [LRCLine] = []
-```
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testParse_ValidLRC_ReturnsTwoLines` | `"[00:01.00]Hello\n[00:03.00]World"` | `parse()` | `count == 2`, timestamps 1.0 and 3.0 |
-| `testParse_EmptyString_ReturnsEmpty` | `""` | `parse()` | `[]` |
-| `testParse_InvalidTimestamp_LineSkipped` | `"[xx:xx]Bad\n[00:01.00]Good"` | `parse()` | `count == 1` |
-| `testParse_LinesAreSortedByTimestamp` | Lines in reverse order in file | `parse()` | lines sorted ascending by `timestamp` |
-| `testParse_BlankTextLine_Included` | `"[00:02.00]"` | `parse()` | `count == 1`, `text == ""` |
-
-### Done criteria
-- ✅ Sidecar `.lrc` file loaded automatically when track plays
-- ✅ Current line highlighted and view scrolls in sync with `currentTime`
-- ✅ Pro gate: Paywall shown for Free users
-- ✅ LRCParserTests green
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9-G: MPNowPlayingInfoCenter + MPRemoteCommandCenter (All Tiers)
-
-### Goal
-Integrate with macOS Now Playing media control centre: show artwork, title,
-artist, duration, and currentTime; respond to remote play/pause/next/previous
-commands.
-
-### Scope
-- New `NowPlayingService` protocol (Application Layer)
-- New `MPNowPlayingAdapter` (Integration Layer — allowed to `import MediaPlayer`)
-- `AppState` calls `nowPlayingService.update(...)` at:
-  - `play(trackID:)` — on successful play start
-  - `pause()` — on pause
-  - `stop()` — clear Now Playing
-  - polling loop — `currentTime` update every ~1 s
-- Register `MPRemoteCommandCenter` handlers wired to `AppState` actions:
-  play, pause, nextTrack, previousTrack, changePlaybackPosition
-- Artwork provided as `MPMediaItemArtwork` from `Track.artworkData`
-- `HarmoniaPlayerApp` injects `MPNowPlayingAdapter`
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/NowPlayingService.swift`
-  (new — protocol)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/MPNowPlayingAdapter.swift`
-  (new — Integration Layer)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — inject `NowPlayingService`, call `update` at play/pause/stop/poll)
-- `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
-  (modify — inject `MPNowPlayingAdapter` into `AppState`)
-
-### Public API shape
-
-```swift
-// NowPlayingService protocol
-protocol NowPlayingService: AnyObject {
-    func update(track: Track?, state: PlaybackState,
-                time: TimeInterval, duration: TimeInterval)
-    func registerRemoteCommands(
-        onPlay: @escaping () async -> Void,
-        onPause: @escaping () async -> Void,
-        onNext: @escaping () async -> Void,
-        onPrev: @escaping () async -> Void,
-        onSeek: @escaping (TimeInterval) async -> Void
-    )
-    func clearNowPlaying()
+enum FileOriginError: Error, LocalizedError {
+    case writeFailed(String)
+    case clearFailed(String)
 }
 ```
 
 ### TDD matrix
 
+HarmoniaCore:
+
 | Test | Given | When | Then |
 |---|---|---|---|
-| `testNowPlaying_UpdateCalledOnPlay` | Track playing | `play(trackID:)` succeeds | `NowPlayingService.update` called with matching track and `.playing` state |
-| `testNowPlaying_ClearCalledOnStop` | Playback active | `stop()` | `NowPlayingService.clearNowPlaying` called |
-| `testNowPlaying_UpdateCalledOnPause` | Track playing | `pause()` | `NowPlayingService.update` called with `.paused` state |
-| `testNowPlaying_RemotePlay_InvokesAppStatePlay` | Remote play command received | handler fires | `AppState.play()` invoked |
-| `testNowPlaying_RemoteNext_InvokesPlayNextTrack` | Remote next command received | handler fires | `AppState.playNextTrack()` invoked |
+| `testWrite_PreservesXattr` | file has xattr | `write(url:tags:)` | xattr preserved |
+| `testWrite_PreservesCreationDate` | file has creation date | `write(url:tags:)` | creation date unchanged |
+
+HarmoniaPlayer:
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testFileOriginRead_WhenPresent_ReturnsURLs` | xattr exists | `read(url:)` | returns URL array |
+| `testFileOriginRead_WhenAbsent_ReturnsEmpty` | no xattr | `read(url:)` | returns `[]` |
+| `testFileOriginWrite_PersistsValue` | empty file | `write(sources, url:)` → `read` | returns written value |
+| `testFileOriginClear_RemovesAttribute` | xattr exists | `clear(url:)` → `read` | returns `[]` |
+| `testFileOriginClear_WhenAbsent_DoesNotThrow` | no xattr | `clear(url:)` | does not throw |
+| `testMakeFileOriginService_ReturnsNonNil` | `FakeCoreProvider` | `makeFileOriginService()` | returns non-nil |
+| `testSaveSources_Failure_ShowsAlert` | xattr write fails | `saveSources()` | error alert shown |
 
 ### Done criteria
-- ✅ macOS Now Playing widget shows correct title, artist, artwork, duration
-- ✅ `currentTime` updates during playback in Now Playing widget
-- ✅ Play/Pause/Next/Previous/Seek commands from widget work correctly
-- ✅ Now Playing cleared when playback stops
-- ✅ All Slice 1–8 tests still green
 
----
-
-## Slice 9-H: Gapless Playback (Pro)
-
-### Goal
-Eliminate the silence gap between tracks during continuous playback.
-
-### Scope
-- When `currentTime` approaches `duration - gaplessPreloadThreshold` (default 5 s),
-  `AppState` pre-loads the next track URL into a secondary `PlaybackService`
-  instance in the background
-- On natural completion (`trackDidFinishPlaying`), swap primary and secondary
-  service references and call `play()` immediately — no engine restart
-- `CoreFactory`: new `makeGaplessPlaybackServicePair()` returns two
-  `PlaybackService` instances sharing the same `AVAudioEngineOutputAdapter`
-  so the audio engine stays running across the handoff
-- `CoreFeatureFlags`: add `supportsGapless: Bool { isProUnlocked }`
-- Free tier: single `PlaybackService`, existing behaviour unchanged
-- Pro gate: `showPaywallIfNeeded()` if user explicitly requests Gapless toggle
-
-### Files
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Services/CoreFactory.swift`
-  (modify — add `makeGaplessPlaybackServicePair()`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/AppState.swift`
-  (modify — add `secondaryPlaybackService`, `gaplessPreloadThreshold`,
-  `preloadNextTrackIfNeeded()`)
-- `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Models/CoreFeatureFlags.swift`
-  (modify — add `supportsGapless`)
-
-Test target only:
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStateGaplessTests.swift`
-  (new)
-
-### Public API shape
-
-```swift
-// CoreFeatureFlags addition
-var supportsGapless: Bool { isProUnlocked }
-
-// AppState additions (private)
-private var secondaryPlaybackService: PlaybackService?
-private let gaplessPreloadThreshold: TimeInterval = 5.0
-private func preloadNextTrackIfNeeded() async
-```
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testSupportsGapless_TrueForPro` | `isProUnlocked == true` | read `featureFlags.supportsGapless` | `true` |
-| `testSupportsGapless_FalseForFree` | `isProUnlocked == false` | read `featureFlags.supportsGapless` | `false` |
-| `testGaplessPreload_TriggeredNearEnd` | Pro user, 2 tracks, `currentTime` within 5 s of `duration` | polling fires | secondary service loaded with next track URL |
-| `testGaplessPreload_NotTriggered_FreeTier` | Free user, 2 tracks | polling fires near end | `secondaryPlaybackService == nil` |
-| `testGaplessPreload_NotTriggered_WhenNoNextTrack` | Pro user, 1 track (last in playlist) | polling fires near end | no secondary load attempted |
-
-### Done criteria
-- ✅ No audible gap between tracks during normal Pro playback
-- ✅ Preload triggered at ~5 s before end of current track
-- ✅ Free tier behaviour unchanged (single `PlaybackService`)
-- ✅ Paywall shown if Free user explicitly toggles Gapless setting
-- ✅ AppStateGaplessTests green
-- ✅ All Slice 1–8 tests still green
-
----
-
-## Slice 9 TDD Matrix
-
-### Test principles
-- All tests must be deterministic
-- No audio device dependencies
-- `MockIAPManager` and all `Fake*` types in test target only
-- Test classes that test `AppState` must be `@MainActor`
-
----
-
-### Slice 9-A — IAP
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testIsProUnlocked_DefaultIsFalse` | Fresh `MockIAPManager` | read `isProUnlocked` | `false` |
-| `testShowPaywallIfNeeded_ReturnsTrueForFreeUser` | `isProUnlocked == false` | `showPaywallIfNeeded()` | returns `true`, `showPaywall == true` |
-| `testShowPaywallIfNeeded_ReturnsFalseForProUser` | `isProUnlocked == true` | `showPaywallIfNeeded()` | returns `false`, `showPaywall == false` |
-| `testLoad_FLAC_FreeTier_AddsToPlaylist` | Free, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1`, `showPaywall == false` |
-| `testLoad_FLAC_ProTier_AddsToPlaylist` | Pro, `.flac` URL | `load(urls:)` | `playlist.tracks.count == 1` |
-| `testLoad_UnsupportedFormat_BlockedWithAlert` | any tier, `.xyz` URL | `load(urls:)` | playlist empty, `skippedUnsupportedURLs.count == 1` |
-| `testPlayGate_FLAC_FreeTier_ShowsPaywall` | Free, FLAC in playlist | `play(trackID:)` | `showPaywall == true` |
-| `testPlayGate_FLAC_FreeTier_DoesNotPlay` | Free, FLAC in playlist | `play(trackID:)` | `loadCallCount == 0` |
-| `testPlayGate_FLAC_FreeTier_DoesNotSetLastError` | Free, FLAC in playlist | `play(trackID:)` | `lastError == nil` |
-| `testPlayGate_FLAC_FreeTier_PostsBringMainWindowToFrontNotification` | Free, FLAC in playlist | `play(trackID:)` | notification received |
-| `testPaywallDismissedThisSession_DefaultIsFalse` | Fresh `AppState` | read `paywallDismissedThisSession` | `false` |
-| `testAutoPlay_FLAC_DismissedSession_SilentSkip` | Free, dismissed, [MP3, FLAC, MP3] | `trackDidFinishPlaying()` from MP3[0] | plays MP3[2], no Paywall |
-| `testAutoPlay_FLAC_NotDismissed_ShowsPaywall` | Free, not dismissed, [MP3, FLAC] | `trackDidFinishPlaying()` from MP3[0] | `showPaywall == true` |
-
----
-
-### Slice 9-B — Tag Editor Basic Fields
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testShowTagEditor_Free_ShowsPaywall` | `isProUnlocked == false` | `showTagEditorIfAllowed(trackID:)` | `showPaywall == true`, `showTagEditor == false` |
-| `testShowTagEditor_Pro_OpensEditor` | `isProUnlocked == true`, track in playlist | `showTagEditorIfAllowed(trackID:)` | `showTagEditor == true`, `tagEditorTrack != nil` |
-| `testSaveTagEdits_UpdatesTrackTitle` | Track with title "Old" | `saveTagEdits(trackID:editedTrack:)` with title "New" | `playlist.tracks[0].title == "New"` |
-| `testSaveTagEdits_UpdatesTrackArtist` | Track with artist "Old" | `saveTagEdits(trackID:editedTrack:)` with artist "New" | `playlist.tracks[0].artist == "New"` |
-
----
-
-### Slice 9-C — Sort Fields
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTrack_DefaultSortFields_AreAllEmpty` | `Track(url:)` | read all sort fields | all `""` |
-| `testTrack_SortFields_Codable_RoundTrip` | Track with all sort fields set | encode → decode | all sort fields match original |
-| `testSortFields_MappedFromTagBundle` | `TagBundle` with sort fields populated | `HarmoniaTagReaderAdapter.readMetadata` | `Track` sort fields match `TagBundle` values |
-| `testSortFields_DefaultToEmpty_WhenTagBundleNil` | `TagBundle` with sort fields `nil` | `HarmoniaTagReaderAdapter.readMetadata` | `Track` sort fields all `""` |
-
----
-
-### Slice 9-D — Artwork
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testSaveTagEdits_Artwork_UpdatesTrack` | Track with `artworkData == nil` | `saveTagEdits` with non-nil `artworkData` | `playlist.tracks[0].artworkData != nil` |
-| `testSaveTagEdits_RemoveArtwork_ClearsTrack` | Track with `artworkData` set | `saveTagEdits` with `artworkData == nil` | `playlist.tracks[0].artworkData == nil` |
-
----
-
-### Slice 9-E — USLT Lyrics
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTrack_DefaultLyrics_IsNil` | `Track(url:)` | read `lyrics` | `nil` |
-| `testTrack_Lyrics_Codable_RoundTrip` | Track with `lyrics` set | encode → decode | `lyrics` matches original |
-| `testLyrics_MappedFromTagBundle` | `TagBundle` with `lyrics` populated | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics` matches `TagBundle.lyrics` |
-| `testLyrics_NilWhenTagBundleNil` | `TagBundle` with `lyrics == nil` | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics == nil` |
-| `testSaveTagEdits_Lyrics_UpdatesTrack` | Track with `lyrics == nil` | `saveTagEdits` with new lyrics string | `playlist.tracks[0].lyrics == new value` |
-
----
-
-### Slice 9-F — LRC Parser
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testParse_ValidLRC_ReturnsTwoLines` | `"[00:01.00]Hello\n[00:03.00]World"` | `parse()` | `count == 2`, timestamps 1.0 and 3.0 |
-| `testParse_EmptyString_ReturnsEmpty` | `""` | `parse()` | `[]` |
-| `testParse_InvalidTimestamp_LineSkipped` | `"[xx:xx]Bad\n[00:01.00]Good"` | `parse()` | `count == 1` |
-| `testParse_LinesAreSortedByTimestamp` | Lines in reverse order in file | `parse()` | lines sorted ascending by `timestamp` |
-| `testParse_BlankTextLine_Included` | `"[00:02.00]"` | `parse()` | `count == 1`, `text == ""` |
-
----
-
-### Slice 9-G — Now Playing
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testNowPlaying_UpdateCalledOnPlay` | Track playing | `play(trackID:)` succeeds | `NowPlayingService.update` called with matching track and `.playing` state |
-| `testNowPlaying_ClearCalledOnStop` | Playback active | `stop()` | `NowPlayingService.clearNowPlaying` called |
-| `testNowPlaying_UpdateCalledOnPause` | Track playing | `pause()` | `NowPlayingService.update` called with `.paused` state |
-| `testNowPlaying_RemotePlay_InvokesAppStatePlay` | Remote play command received | handler fires | `AppState.play()` invoked |
-| `testNowPlaying_RemoteNext_InvokesPlayNextTrack` | Remote next command received | handler fires | `AppState.playNextTrack()` invoked |
-
----
-
-### Slice 9-H — Gapless
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testSupportsGapless_TrueForPro` | `isProUnlocked == true` | read `featureFlags.supportsGapless` | `true` |
-| `testSupportsGapless_FalseForFree` | `isProUnlocked == false` | read `featureFlags.supportsGapless` | `false` |
-| `testGaplessPreload_TriggeredNearEnd` | Pro user, 2 tracks, `currentTime` within 5 s of `duration` | polling fires | secondary service loaded with next track URL |
-| `testGaplessPreload_NotTriggered_FreeTier` | Free user, 2 tracks | polling fires near end | `secondaryPlaybackService == nil` |
-| `testGaplessPreload_NotTriggered_WhenNoNextTrack` | Pro user, 1 track (last in playlist) | polling fires near end | no secondary load attempted |
-
----
-
-## Slice 9 Completion Gate
-
-### Required
-
-- ⬜ `StoreKitIAPManager` purchases and restores correctly
-- ⬜ Paywall shown for all Pro-only actions (FLAC/DSD, Tag Editor, LRC Sync, Gapless)
-- ⬜ `isProUnlocked` persists after purchase
-- ⬜ Tag Editor opens for Pro users (⌘E / right-click)
-- ⬜ Basic fields (Groups A+C) editable and saved to file
-- ⬜ Sort fields editable and saved to file
-- ⬜ Artwork viewable, replaceable, removable
-- ⬜ USLT lyrics viewable by all users; editable via Tag Editor (Pro)
-- ⬜ LRC synchronised display for Pro users
-- ⬜ macOS Now Playing widget integrated for all users
-- ⬜ Gapless playback for Pro users
-- ⬜ All Slice 9 unit tests green
+- ⬜ HarmoniaCore: `AVMutableTagWriterAdapter` uses `replaceItemAt`, xattr preserved
+- ⬜ `FileOriginService` protocol defined in Application Layer
+- ⬜ `DarwinFileOriginAdapter` wraps `ExtendedAttributeService`
+- ⬜ `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended
+- ⬜ `AppState` receives `fileOriginService` via factory
+- ⬜ `FileInfoView` read-only, Edit/Clear removed, `languageBundle` added
+- ⬜ `saveSources()` / `clearSources()` errors shown to user (no silent `try?`)
+- ⬜ All 9-B TDD matrix tests green
 - ⬜ All Slice 1–8 tests still green
+
+### Commit order
+
+```
+1. fix(slice 9-B): HarmoniaCore — replace removeItem+moveItem with replaceItemAt
+2. feat(slice 9-B): add FileOriginService protocol and DarwinFileOriginAdapter
+3. refactor(slice 9-B): make FileInfoView read-only, remove source editing
+4. feat(slice 9-B): integrate FileOriginService into CoreFactory and AppState
+```
+
+Commit 1 is a HarmoniaCore repo commit. Commits 2–4 are HarmoniaPlayer.
+
+---
+
+## Slice 9-C: Codec + Encoding Fields
+
+### Goal
+Add Codec (e.g. AAC, MP3, ALAC) and Encoding (lossy/lossless) fields to
+the metadata pipeline so FileInfoView's Technical section shows accurate
+stream information instead of relying on file extension alone.
+
+### Scope
+
+#### HarmoniaCore TagBundle changes
+- Add `codec: String?` to `TagBundle` (e.g. "AAC", "MP3", "ALAC", "PCM")
+- Add `encoding: String?` to `TagBundle` (e.g. "lossy", "lossless")
+- `AVMetadataTagReaderAdapter`: read codec from `AVAssetTrack.mediaType` /
+  `formatDescriptions`; derive encoding from codec type
+
+#### HarmoniaPlayer mapping
+- `Track`: add `codec: String` (default `""`) and `encoding: String` (default `""`)
+- `HarmoniaTagReaderAdapter`: map `TagBundle.codec` → `Track.codec`,
+  `TagBundle.encoding` → `Track.encoding`
+- `FileInfoView` Technical section: display Codec and Encoding rows
+- `metadataVersion` bump so `refreshMetadataIfNeeded()` re-reads existing tracks
+
+### Files
+
+HarmoniaCore:
+- `Models/TagBundle.swift` (modify — add `codec`, `encoding`)
+- `Adapters/AVMetadataTagReaderAdapter.swift` (modify — read codec/encoding)
+- `Tests/TagBundleTests.swift` (modify)
+
+HarmoniaPlayer:
+- `Shared/Models/Track.swift` (modify — add `codec`, `encoding`)
+- `Shared/Services/HarmoniaTagReaderAdapter.swift` (modify — map fields)
+- `Shared/Views/FileInfoView.swift` (modify — display rows)
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testTagBundle_Codec_DefaultNil` | empty TagBundle | read `codec` | `nil` |
+| `testTrack_Codec_DefaultEmpty` | `Track(url:)` | read `codec` | `""` |
+| `testCodec_MappedFromTagBundle` | TagBundle with `codec = "AAC"` | readMetadata | `Track.codec == "AAC"` |
+| `testEncoding_MappedFromTagBundle` | TagBundle with `encoding = "lossy"` | readMetadata | `Track.encoding == "lossy"` |
+
+### Done criteria
+
+- ⬜ HarmoniaCore: `TagBundle` has `codec` and `encoding` fields
+- ⬜ `AVMetadataTagReaderAdapter` reads codec/encoding from AVFoundation
+- ⬜ `Track` has `codec` and `encoding`; mapped in `HarmoniaTagReaderAdapter`
+- ⬜ `FileInfoView` Technical section displays Codec and Encoding
+- ⬜ `metadataVersion` bumped; existing tracks re-read on launch
+- ⬜ All tests green
+
+### Commit order
+
+```
+1. feat(HarmoniaCore): add codec and encoding fields to TagBundle and AVMetadataTagReaderAdapter
+2. feat(slice 9-C): map codec and encoding to Track and display in FileInfoView
+```
+
+---
+
+## Slice 9-D: FileInfoView `.sheet` → `WindowGroup`
+
+### Goal
+Convert FileInfoView from a modal `.sheet` to an independent `WindowGroup`
+so it can be dragged, resized, and kept open during playback. Enables
+multi-track comparison by opening multiple info windows.
+
+### Scope
+- Replace `.sheet(item: $appState.fileInfoTrack)` with a `WindowGroup`
+  identified by track ID
+- FileInfoView becomes a standalone window: resizable, draggable, non-modal
+- Support multiple simultaneous FileInfoView windows (one per track)
+- Window title shows track display name
+- Close via ⌘W or window close button
+
+### Files
+
+- `Shared/Views/FileInfoView.swift` (modify — standalone window adaptations)
+- `Shared/Views/ContentView.swift` (modify — remove `.sheet`, use `openWindow`)
+- `macOS/Free/HarmoniaPlayerApp.swift` (modify — add `WindowGroup` for FileInfo)
+- `Shared/Models/AppState.swift` (modify — adjust `fileInfoTrack` / `showFileInfo` logic)
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testShowFileInfo_SetsTrack` | Track in playlist | `showFileInfo(trackID:)` | `fileInfoTrack` set |
+| `testShowFileInfo_InvalidID_NoOp` | No matching track | `showFileInfo(trackID: random)` | `fileInfoTrack == nil` |
+
+### Done criteria
+
+- ⬜ FileInfoView opens as independent non-modal window
+- ⬜ Window is draggable and resizable
+- ⬜ Multiple FileInfoView windows can be open simultaneously
+- ⬜ Main window remains interactive while FileInfoView is open
+- ⬜ All tests green
+
+### Commit message
+
+```
+feat(slice 9-D): convert FileInfoView from sheet to independent WindowGroup
+
+- Replace .sheet(item:) with WindowGroup identified by track ID
+- Support multiple simultaneous FileInfoView windows
+- Window is resizable, draggable, non-modal
+```
+
+---
+
+## Slice 9-E: Fix Polling Loop CPU Issue
+
+### Goal
+Replace `try? await Task.sleep` in the polling loop with proper `do/catch`
+for `CancellationError` to prevent unnecessary CPU usage when polling
+should have stopped.
+
+### Scope
+- In `AppState+Playback.swift` `startPolling()`: replace `try? await Task.sleep`
+  with `do { try await Task.sleep } catch { break }` so cancellation
+  cleanly exits the loop
+- Verify `stopPolling()` is called when `playbackState` transitions to `.stopped`
+- Verify polling task is cancelled on `stop()` and `play(trackID:)` reload
+
+### Files
+
+- `Shared/Models/AppState+Playback.swift` (modify — polling loop)
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testStopPolling_CancelsTask` | Playing with active polling | `stop()` | `pollingTask` cancelled |
+| `testPolling_StopsOnCancellation` | Active polling | cancel `pollingTask` | loop exits cleanly |
+
+### Done criteria
+
+- ⬜ `Task.sleep` cancellation handled with `do/catch`, not `try?`
+- ⬜ `stopPolling()` called on `.stopped` transition
+- ⬜ No residual CPU usage after stop
+- ⬜ All tests green
+
+### Commit message
+
+```
+fix(slice 9-E): replace try? await Task.sleep with proper CancellationError handling in polling loop
+
+- Use do/catch instead of try? so CancellationError exits the loop cleanly
+- Verify stopPolling() called when playbackState transitions to .stopped
+```
+
+---
+
+## Slice 9-F: Multi-Artwork Support
+
+### Goal
+Support multiple embedded artworks per track (ID3v2 APIC picture types).
+Currently only the first artwork is read; display all available artworks
+in FileInfoView.
+
+### Scope
+- HarmoniaCore `TagBundle`: change `artworkData: Data?` to
+  `artworks: [ArtworkData]` where `ArtworkData` contains `data: Data`
+  and `pictureType: Int` (APIC picture type code)
+- `AVMetadataTagReaderAdapter`: read all APIC items, not just the first
+- `HarmoniaTagReaderAdapter`: map `artworks` to `Track`
+- `Track`: add `artworks: [ArtworkData]`; keep `artworkData: Data?` as
+  computed property returning `artworks.first?.data` for backward compat
+- `FileInfoView`: display artwork gallery if multiple artworks present
+- `PlayerView`: continue using `artworkData` (first artwork) for Now Playing
+
+### Files
+
+HarmoniaCore:
+- `Models/TagBundle.swift` (modify — `artworks` array)
+- `Adapters/AVMetadataTagReaderAdapter.swift` (modify — read all APIC)
+- `Tests/TagBundleTests.swift` (modify)
+
+HarmoniaPlayer:
+- `Shared/Models/Track.swift` (modify — `artworks` + computed `artworkData`)
+- `Shared/Services/HarmoniaTagReaderAdapter.swift` (modify — map artworks)
+- `Shared/Views/FileInfoView.swift` (modify — artwork gallery)
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testTagBundle_Artworks_DefaultEmpty` | empty TagBundle | read `artworks` | `[]` |
+| `testTrack_ArtworkData_ReturnsFirstArtwork` | Track with 2 artworks | read `artworkData` | returns first |
+| `testTrack_ArtworkData_NilWhenEmpty` | Track with no artworks | read `artworkData` | `nil` |
+| `testMultipleArtworks_MappedFromTagBundle` | TagBundle with 3 artworks | readMetadata | `Track.artworks.count == 3` |
+
+### Done criteria
+
+- ⬜ All APIC artworks read from audio files
+- ⬜ `FileInfoView` shows artwork gallery when multiple exist
+- ⬜ `PlayerView` still uses first artwork for Now Playing display
+- ⬜ Backward compatibility: `artworkData` computed property works
+- ⬜ All tests green
+
+### Commit order
+
+```
+1. feat(HarmoniaCore): read multiple APIC artworks into TagBundle.artworks
+2. feat(slice 9-F): map multi-artwork to Track and display in FileInfoView
+```
+
+---
+
+## Slice 9-G: Error Reporting Phase 1
+
+### Goal
+Add a basic error reporting mechanism so users can send diagnostic
+information when playback fails. Phase 1 uses a prefilled mailto link.
+
+### Scope
+- Add `lastErrorDetail: String?` to `AppState` — captures a one-line
+  diagnostic summary when `lastError` is set (e.g. "failedToOpenFile:
+  /path/to/file.mp3")
+- Add "Report Issue" button to the playback error alert
+- Button opens `mailto:` prefilled with:
+  - To: `harmonia.audio.project+harmonia_player@gmail.com`
+  - Subject: `[HarmoniaPlayer] Error Report`
+  - Body: `lastErrorDetail`, app version, macOS version
+- No network calls; purely local mailto
+
+### Files
+
+- `Shared/Models/AppState.swift` (modify — add `lastErrorDetail`)
+- `Shared/Models/AppState+Playback.swift` (modify — set `lastErrorDetail` on error)
+- `Shared/Views/ContentView.swift` (modify — "Report Issue" button in error alert)
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testLastErrorDetail_SetOnPlaybackError` | Play fails with `.failedToOpenFile` | error occurs | `lastErrorDetail` contains file path |
+| `testLastErrorDetail_ClearedOnClearLastError` | `lastErrorDetail` set | `clearLastError()` | `lastErrorDetail == nil` |
+
+### Done criteria
+
+- ⬜ Error alert shows "Report Issue" button
+- ⬜ Mailto opens with prefilled diagnostic info
+- ⬜ `lastErrorDetail` cleared when error is dismissed
+- ⬜ All tests green
+
+### Commit message
+
+```
+feat(slice 9-G): add error reporting Phase 1 with prefilled mailto
+
+- Add lastErrorDetail to AppState for diagnostic summary
+- Add "Report Issue" button to playback error alert
+- Open mailto with prefilled subject, body, and recipient
+```
+
+---
+
+## Slice 9-H: Play/Pause Menu Label Investigation
+
+### Goal
+Investigate and fix the known issue where the Play/Pause menu label does
+not update reliably due to `@FocusedObject` SwiftUI limitation.
+
+### Scope
+- Investigate root cause: `@FocusedObject` does not reliably re-evaluate
+  `Commands` body when a published property changes
+- Evaluate alternatives:
+  - `@FocusedValue` with scalar `PlaybackState` (already partially implemented
+    in Slice 8-A `PlaybackFocusedValues`)
+  - Timer-based polling of the label
+  - `NSMenuItem` direct manipulation via AppKit
+- Implement the most reliable solution
+- If no perfect solution exists, document the limitation and the best
+  available workaround
+
+### Files
+
+- `macOS/Free/Views/HarmoniaPlayerCommands.swift` (modify)
+- `Shared/Views/PlaybackFocusedValues.swift` (possibly modify)
+- Other files TBD based on investigation
+
+### Done criteria
+
+- ⬜ Play/Pause menu label updates correctly when playback state changes
+- ⬜ Or: limitation documented with best-effort workaround implemented
+- ⬜ All tests green
+
+### Commit message
+
+```
+fix(slice 9-H): improve Play/Pause menu label update reliability
+
+- (details TBD after investigation)
+```
+
+---
+
+## Slice 9-I: Fix Xcode Warnings (Cosmetic)
+
+### Goal
+Fix the "Switch condition evaluates to a constant" warnings in
+`PlaybackErrorTests` and `PlaybackStateTests`.
+
+### Scope
+- Review the switch statements that trigger the warning
+- Refactor to eliminate the constant-condition pattern while preserving
+  test coverage
+
+### Files
+
+- `HarmoniaPlayerTests/SharedTests/PlaybackErrorTests.swift` (modify)
+- `HarmoniaPlayerTests/SharedTests/PlaybackStateTests.swift` (modify)
+
+### Done criteria
+
+- ⬜ No Xcode warnings from these two test files
+- ⬜ Test coverage unchanged
+- ⬜ All tests green
+
+### Commit message
+
+```
+fix(slice 9-I): resolve "Switch condition evaluates to a constant" warnings
+
+- Refactor switch statements in PlaybackErrorTests and PlaybackStateTests
+```
 
 ---
 
 ## Related Slices
 
 - **Slice 5-A (Format Gating)** — FLAC/DSD gate already in `AppState.play(trackID:)`;
-  9-A only needs to provide real `isProUnlocked == true`
-- **Slice 6 (UI + Menu Bar)** — `HarmoniaPlayerCommands` extended with ⌘E shortcut in 9-B
-- **Slice 7-G (Track model)** — Groups A–E fields are the editable fields in 9-B/C/E
-- **Slice 7-H (File Info Panel)** — Tag Editor shares the same right-click trigger pattern
-- **Slice 8-C (ReplayGain)** — same `applyVolume` pattern reused in 9-H gapless handoff
+  commented out in v0.1 since FLAC cannot enter playlist
+- **Slice 7-G (Track model)** — Groups A–E fields define the metadata surface
+- **Slice 10 (v0.2 Pro features)** — Tag Editor editing, Lyrics, Now Playing,
+  Gapless, Equalizer planned for post-Free-launch evaluation
