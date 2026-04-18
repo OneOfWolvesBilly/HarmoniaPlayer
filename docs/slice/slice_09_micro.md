@@ -50,7 +50,6 @@ evaluated after Free v0.1 ships.
 - Fix HarmoniaCore tag writer to preserve xattr on file replacement
 - Make FileInfoView read-only (source editing deferred to v0.2 Tag Editor)
 - Define `FileOriginService` protocol (infrastructure for v0.2)
-- Fix `saveSources()`/`clearSources()` silent `try?` to show error alert
 - Add Codec + Encoding to FileInfoView Technical section
 - Convert FileInfoView from `.sheet` to independent `WindowGroup`
 - Fix polling loop CPU issue (proper `CancellationError` handling)
@@ -313,14 +312,9 @@ Define `FileOriginService` protocol as infrastructure for v0.2.
 - New `FileOriginError` enum: `.writeFailed(String)`, `.clearFailed(String)`
 - New `DarwinFileOriginAdapter` wraps existing `ExtendedAttributeService`
 - `ExtendedAttributeService` retained as bottom-level Darwin utility
-- `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended
-  with `makeFileOriginService()`
-- `AppState` receives `fileOriginService` dependency via factory
-
-#### Fix saveSources/clearSources error handling
-- Replace silent `try?` in `saveSources()` / `clearSources()` with proper
-  error propagation that shows an alert to the user when xattr write fails
-- Depends on `FileOriginService` being wired into AppState
+- Infrastructure only — `CoreServiceProviding` / `CoreFactory` /
+  `HarmoniaCoreProvider` / `AppState` wiring is deferred to v0.2 along with
+  Source editing (see "Deferred to v0.2" note below)
 
 ### Files
 
@@ -331,18 +325,12 @@ HarmoniaCore:
 HarmoniaPlayer:
 - `Shared/Services/FileOriginService.swift` (new — protocol + `FileOriginError`)
 - `Shared/Services/DarwinFileOriginAdapter.swift` (new)
-- `Shared/Services/CoreServiceProviding.swift` (modify — add `makeFileOriginService()`)
-- `Shared/Services/CoreFactory.swift` (modify)
-- `Shared/Services/HarmoniaCoreProvider.swift` (modify)
-- `Shared/Models/AppState.swift` (modify — add `fileOriginService`)
 - `Shared/Views/FileInfoView.swift` (modify — read-only, `languageBundle`)
 - `Shared/Views/ContentView.swift` (modify — pass `languageBundle`)
 
 Test target:
 - `FakeInfrastructure/FakeFileOriginService.swift` (new)
-- `FakeInfrastructure/FakeCoreProvider.swift` (modify — add `fileOriginServiceStub`)
 - `SharedTests/FileOriginServiceTests.swift` (new)
-- `SharedTests/CoreFactoryTests.swift` (modify)
 
 ### Public API shape
 
@@ -366,8 +354,13 @@ HarmoniaCore:
 
 | Test | Given | When | Then |
 |---|---|---|---|
-| `testWrite_PreservesXattr` | file has xattr | `write(url:tags:)` | xattr preserved |
-| `testWrite_PreservesCreationDate` | file has creation date | `write(url:tags:)` | creation date unchanged |
+| `testReplaceFile_PreservesXattr` | original file has xattr | `replaceFile(at:withTempFileAt:)` | xattr preserved on replaced file |
+| `testReplaceFile_PreservesCreationDate` | original file has past creation date | `replaceFile(at:withTempFileAt:)` | creation date preserved (not reset to "now") |
+
+> Note: these tests exercise the internal helper `replaceFile(at:withTempFileAt:)`
+> that `write(url:tags:)` delegates the final file swap to. Testing the helper
+> directly with plain `.bin` temp files avoids depending on an AVFoundation
+> export session or a real audio fixture in the HarmoniaCore test target.
 
 HarmoniaPlayer:
 
@@ -378,18 +371,13 @@ HarmoniaPlayer:
 | `testFileOriginWrite_PersistsValue` | empty file | `write(sources, url:)` → `read` | returns written value |
 | `testFileOriginClear_RemovesAttribute` | xattr exists | `clear(url:)` → `read` | returns `[]` |
 | `testFileOriginClear_WhenAbsent_DoesNotThrow` | no xattr | `clear(url:)` | does not throw |
-| `testMakeFileOriginService_ReturnsNonNil` | `FakeCoreProvider` | `makeFileOriginService()` | returns non-nil |
-| `testSaveSources_Failure_ShowsAlert` | xattr write fails | `saveSources()` | error alert shown |
 
 ### Done criteria
 
 - ⬜ HarmoniaCore: `AVMutableTagWriterAdapter` uses `replaceItemAt`, xattr preserved
 - ⬜ `FileOriginService` protocol defined in Application Layer
 - ⬜ `DarwinFileOriginAdapter` wraps `ExtendedAttributeService`
-- ⬜ `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended
-- ⬜ `AppState` receives `fileOriginService` via factory
 - ⬜ `FileInfoView` read-only, Edit/Clear removed, `languageBundle` added
-- ⬜ `saveSources()` / `clearSources()` errors shown to user (no silent `try?`)
 - ⬜ All 9-B TDD matrix tests green
 - ⬜ All Slice 1–8 tests still green
 
@@ -399,10 +387,26 @@ HarmoniaPlayer:
 1. fix(slice 9-B): HarmoniaCore — replace removeItem+moveItem with replaceItemAt
 2. feat(slice 9-B): add FileOriginService protocol and DarwinFileOriginAdapter
 3. refactor(slice 9-B): make FileInfoView read-only, remove source editing
-4. feat(slice 9-B): integrate FileOriginService into CoreFactory and AppState
 ```
 
-Commit 1 is a HarmoniaCore repo commit. Commits 2–4 are HarmoniaPlayer.
+Commit 1 is a HarmoniaCore repo commit. Commits 2–3 are HarmoniaPlayer.
+
+### Deferred to v0.2
+
+Because Source editing is read-only in v0.1 Free, the following items that
+were originally planned inside 9-B are deferred to the v0.2 Tag Editor slice:
+
+- `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended with
+  `makeFileOriginService()`
+- `AppState` receives `fileOriginService` via factory
+- `FakeCoreProvider` adds `fileOriginServiceStub`
+- `CoreFactoryTests` updates
+- `testMakeFileOriginService_ReturnsNonNil`
+- `saveSources()` / `clearSources()` alert-on-failure UX and the
+  `testSaveSources_Failure_ShowsAlert` test
+
+Commit 2 already lands the protocol, adapter, fake, and adapter tests, so the
+v0.2 Tag Editor slice starts from a ready FileOriginService foundation.
 
 ---
 
