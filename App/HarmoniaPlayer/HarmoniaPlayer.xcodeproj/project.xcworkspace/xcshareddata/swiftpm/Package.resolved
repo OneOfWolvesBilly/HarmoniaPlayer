@@ -1,0 +1,14 @@
+{
+  "originHash" : "bddedb1b0ef9984b2ede16565a72594065f1e68c7d1ee3deb1dee8d3db5a8694",
+  "pins" : [
+    {
+      "identity" : "harmoniacore-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git",
+      "state" : {
+        "revision" : "871f507476b7b4552a326be5721b4e9b9d8be29c"
+      }
+    }
+  ],
+  "version" : 3
+}

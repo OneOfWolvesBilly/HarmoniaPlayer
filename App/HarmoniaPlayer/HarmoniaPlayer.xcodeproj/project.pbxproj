@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C0819FEF2F1D539C005ABA46 /* HarmoniaCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0819FEE2F1D539C005ABA46 /* HarmoniaCore */; };
+		C09D38C22F9402D400E4526D /* HarmoniaCore in Frameworks */ = {isa = PBXBuildFile; productRef = C09D38C12F9402D400E4526D /* HarmoniaCore */; };
 		C0B472CF2F81FA4400F46865 /* HarmoniaPlayer.storekit in Resources */ = {isa = PBXBuildFile; fileRef = C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */; };
 /* End PBXBuildFile section */
 
@@ -72,6 +73,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C09D38C22F9402D400E4526D /* HarmoniaCore in Frameworks */,
 				C0819FEF2F1D539C005ABA46 /* HarmoniaCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -167,6 +169,7 @@
 			name = HarmoniaPlayer;
 			packageProductDependencies = (
 				C0819FEE2F1D539C005ABA46 /* HarmoniaCore */,
+				C09D38C12F9402D400E4526D /* HarmoniaCore */,
 			);
 			productName = HarmoniaPlayer;
 			productReference = C0FCFCF62EF669DA006DE114 /* HarmoniaPlayer.app */;
@@ -228,7 +231,7 @@
 			mainGroup = C0FCFCED2EF669DA006DE114;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C0819FED2F1D539C005ABA46 /* XCLocalSwiftPackageReference "../../../HarmoniaCore/apple-swift" */,
+				C09D38C02F9402D400E4526D /* XCRemoteSwiftPackageReference "HarmoniaCore-Swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C0FCFCF72EF669DA006DE114 /* Products */;
@@ -669,16 +672,25 @@
 		};
 /* End XCConfigurationList section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		C0819FED2F1D539C005ABA46 /* XCLocalSwiftPackageReference "../../../HarmoniaCore/apple-swift" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = "../../../HarmoniaCore/apple-swift";
+/* Begin XCRemoteSwiftPackageReference section */
+		C09D38C02F9402D400E4526D /* XCRemoteSwiftPackageReference "HarmoniaCore-Swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git";
+			requirement = {
+				kind = revision;
+				revision = 871f507476b7b4552a326be5721b4e9b9d8be29c;
+			};
 		};
-/* End XCLocalSwiftPackageReference section */
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		C0819FEE2F1D539C005ABA46 /* HarmoniaCore */ = {
 			isa = XCSwiftPackageProductDependency;
+			productName = HarmoniaCore;
+		};
+		C09D38C12F9402D400E4526D /* HarmoniaCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C09D38C02F9402D400E4526D /* XCRemoteSwiftPackageReference "HarmoniaCore-Swift" */;
 			productName = HarmoniaCore;
 		};
 /* End XCSwiftPackageProductDependency section */
