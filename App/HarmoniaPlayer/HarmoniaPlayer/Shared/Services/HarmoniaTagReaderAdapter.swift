@@ -105,6 +105,8 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
             channels:         bundle.channels,
             fileSize:         bundle.fileSize,
             fileFormat:       fileFormat,
+            codec:            bundle.codec    ?? "",
+            encoding:         bundle.encoding ?? "",
             metadataVersion:  TagBundle.currentSchemaVersion
         )
     }

@@ -60,6 +60,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var channels: Int? = nil
     var fileSize: Int? = nil
     var fileFormat: String = ""
+    var codec: String = ""
+    var encoding: String = ""
 
     // MARK: - Group E: Playback statistics (reserved — no UI in Slice 7)
 
@@ -79,6 +81,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     /// History:
     /// - 0: legacy (Slices 1–6; no Groups A–E)
     /// - 1: Groups A–D + technical info added (Slice 7-G / Split B)
+    /// - 2: codec and encoding added (Slice 9-C)
     var metadataVersion: Int = 0
 
     // MARK: - Runtime-only fields (not persisted)
@@ -127,6 +130,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         channels: Int? = nil,
         fileSize: Int? = nil,
         fileFormat: String = "",
+        codec: String = "",
+        encoding: String = "",
         playCount: Int = 0,
         lastPlayedAt: Date? = nil,
         rating: Double? = nil,
@@ -156,6 +161,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         self.channels        = channels
         self.fileSize        = fileSize
         self.fileFormat      = fileFormat
+        self.codec           = codec
+        self.encoding        = encoding
         self.playCount       = playCount
         self.lastPlayedAt    = lastPlayedAt
         self.rating          = rating
@@ -181,6 +188,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         case replayGainTrack, replayGainAlbum
         case comment
         case bitrate, sampleRate, channels, fileSize, fileFormat
+        case codec, encoding
         case playCount, lastPlayedAt, rating
         case metadataVersion
     }
@@ -221,6 +229,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         try c.encodeIfPresent(channels,       forKey: .channels)
         try c.encodeIfPresent(fileSize,       forKey: .fileSize)
         try c.encode(fileFormat,              forKey: .fileFormat)
+        try c.encode(codec,                   forKey: .codec)
+        try c.encode(encoding,                forKey: .encoding)
         try c.encode(playCount,               forKey: .playCount)
         try c.encodeIfPresent(lastPlayedAt,   forKey: .lastPlayedAt)
         try c.encodeIfPresent(rating,         forKey: .rating)
@@ -300,6 +310,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         channels   = try c.decodeIfPresent(Int.self,    forKey: .channels)
         fileSize   = try c.decodeIfPresent(Int.self,    forKey: .fileSize)
         fileFormat = try c.decodeIfPresent(String.self, forKey: .fileFormat) ?? ""
+        codec      = try c.decodeIfPresent(String.self, forKey: .codec)      ?? ""
+        encoding   = try c.decodeIfPresent(String.self, forKey: .encoding)   ?? ""
 
         // Group E
         playCount    = try c.decodeIfPresent(Int.self,    forKey: .playCount)         ?? 0
@@ -338,7 +350,9 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
               lhs.sampleRate == rhs.sampleRate,
               lhs.channels   == rhs.channels,
               lhs.fileSize   == rhs.fileSize,
-              lhs.fileFormat == rhs.fileFormat
+              lhs.fileFormat == rhs.fileFormat,
+              lhs.codec      == rhs.codec,
+              lhs.encoding   == rhs.encoding
         else { return false }
         return lhs.playCount    == rhs.playCount &&
                lhs.lastPlayedAt == rhs.lastPlayedAt &&

@@ -260,6 +260,10 @@ struct FileInfoView: View {
         InfoSection(title: L("file_info_section_technical")) {
             InfoRow(label: L("file_info_label_format"),
                     value: track.fileFormat.isEmpty ? "\u{2014}" : track.fileFormat.uppercased())
+            InfoRow(label: L("file_info_label_codec"),
+                    value: track.codec.isEmpty ? "\u{2014}" : track.codec)
+            InfoRow(label: L("file_info_label_encoding"),
+                    value: track.encoding.isEmpty ? "\u{2014}" : track.encoding)
             InfoRow(label: L("file_info_label_duration"),
                     value: durationString(track.duration))
             InfoRow(label: L("file_info_label_bit_rate"),

@@ -195,6 +195,43 @@ final class TrackTests: XCTestCase {
                      "rating must default to nil")
     }
 
+    func testTrack_Codec_DefaultEmpty() {
+        let track = Track(url: sampleURL)
+        XCTAssertEqual(track.codec, "",
+                       "codec must default to empty string")
+    }
+
+    func testTrack_Encoding_DefaultEmpty() {
+        let track = Track(url: sampleURL)
+        XCTAssertEqual(track.encoding, "",
+                       "encoding must default to empty string")
+    }
+
+    func testTrack_InitWithCodecAndEncoding_StoresValues() {
+        let track = Track(url: sampleURL, title: "T",
+                          codec: "AAC LC", encoding: "lossy")
+        XCTAssertEqual(track.codec,    "AAC LC")
+        XCTAssertEqual(track.encoding, "lossy")
+    }
+
+    func testTrack_Equatable_DifferentCodec_AreNotEqual() {
+        let sharedID = UUID()
+        let track1 = Track(id: sharedID, url: sampleURL, title: "S",
+                           codec: "MP3 Layer 3", encoding: "lossy")
+        let track2 = Track(id: sharedID, url: sampleURL, title: "S",
+                           codec: "AAC LC", encoding: "lossy")
+        XCTAssertNotEqual(track1, track2)
+    }
+
+    func testTrack_Equatable_DifferentEncoding_AreNotEqual() {
+        let sharedID = UUID()
+        let track1 = Track(id: sharedID, url: sampleURL, title: "S",
+                           codec: "FLAC", encoding: "lossless")
+        let track2 = Track(id: sharedID, url: sampleURL, title: "S",
+                           codec: "FLAC", encoding: "lossy")
+        XCTAssertNotEqual(track1, track2)
+    }
+
     func testTrack_AllNewFields_RoundTrip() throws {
         // Given: A track with all Groups A–E fields set
         let original = Track(
@@ -221,6 +258,8 @@ final class TrackTests: XCTestCase {
             channels: 2,
             fileSize: 1_048_576,
             fileFormat: "MP3",
+            codec: "MP3 Layer 3",
+            encoding: "lossy",
             playCount: 7,
             lastPlayedAt: Date(timeIntervalSinceReferenceDate: 0),
             rating: 0.8
@@ -249,6 +288,8 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(restored.channels,    original.channels)
         XCTAssertEqual(restored.fileSize,    original.fileSize)
         XCTAssertEqual(restored.fileFormat,  original.fileFormat)
+        XCTAssertEqual(restored.codec,       original.codec)
+        XCTAssertEqual(restored.encoding,    original.encoding)
         XCTAssertEqual(restored.playCount,   original.playCount)
         XCTAssertEqual(restored.lastPlayedAt, original.lastPlayedAt)
         XCTAssertEqual(restored.rating,      original.rating)
@@ -309,5 +350,7 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(track.albumArtist, "")
         XCTAssertEqual(track.comment,     "")
         XCTAssertEqual(track.fileFormat,  "")
+        XCTAssertEqual(track.codec,       "")
+        XCTAssertEqual(track.encoding,    "")
     }
 }

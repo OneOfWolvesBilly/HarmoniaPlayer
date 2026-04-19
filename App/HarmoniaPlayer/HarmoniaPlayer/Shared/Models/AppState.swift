@@ -660,6 +660,8 @@ final class AppState: ObservableObject {
             playlists[pi].tracks[ti].channels        = refreshed.channels
             playlists[pi].tracks[ti].fileSize        = refreshed.fileSize
             playlists[pi].tracks[ti].fileFormat      = refreshed.fileFormat
+            playlists[pi].tracks[ti].codec           = refreshed.codec
+            playlists[pi].tracks[ti].encoding        = refreshed.encoding
             playlists[pi].tracks[ti].metadataVersion = tagReaderService.currentSchemaVersion
 
             didRefreshAny = true

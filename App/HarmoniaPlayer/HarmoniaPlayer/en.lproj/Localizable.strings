@@ -180,6 +180,8 @@
 "file_info_label_replaygain_track" = "ReplayGain Track";
 "file_info_label_replaygain_album" = "ReplayGain Album";
 "file_info_label_format" = "Format";
+"file_info_label_codec" = "Codec";
+"file_info_label_encoding" = "Encoding";
 "file_info_label_duration" = "Duration";
 "file_info_label_bit_rate" = "Bit Rate";
 "file_info_label_sample_rate" = "Sample Rate";

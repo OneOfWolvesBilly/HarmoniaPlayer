@@ -180,6 +180,8 @@
 "file_info_label_replaygain_track" = "ReplayGain トラック";
 "file_info_label_replaygain_album" = "ReplayGain アルバム";
 "file_info_label_format" = "フォーマット";
+"file_info_label_codec" = "コーデック";
+"file_info_label_encoding" = "エンコーディング";
 "file_info_label_duration" = "再生時間";
 "file_info_label_bit_rate" = "ビットレート";
 "file_info_label_sample_rate" = "サンプルレート";

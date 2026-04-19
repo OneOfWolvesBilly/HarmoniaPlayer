@@ -180,6 +180,8 @@
 "file_info_label_replaygain_track" = "ReplayGain 曲目";
 "file_info_label_replaygain_album" = "ReplayGain 專輯";
 "file_info_label_format" = "格式";
+"file_info_label_codec" = "編碼";
+"file_info_label_encoding" = "壓縮";
 "file_info_label_duration" = "時長";
 "file_info_label_bit_rate" = "位元速率";
 "file_info_label_sample_rate" = "取樣率";
