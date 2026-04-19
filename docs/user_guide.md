@@ -218,7 +218,7 @@ Up to the most recent 10 operations are remembered.
 ## File Info
 
 Select a track and press **`⌘I`** (or right-click → Get Info) to open the
-File Info panel, showing:
+File Info window, showing:
 
 - **Artwork:** embedded album artwork, with pixel dimensions
 - **Tags:** Title, Artist, Album, Album Artist, Composer, Genre, Year,
@@ -227,6 +227,12 @@ File Info panel, showing:
   file format
 - **Source URLs:** files downloaded from the web have their
   `kMDItemWhereFroms` source URL shown; you can edit or clear this
+
+File Info is a standalone window: it is resizable, draggable, and does
+not block the main window, so you can keep playing music and continue
+using the app while it is open. You can also open multiple File Info
+windows at once (one per track) to compare tracks side by side. Close
+each window with **`⌘W`** or the window's close button.
 
 ---
 

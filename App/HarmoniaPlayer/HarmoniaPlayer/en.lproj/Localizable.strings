@@ -187,3 +187,8 @@
 "file_info_label_sample_rate" = "Sample Rate";
 "file_info_label_channels" = "Channels";
 "file_info_source_none" = "(none)";
+
+// Slice 9-D: FileInfoView as independent WindowGroup
+"file_info_window_title_fallback" = "File Info";
+"file_info_track_unavailable_title" = "Track no longer available";
+"file_info_track_unavailable_message" = "This track is no longer in the active playlist.";

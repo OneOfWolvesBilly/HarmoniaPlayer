@@ -326,7 +326,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `viewPreferences` | `ViewPreferences` | read/write | Layout preferences |
-| `fileInfoTrack` | `Track?` | read/write | Track shown in File Info panel |
+| `fileInfoTrack` | `Track?` | read/write | One-shot signal requesting File Info window to open; ContentView observes and resets to nil |
 | `showPaywall` | `Bool` | read/write | Paywall sheet binding (v0.1: hidden) |
 | `paywallDismissedThisSession` | `Bool` | read/write | Session-only skip flag |
 
@@ -423,7 +423,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `restoreState()` | Restores state from UserDefaults; triggers metadata refresh |
 | `displayName(for:) -> String` | Returns "Title - Artist" or filename |
 | `clearLastError()` | Clears lastError and failedTrackName |
-| `showFileInfo(trackID:)` | Sets fileInfoTrack for File Info panel |
+| `showFileInfo(trackID:)` | Sets fileInfoTrack to signal ContentView to open File Info WindowGroup; no-op if ID not in active playlist |
 | `showPaywallIfNeeded() -> Bool` | Sets showPaywall if Free tier; returns true if blocked |
 | `purchasePro() async throws` | Initiates purchase via IAPManager |
 | `refreshEntitlements() async` | Refreshes Pro status from App Store |

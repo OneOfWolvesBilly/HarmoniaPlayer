@@ -187,3 +187,8 @@
 "file_info_label_sample_rate" = "取樣率";
 "file_info_label_channels" = "聲道";
 "file_info_source_none" = "（無）";
+
+// Slice 9-D: FileInfoView as independent WindowGroup
+"file_info_window_title_fallback" = "檔案資訊";
+"file_info_track_unavailable_title" = "曲目已不存在";
+"file_info_track_unavailable_message" = "此曲目已不在目前的播放列表中。";

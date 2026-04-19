@@ -82,6 +82,23 @@ struct HarmoniaPlayerApp: App {
         .windowStyle(.plain)
         .defaultLaunchBehavior(.suppressed)
 
+        // File Info — independent, non-modal window identified by Track.ID.
+        // Opened via ContentView's .onChange(of: appState.fileInfoTrack).
+        // Multiple File Info windows can coexist; each is keyed by its track's ID.
+        // `.defaultLaunchBehavior(.suppressed)` mirrors Mini Player: File Info
+        // windows are never auto-restored on launch; they only open in response
+        // to an explicit user action (⌘I or right-click → Get Info).
+        WindowGroup(for: Track.ID.self) { $trackID in
+            if let trackID {
+                FileInfoView(trackID: trackID)
+                    .environmentObject(appState)
+            } else {
+                EmptyView()
+            }
+        }
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+
         Settings {
             SettingsView()
                 .environmentObject(appState)

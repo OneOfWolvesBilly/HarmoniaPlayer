@@ -37,6 +37,8 @@ struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
 
+    @Environment(\.openWindow) private var openWindow
+
     // MARK: - Localization helper
 
     private func L(_ key: String) -> String {
@@ -60,9 +62,14 @@ struct ContentView: View {
         // @FocusedObject does not reliably re-evaluate Commands body on
         // property changes; @FocusedValue with a scalar value does.
         .focusedValue(\.playbackState, appState.playbackState)
-        // File Info panel — presented when appState.fileInfoTrack is set
-        .sheet(item: $appState.fileInfoTrack) { track in
-            FileInfoView(track: track, languageBundle: appState.languageBundle)
+        // File Info window — opens an independent WindowGroup(for: Track.ID.self)
+        // whenever AppState.fileInfoTrack is set by showFileInfo(trackID:).
+        // The property is a one-shot signal: we reset it to nil after opening
+        // so the same track can re-trigger the window on a subsequent call.
+        .onChange(of: appState.fileInfoTrack) { _, newValue in
+            guard let track = newValue else { return }
+            openWindow(value: track.id)
+            appState.fileInfoTrack = nil
         }
         // Paywall sheet — presented when a Free user triggers a Pro-only action
         .sheet(isPresented: $appState.showPaywall) {

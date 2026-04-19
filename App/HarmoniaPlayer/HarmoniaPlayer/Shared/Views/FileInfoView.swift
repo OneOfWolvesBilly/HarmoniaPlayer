@@ -6,7 +6,7 @@
 //
 //  PURPOSE
 //  -------
-//  Sheet-style "Get Info" panel for a single track. Read-only.
+//  "Get Info" panel for a single track. Read-only.
 //  Displays five sections:
 //    • Artwork    — embedded cover art image with dimensions, format, size
 //    • Location   — fileName, folder, path, fileSize, modified, created
@@ -18,14 +18,23 @@
 //
 //  DESIGN NOTES
 //  ------------
-//  - Presented as a sheet from ContentView via $appState.fileInfoTrack.
+//  - Presented as an independent `WindowGroup(for: Track.ID.self)` scene,
+//    declared in `HarmoniaPlayerApp`. The scene is non-modal, draggable,
+//    and resizable. Multiple File Info windows can be open simultaneously,
+//    one per track ID.
+//  - Receives the `trackID` as a value-based window payload; the view looks
+//    up the current `Track` from `AppState.playlist` on every render so the
+//    data stays in sync with any playlist updates (e.g. future v0.2 tag edits).
+//  - When the track is no longer present in the active playlist (removed
+//    by the user), the view shows a localized "unavailable" placeholder
+//    but keeps the window open so the user can close it explicitly.
+//  - `AppState` is provided via `@EnvironmentObject` by the `WindowGroup`
+//    content closure in `HarmoniaPlayerApp`.
 //  - Source editing is deferred to the v0.2 Tag Editor. This view does not
 //    write xattrs; it only reads kMDItemWhereFroms for display via
-//    ExtendedAttributeService.
+//    `ExtendedAttributeService`.
 //  - All disk I/O runs synchronously on the calling thread (xattr and
 //    FileManager attribute calls are cheap).
-//  - Receives `languageBundle` as an init parameter so UI strings resolve
-//    through the user-selected language bundle.
 //  - No import HarmoniaCore.
 //
 
@@ -36,12 +45,11 @@ struct FileInfoView: View {
 
     // MARK: - Input
 
-    let track: Track
-    let languageBundle: Bundle
+    let trackID: Track.ID
 
     // MARK: - Environment
 
-    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var appState: AppState
 
     // MARK: - State
 
@@ -50,61 +58,83 @@ struct FileInfoView: View {
     @State private var whereSources: [String] = []
     @State private var fileAttributes: FileAttributeInfo = .empty
 
+    // MARK: - Derived
+
+    /// Looks up the current `Track` from the active playlist by ID.
+    ///
+    /// Returns `nil` when the track has been removed from the playlist.
+    /// The view renders an "unavailable" placeholder in that case and keeps
+    /// the window open so the user can close it explicitly.
+    private var track: Track? {
+        appState.playlist.tracks.first { $0.id == trackID }
+    }
+
     // MARK: - Localization helper
 
     private func L(_ key: String) -> String {
-        NSLocalizedString(key, bundle: languageBundle, comment: "")
+        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
     }
 
     // MARK: - Body
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Title bar
-            HStack {
-                Text(track.title)
-                    .font(.headline)
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityIdentifier("file-info-close-button")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    artworkSection
-                    Divider().padding(.horizontal, 16)
-                    locationSection
-                    Divider().padding(.horizontal, 16)
-                    tagsSection
-                    Divider().padding(.horizontal, 16)
-                    technicalSection
-                    Divider().padding(.horizontal, 16)
-                    sourceSection
-                }
-                .padding(.bottom, 16)
+        Group {
+            if let track {
+                content(for: track)
+            } else {
+                unavailableView
             }
         }
-        .frame(width: 500, height: 720)
+        .frame(minWidth: 400, idealWidth: 500, minHeight: 500, idealHeight: 720)
+        .navigationTitle(track?.title.isEmpty == false
+                         ? track!.title
+                         : L("file_info_window_title_fallback"))
         .onAppear {
             loadAttributes()
             loadWhereSources()
         }
     }
 
+    /// Placeholder shown when the track is no longer in the active playlist.
+    private var unavailableView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 36))
+                .foregroundStyle(Color.secondary)
+            Text(L("file_info_track_unavailable_title"))
+                .font(.headline)
+            Text(L("file_info_track_unavailable_message"))
+                .font(.body)
+                .foregroundStyle(Color.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityIdentifier("file-info-unavailable")
+    }
+
+    /// Main content rendered when `track` is available.
+    @ViewBuilder
+    private func content(for track: Track) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                artworkSection(track: track)
+                Divider().padding(.horizontal, 16)
+                locationSection(track: track)
+                Divider().padding(.horizontal, 16)
+                tagsSection(track: track)
+                Divider().padding(.horizontal, 16)
+                technicalSection(track: track)
+                Divider().padding(.horizontal, 16)
+                sourceSection
+            }
+            .padding(.vertical, 16)
+        }
+    }
+
     // MARK: - Artwork Section
 
-    private var artworkSection: some View {
+    private func artworkSection(track: Track) -> some View {
         InfoSection(title: L("file_info_section_artwork")) {
             VStack(spacing: 8) {
                 if let data = track.artworkData,
@@ -204,7 +234,7 @@ struct FileInfoView: View {
 
     // MARK: - Location Section
 
-    private var locationSection: some View {
+    private func locationSection(track: Track) -> some View {
         InfoSection(title: L("file_info_section_location")) {
             InfoRow(label: L("file_info_label_file_name"),
                     value: track.url.lastPathComponent)
@@ -213,7 +243,7 @@ struct FileInfoView: View {
             InfoRow(label: L("file_info_label_path"),
                     value: track.url.path)
             InfoRow(label: L("file_info_label_file_size"),
-                    value: fileSizeString)
+                    value: fileSizeString(track: track))
             InfoRow(label: L("file_info_label_modified"),
                     value: fileAttributes.modificationDate.map(dateString) ?? "\u{2014}")
             InfoRow(label: L("file_info_label_created"),
@@ -223,7 +253,7 @@ struct FileInfoView: View {
 
     // MARK: - Tags Section
 
-    private var tagsSection: some View {
+    private func tagsSection(track: Track) -> some View {
         InfoSection(title: L("file_info_section_tags")) {
             InfoRow(label: L("file_info_label_title"),
                     value: track.title.isEmpty ? "\u{2014}" : track.title)
@@ -240,9 +270,9 @@ struct FileInfoView: View {
             InfoRow(label: L("file_info_label_year"),
                     value: track.year.map(String.init) ?? "\u{2014}")
             InfoRow(label: L("file_info_label_track"),
-                    value: trackNumberString)
+                    value: trackNumberString(track: track))
             InfoRow(label: L("file_info_label_disc"),
-                    value: discNumberString)
+                    value: discNumberString(track: track))
             InfoRow(label: L("file_info_label_bpm"),
                     value: track.bpm.map(String.init) ?? "\u{2014}")
             InfoRow(label: L("file_info_label_comment"),
@@ -256,7 +286,7 @@ struct FileInfoView: View {
 
     // MARK: - Technical Section
 
-    private var technicalSection: some View {
+    private func technicalSection(track: Track) -> some View {
         InfoSection(title: L("file_info_section_technical")) {
             InfoRow(label: L("file_info_label_format"),
                     value: track.fileFormat.isEmpty ? "\u{2014}" : track.fileFormat.uppercased())
@@ -303,10 +333,12 @@ struct FileInfoView: View {
     // MARK: - Data Loading
 
     private func loadWhereSources() {
+        guard let track else { return }
         whereSources = xattrService.readWhereFroms(url: track.url)
     }
 
     private func loadAttributes() {
+        guard let track else { return }
         let attrs = (try? FileManager.default.attributesOfItem(atPath: track.url.path)) ?? [:]
         fileAttributes = FileAttributeInfo(
             modificationDate: attrs[.modificationDate] as? Date,
@@ -316,7 +348,7 @@ struct FileInfoView: View {
 
     // MARK: - Formatting Helpers
 
-    private var fileSizeString: String {
+    private func fileSizeString(track: Track) -> String {
         if let size = track.fileSize {
             return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
         }
@@ -327,7 +359,7 @@ struct FileInfoView: View {
         return "\u{2014}"
     }
 
-    private var trackNumberString: String {
+    private func trackNumberString(track: Track) -> String {
         switch (track.trackNumber, track.trackTotal) {
         case (nil, _):          return "\u{2014}"
         case (let n?, nil):     return "\(n)"
@@ -335,7 +367,7 @@ struct FileInfoView: View {
         }
     }
 
-    private var discNumberString: String {
+    private func discNumberString(track: Track) -> String {
         switch (track.discNumber, track.discTotal) {
         case (nil, _):          return "\u{2014}"
         case (let n?, nil):     return "\(n)"

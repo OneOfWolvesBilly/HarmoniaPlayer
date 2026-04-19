@@ -187,3 +187,8 @@
 "file_info_label_sample_rate" = "サンプルレート";
 "file_info_label_channels" = "チャンネル";
 "file_info_source_none" = "（なし）";
+
+// Slice 9-D: FileInfoView as independent WindowGroup
+"file_info_window_title_fallback" = "ファイル情報";
+"file_info_track_unavailable_title" = "トラックが見つかりません";
+"file_info_track_unavailable_message" = "このトラックは現在のプレイリストに存在しません。";

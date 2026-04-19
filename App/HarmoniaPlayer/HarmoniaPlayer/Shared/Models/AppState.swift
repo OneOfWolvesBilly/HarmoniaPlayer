@@ -213,11 +213,13 @@ final class AppState: ObservableObject {
 
     // MARK: - File Info Panel
 
-    /// Track currently shown in the File Info panel sheet.
+    /// One-shot signal requesting the File Info window to open for a track.
     ///
-    /// Set via `showFileInfo(trackID:)`; cleared automatically when the sheet
-    /// is dismissed (the sheet binding sets this back to nil).
-    /// Not `private(set)` so the sheet's `item` binding can dismiss it.
+    /// Set via `showFileInfo(trackID:)`. `ContentView` observes this property
+    /// via `.onChange` and opens an independent `WindowGroup(for: Track.ID.self)`
+    /// scene keyed by the track's ID, then resets this property back to `nil`
+    /// so the same track can request the window again on a subsequent call.
+    /// Not `private(set)` so the `ContentView.onChange` handler can clear it.
     @Published var fileInfoTrack: Track? = nil
 
     // MARK: - Paywall
@@ -476,10 +478,12 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Presents the File Info panel for the track with the given ID.
+    /// Requests the File Info window to open for the track with the given ID.
     ///
-    /// Sets `fileInfoTrack` to the matching track, which triggers the sheet
-    /// in `ContentView`. If no matching track is found, the call is a no-op.
+    /// Sets `fileInfoTrack` to the matching track. `ContentView` observes
+    /// `fileInfoTrack` and opens the independent `WindowGroup(for:)` scene,
+    /// then clears the property. If no matching track is found, the call
+    /// is a no-op and `fileInfoTrack` remains unchanged.
     func showFileInfo(trackID: Track.ID) {
         fileInfoTrack = playlist.tracks.first { $0.id == trackID }
     }
