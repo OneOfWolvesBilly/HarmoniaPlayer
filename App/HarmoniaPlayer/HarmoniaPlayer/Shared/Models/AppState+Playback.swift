@@ -293,8 +293,11 @@ extension AppState {
         pollingTask = Task { [weak self] in
             guard let self else { return }
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 250_000_000) // 0.25s
-                guard !Task.isCancelled else { break }
+                do {
+                    try await Task.sleep(nanoseconds: 250_000_000) // 0.25s
+                } catch {
+                    break // CancellationError — exit loop cleanly
+                }
                 let serviceState = self.playbackService.state
                 let time = await self.playbackService.currentTime()
                 await MainActor.run {
