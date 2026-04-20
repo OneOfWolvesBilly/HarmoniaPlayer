@@ -31,14 +31,9 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | Free | v0.1 |
 | 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | v0.1 |
 | 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | v0.1 |
-| 9-F | Multi-artwork support (ID3v2 APIC picture types) | Free | v0.1 |
-| 9-G | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
-| 9-H | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | v0.1 |
-| 9-I | Fix Xcode warnings (cosmetic) | Free | v0.1 |
-
-v0.2 Pro features (Tag Editor editing, Lyrics, Now Playing, Gapless, Equalizer)
-are planned in [Slice 10](slice_10_micro_draft.md). Their priority will be
-evaluated after Free v0.1 ships.
+| 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
+| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | v0.1 |
+| 9-H | Fix Xcode warnings (cosmetic) | Free | v0.1 |
 
 ### Goals (v0.1)
 
@@ -53,7 +48,6 @@ evaluated after Free v0.1 ships.
 - Add Codec + Encoding to FileInfoView Technical section
 - Convert FileInfoView from `.sheet` to independent `WindowGroup`
 - Fix polling loop CPU issue (proper `CancellationError` handling)
-- Add multi-artwork support (ID3v2 APIC picture types)
 - Add error reporting Phase 1 (mailto prefilled)
 - Investigate Play/Pause menu label update reliability
 - Fix Xcode warnings in test files
@@ -563,63 +557,7 @@ fix(slice 9-E): replace try? await Task.sleep with proper CancellationError hand
 
 ---
 
-## Slice 9-F: Multi-Artwork Support
-
-### Goal
-Support multiple embedded artworks per track (ID3v2 APIC picture types).
-Currently only the first artwork is read; display all available artworks
-in FileInfoView.
-
-### Scope
-- HarmoniaCore `TagBundle`: change `artworkData: Data?` to
-  `artworks: [ArtworkData]` where `ArtworkData` contains `data: Data`
-  and `pictureType: Int` (APIC picture type code)
-- `AVMetadataTagReaderAdapter`: read all APIC items, not just the first
-- `HarmoniaTagReaderAdapter`: map `artworks` to `Track`
-- `Track`: add `artworks: [ArtworkData]`; keep `artworkData: Data?` as
-  computed property returning `artworks.first?.data` for backward compat
-- `FileInfoView`: display artwork gallery if multiple artworks present
-- `PlayerView`: continue using `artworkData` (first artwork) for Now Playing
-
-### Files
-
-HarmoniaCore:
-- `Models/TagBundle.swift` (modify — `artworks` array)
-- `Adapters/AVMetadataTagReaderAdapter.swift` (modify — read all APIC)
-- `Tests/TagBundleTests.swift` (modify)
-
-HarmoniaPlayer:
-- `Shared/Models/Track.swift` (modify — `artworks` + computed `artworkData`)
-- `Shared/Services/HarmoniaTagReaderAdapter.swift` (modify — map artworks)
-- `Shared/Views/FileInfoView.swift` (modify — artwork gallery)
-
-### TDD matrix
-
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testTagBundle_Artworks_DefaultEmpty` | empty TagBundle | read `artworks` | `[]` |
-| `testTrack_ArtworkData_ReturnsFirstArtwork` | Track with 2 artworks | read `artworkData` | returns first |
-| `testTrack_ArtworkData_NilWhenEmpty` | Track with no artworks | read `artworkData` | `nil` |
-| `testMultipleArtworks_MappedFromTagBundle` | TagBundle with 3 artworks | readMetadata | `Track.artworks.count == 3` |
-
-### Done criteria
-
-- ⬜ All APIC artworks read from audio files
-- ⬜ `FileInfoView` shows artwork gallery when multiple exist
-- ⬜ `PlayerView` still uses first artwork for Now Playing display
-- ⬜ Backward compatibility: `artworkData` computed property works
-- ⬜ All tests green
-
-### Commit order
-
-```
-1. feat(HarmoniaCore): read multiple APIC artworks into TagBundle.artworks
-2. feat(slice 9-F): map multi-artwork to Track and display in FileInfoView
-```
-
----
-
-## Slice 9-G: Error Reporting Phase 1
+## Slice 9-F: Error Reporting Phase 1
 
 ### Goal
 Add a basic error reporting mechanism so users can send diagnostic
@@ -659,7 +597,7 @@ information when playback fails. Phase 1 uses a prefilled mailto link.
 ### Commit message
 
 ```
-feat(slice 9-G): add error reporting Phase 1 with prefilled mailto
+feat(slice 9-F): add error reporting Phase 1 with prefilled mailto
 
 - Add lastErrorDetail to AppState for diagnostic summary
 - Add "Report Issue" button to playback error alert
@@ -668,7 +606,7 @@ feat(slice 9-G): add error reporting Phase 1 with prefilled mailto
 
 ---
 
-## Slice 9-H: Play/Pause Menu Label Investigation
+## Slice 9-G: Play/Pause Menu Label Investigation
 
 ### Goal
 Investigate and fix the known issue where the Play/Pause menu label does
@@ -701,14 +639,14 @@ not update reliably due to `@FocusedObject` SwiftUI limitation.
 ### Commit message
 
 ```
-fix(slice 9-H): improve Play/Pause menu label update reliability
+fix(slice 9-G): improve Play/Pause menu label update reliability
 
 - (details TBD after investigation)
 ```
 
 ---
 
-## Slice 9-I: Fix Xcode Warnings (Cosmetic)
+## Slice 9-H: Fix Xcode Warnings (Cosmetic)
 
 ### Goal
 Fix the "Switch condition evaluates to a constant" warnings in
@@ -733,17 +671,7 @@ Fix the "Switch condition evaluates to a constant" warnings in
 ### Commit message
 
 ```
-fix(slice 9-I): resolve "Switch condition evaluates to a constant" warnings
+fix(slice 9-H): resolve "Switch condition evaluates to a constant" warnings
 
 - Refactor switch statements in PlaybackErrorTests and PlaybackStateTests
 ```
-
----
-
-## Related Slices
-
-- **Slice 5-A (Format Gating)** — FLAC/DSD gate already in `AppState.play(trackID:)`;
-  commented out in v0.1 since FLAC cannot enter playlist
-- **Slice 7-G (Track model)** — Groups A–E fields define the metadata surface
-- **Slice 10 (v0.2 Pro features)** — Tag Editor editing, Lyrics, Now Playing,
-  Gapless, Equalizer planned for post-Free-launch evaluation
