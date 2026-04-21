@@ -308,6 +308,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `lastError` | `PlaybackError?` | read | Most recent error |
+| `lastErrorDetail` | `String?` | read | One-line diagnostic summary in format `"<errorCode>: <path-or-noTrack>"`; set alongside `lastError` |
 | `failedTrackName` | `String?` | read | Display name of failed track |
 | `showFileNotFoundAlert` | `Bool` | read/write | File-not-found alert binding |
 | `skippedInaccessibleNames` | `[String]` | read/write | Tracks skipped during auto-play |
@@ -422,7 +423,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `saveState()` | Persists playlists, settings to UserDefaults |
 | `restoreState()` | Restores state from UserDefaults; triggers metadata refresh |
 | `displayName(for:) -> String` | Returns "Title - Artist" or filename |
-| `clearLastError()` | Clears lastError and failedTrackName |
+| `clearLastError()` | Clears lastError, lastErrorDetail, failedTrackName, showFileNotFoundAlert, skippedInaccessibleNames |
 | `showFileInfo(trackID:)` | Sets fileInfoTrack to signal ContentView to open File Info WindowGroup; no-op if ID not in active playlist |
 | `showPaywallIfNeeded() -> Bool` | Sets showPaywall if Free tier; returns true if blocked |
 | `purchasePro() async throws` | Initiates purchase via IAPManager |
@@ -540,6 +541,32 @@ struct ExtendedAttributeService {
     func clearWhereFroms(url: URL) throws
 }
 ```
+
+### 5.5 ErrorReportService
+
+**Location:** `Shared/Services/ErrorReportService.swift`
+
+**Purpose:** Application Layer pure struct. Builds a `mailto:` URL for the
+"Report Issue" button in the playback-error alert. No I/O — only URL
+construction. No `import HarmoniaCore`.
+
+```swift
+struct ErrorReportService {
+    static let reportEmail = "harmonia.audio.project+harmonia_player@gmail.com"
+    static let subjectLine = "[HarmoniaPlayer] Error Report"
+
+    static func buildMailtoURL(
+        detail: String,
+        appVersion: String,
+        osVersion: String
+    ) -> URL?
+}
+```
+
+The caller (`ContentView`) is responsible for reading runtime versions
+(`Bundle.main` / `ProcessInfo`) and invoking `NSWorkspace.shared.open(_:)`.
+This split keeps `ErrorReportService` itself free of side effects and
+trivially unit-testable.
 
 ---
 

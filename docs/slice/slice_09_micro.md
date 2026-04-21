@@ -561,48 +561,126 @@ fix(slice 9-E): replace try? await Task.sleep with proper CancellationError hand
 
 ### Goal
 Add a basic error reporting mechanism so users can send diagnostic
-information when playback fails. Phase 1 uses a prefilled mailto link.
+information when playback fails. Phase 1 uses a prefilled mailto link —
+no network calls, no PII, no telemetry.
 
 ### Scope
+
 - Add `lastErrorDetail: String?` to `AppState` — captures a one-line
-  diagnostic summary when `lastError` is set (e.g. "failedToOpenFile:
-  /path/to/file.mp3")
-- Add "Report Issue" button to the playback error alert
-- Button opens `mailto:` prefilled with:
+  diagnostic summary when `lastError` is set, in the format
+  `"<errorCode>: <track.url.path>"` or `"<errorCode>: (no active track)"`
+  for error sites without a known track (e.g. `seek()` catch)
+- All four error sites in `AppState+Playback.swift` set `lastErrorDetail`:
+  `play()` catch, `seek()` catch, `play(trackID:)` inaccessibility gate,
+  `play(trackID:)` load/play catch
+- `clearLastError()` also clears `lastErrorDetail`
+- New `ErrorReportService` (Application Layer, pure struct):
+  builds a `mailto:` URL from detail string + app version + macOS version.
+  Does not perform I/O — only URL construction, unit-testable in isolation.
+- "Report Issue" button added to the **playback-error alert** in
+  `ContentView` (i.e. the alert triggered by `lastError != nil` excluding
+  `.failedToOpenFile`). The `file-not-found alert` (auto-dismiss 3 s) is
+  **not** modified — its short lifetime makes a manual button impractical,
+  and the user already knows the file is missing.
+- Button action calls `NSWorkspace.shared.open(_:)` on the mailto URL:
   - To: `harmonia.audio.project+harmonia_player@gmail.com`
-  - Subject: `[HarmoniaPlayer] Error Report`
-  - Body: `lastErrorDetail`, app version, macOS version
-- No network calls; purely local mailto
+  - Subject: `[HarmoniaPlayer] Error Report` (not localized)
+  - Body: detail line + app version + macOS version (not localized — easier
+    for triage across all users)
+- New localized string `alert_report_issue_button` (en / zh-Hant / ja)
+
+### Design rationale: subject and body not localized
+
+The mailto subject (`[HarmoniaPlayer] Error Report`) and body (detail +
+versions) are intentionally kept in English for every locale. Reasons:
+
+1. Error triage is done by the developer reading incoming mail; a uniform
+   language simplifies filtering, searching, and pattern matching across
+   reports from all locales
+2. `lastErrorDetail` itself already embeds a non-localized error code
+   string (e.g. `failedToDecode`) — localizing the surrounding body while
+   keeping the error code English would be inconsistent
+3. File paths in the detail are not translatable regardless of UI locale
+4. Only the **button label** (`alert_report_issue_button`) is presented
+   to the user in-app, and that one is localized
 
 ### Files
 
-- `Shared/Models/AppState.swift` (modify — add `lastErrorDetail`)
-- `Shared/Models/AppState+Playback.swift` (modify — set `lastErrorDetail` on error)
-- `Shared/Views/ContentView.swift` (modify — "Report Issue" button in error alert)
+HarmoniaPlayer:
+- `Shared/Models/AppState.swift` (modify — add `@Published var lastErrorDetail: String?`,
+  clear in `clearLastError()`)
+- `Shared/Models/AppState+Playback.swift` (modify — set `lastErrorDetail` at
+  all four error sites)
+- `Shared/Services/ErrorReportService.swift` (new — pure struct, URL builder)
+- `Shared/Views/ContentView.swift` (modify — "Report Issue" button on
+  playback-error alert)
+- `Resources/en.lproj/Localizable.strings` (add `alert_report_issue_button`)
+- `Resources/zh-Hant.lproj/Localizable.strings` (add)
+- `Resources/ja.lproj/Localizable.strings` (add)
+
+Test target:
+- `HarmoniaPlayerTests/SharedTests/AppStateErrorHandlingTests.swift`
+  (modify — add `lastErrorDetail` tests)
+- `HarmoniaPlayerTests/SharedTests/ErrorReportServiceTests.swift` (new)
+
+### Public API shape
+
+```swift
+// AppState additions
+@Published var lastErrorDetail: String?   // format: "<errorCode>: <path-or-noTrack>"
+
+// AppState+Playback internal helper
+private func makeErrorDetail(code: PlaybackError, track: Track?) -> String
+// Examples:
+//   makeErrorDetail(code: .failedToDecode, track: t)  -> "failedToDecode: /Users/x/song.mp3"
+//   makeErrorDetail(code: .invalidState,   track: nil) -> "invalidState: (no active track)"
+
+// ErrorReportService — Application Layer, pure struct
+struct ErrorReportService {
+    static let reportEmail = "harmonia.audio.project+harmonia_player@gmail.com"
+    static let subjectLine = "[HarmoniaPlayer] Error Report"
+
+    /// Builds a mailto URL with the given detail and runtime versions.
+    /// Returns nil only if URLComponents fails to produce a URL (should not
+    /// happen with valid inputs).
+    static func buildMailtoURL(
+        detail: String,
+        appVersion: String,
+        osVersion: String
+    ) -> URL?
+}
+```
 
 ### TDD matrix
 
 | Test | Given | When | Then |
 |---|---|---|---|
-| `testLastErrorDetail_SetOnPlaybackError` | Play fails with `.failedToOpenFile` | error occurs | `lastErrorDetail` contains file path |
+| `testLastErrorDetail_PlayTrackDecodeFailure_ContainsCodeAndPath` | `play(trackID:)` throws `.failedToDecode` | error occurs | `lastErrorDetail` contains `"failedToDecode"` and `track.url.path` |
+| `testLastErrorDetail_InaccessibleTrack_ContainsCodeAndPath` | `play(trackID:)` with inaccessible track | gate trips | `lastErrorDetail` contains `"failedToOpenFile"` and `track.url.path` |
+| `testLastErrorDetail_SeekFailure_ContainsCodeAndNoTrack` | `seek()` catch path | error occurs | `lastErrorDetail` contains error code and `"(no active track)"` |
 | `testLastErrorDetail_ClearedOnClearLastError` | `lastErrorDetail` set | `clearLastError()` | `lastErrorDetail == nil` |
+| `testErrorReportService_BuildMailtoURL_ContainsToSubjectBody` | detail + versions | `buildMailtoURL()` | url.scheme == "mailto"; path is reportEmail; queryItems include subject and body |
+| `testErrorReportService_BuildMailtoURL_EncodesSpecialChars` | body with `&` and newline | `buildMailtoURL()` | `absoluteString` contains `%26` and `%0A` |
 
 ### Done criteria
 
-- ⬜ Error alert shows "Report Issue" button
-- ⬜ Mailto opens with prefilled diagnostic info
-- ⬜ `lastErrorDetail` cleared when error is dismissed
+- ⬜ Error alert shows "Report Issue" button on playback-error alert
+- ⬜ Mailto opens Mail.app with prefilled subject, body, and recipient
+- ⬜ `lastErrorDetail` set at all four error sites in `AppState+Playback`
+- ⬜ `lastErrorDetail` cleared when error is dismissed via `clearLastError()`
+- ⬜ `ErrorReportService.buildMailtoURL` unit-tested in isolation
 - ⬜ All tests green
 
-### Commit message
+### Commit order
 
 ```
-feat(slice 9-F): add error reporting Phase 1 with prefilled mailto
-
-- Add lastErrorDetail to AppState for diagnostic summary
-- Add "Report Issue" button to playback error alert
-- Open mailto with prefilled subject, body, and recipient
+1. feat(slice 9-F): add ErrorReportService with mailto URL builder
+2. feat(slice 9-F): add lastErrorDetail to AppState and Report Issue alert button
 ```
+
+Commit 1 is pure new code — service + its unit tests. No AppState changes.
+Commit 2 wires `lastErrorDetail` into AppState error sites, adds the
+ContentView button, and adds the localized string.
 
 ---
 

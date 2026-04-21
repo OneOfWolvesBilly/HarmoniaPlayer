@@ -37,8 +37,8 @@ At a high level, the codebase is divided into the following logical modules.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`, etc.)
    - App-layer service protocols (`PlaybackService`, `TagReaderService`) — defined here
      so that `AppState` can depend on them without importing HarmoniaCore.
-   - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`
-     (pure Swift utilities with no HarmoniaCore dependency).
+   - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
+     `ErrorReportService` (pure Swift utilities with no HarmoniaCore dependency).
    - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
 3. **Integration Layer** (`import HarmoniaCore` allowed — only these 3 files)
    - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
