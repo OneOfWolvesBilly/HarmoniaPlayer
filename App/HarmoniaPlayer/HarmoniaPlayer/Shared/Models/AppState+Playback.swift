@@ -75,6 +75,7 @@ extension AppState {
         } catch {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
+            lastErrorDetail = makeErrorDetail(code: mapped, track: nil)
             playbackState = .error(mapped)
         }
     }
@@ -107,7 +108,9 @@ extension AppState {
             try await playbackService.seek(to: seconds)
             currentTime = seconds
         } catch {
-            lastError = mapToPlaybackError(error)
+            let mapped = mapToPlaybackError(error)
+            lastError = mapped
+            lastErrorDetail = makeErrorDetail(code: mapped, track: nil)
         }
     }
 
@@ -186,6 +189,7 @@ extension AppState {
             await playbackService.stop()
             currentTrack = nil
             lastError = .failedToOpenFile
+            lastErrorDetail = makeErrorDetail(code: .failedToOpenFile, track: track)
             failedTrackName = displayName(for: track)
             showFileNotFoundAlert = true
             playbackState = .error(.failedToOpenFile)
@@ -230,6 +234,7 @@ extension AppState {
             let mapped = mapToPlaybackError(error)
             currentTrack = nil
             lastError = mapped
+            lastErrorDetail = makeErrorDetail(code: mapped, track: track)
             playbackState = .error(mapped)
             if mapped == .failedToOpenFile {
                 failedTrackName = displayName(for: track)
@@ -370,5 +375,20 @@ extension AppState {
     func mapToPlaybackError(_ error: Error) -> PlaybackError {
         if let playbackError = error as? PlaybackError { return playbackError }
         return .invalidState
+    }
+
+    /// Builds a one-line diagnostic summary for `lastErrorDetail`.
+    ///
+    /// Format: `"<errorCode>: <track.url.path>"` when a specific track is
+    /// associated with the failure, or `"<errorCode>: (no active track)"`
+    /// when the error site cannot identify which track was involved
+    /// (e.g. `play()` catch, `seek()` catch).
+    ///
+    /// Used by Report Issue button to prefill the mailto body with enough
+    /// context for developer triage without dragging in PII beyond the
+    /// local file path.
+    func makeErrorDetail(code: PlaybackError, track: Track?) -> String {
+        let suffix = track.map { $0.url.path } ?? "(no active track)"
+        return "\(code): \(suffix)"
     }
 }

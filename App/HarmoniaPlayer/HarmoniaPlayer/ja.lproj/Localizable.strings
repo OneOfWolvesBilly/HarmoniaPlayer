@@ -19,6 +19,7 @@
 "error_failed_to_decode" = "ファイルをデコードできませんでした。";
 "error_output_error" = "再生中に出力エラーが発生しました。";
 "error_internal" = "再生中に内部エラーが発生しました。";
+"alert_report_issue_button" = "問題を報告";
 
 /* MARK: - PlayerView: Metadata */
 "no_track_playing" = "再生中の曲はありません";

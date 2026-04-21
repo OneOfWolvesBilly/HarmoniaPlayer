@@ -19,6 +19,7 @@
 "error_failed_to_decode" = "The file could not be decoded.";
 "error_output_error" = "A playback output error occurred.";
 "error_internal" = "An internal playback error occurred.";
+"alert_report_issue_button" = "Report Issue";
 
 /* MARK: - PlayerView: Metadata */
 "no_track_playing" = "No Track Playing";

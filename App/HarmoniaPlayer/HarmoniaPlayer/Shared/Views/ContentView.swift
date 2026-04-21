@@ -24,6 +24,7 @@
 //
 
 import SwiftUI
+import AppKit
 
 /// Root view combining `PlaylistView` and `PlayerView`.
 ///
@@ -141,6 +142,10 @@ struct ContentView: View {
                 set: { if !$0 { appState.clearLastError() } }
             )
         ) {
+            Button(L("alert_report_issue_button")) {
+                openReportIssueMail()
+                appState.clearLastError()
+            }
             Button("OK") { appState.clearLastError() }
         } message: {
             switch appState.lastError {
@@ -156,5 +161,26 @@ struct ContentView: View {
                 Text(verbatim: "")
             }
         }
+    }
+
+    // MARK: - Report Issue
+
+    /// Builds a mailto URL via `ErrorReportService` and opens Mail.app.
+    ///
+    /// The service itself is pure and unit-tested. This wrapper reads
+    /// runtime versions (app, macOS) and performs the `NSWorkspace` side
+    /// effect, keeping both concerns separated.
+    private func openReportIssueMail() {
+        let detail = appState.lastErrorDetail ?? "(no detail available)"
+        let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
+        let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
+
+        guard let url = ErrorReportService.buildMailtoURL(
+            detail: detail,
+            appVersion: appVersion,
+            osVersion: osVersion
+        ) else { return }
+
+        NSWorkspace.shared.open(url)
     }
 }
