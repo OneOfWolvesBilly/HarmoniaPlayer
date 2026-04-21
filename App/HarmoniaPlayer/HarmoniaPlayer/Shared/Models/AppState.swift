@@ -168,6 +168,14 @@ final class AppState: ObservableObject {
     /// Views observe this to present error banners or alerts.
     @Published var lastError: PlaybackError?
 
+    /// One-line diagnostic summary accompanying `lastError`.
+    ///
+    /// Format: `"<errorCode>: <track.url.path>"` or
+    /// `"<errorCode>: (no active track)"` for error sites without a known track.
+    /// Used by the "Report Issue" button to prefill the mailto body.
+    /// Cleared by `clearLastError()`.
+    @Published var lastErrorDetail: String?
+
     /// Display name of the track that triggered the most recent `failedToOpenFile` error.
     ///
     /// Set to "Title - Artist" when artist is available, otherwise the URL filename.

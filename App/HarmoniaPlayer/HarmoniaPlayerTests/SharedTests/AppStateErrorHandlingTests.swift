@@ -26,6 +26,7 @@ final class AppStateErrorHandlingTests: XCTestCase {
     // MARK: - Fixtures
 
     private var fakeTagReader: FakeTagReaderService!
+    private var fakePlaybackService: FakePlaybackService!
     private var sut: AppState!
     private var testDefaults: UserDefaults!
     private var suiteName: String!
@@ -36,13 +37,18 @@ final class AppStateErrorHandlingTests: XCTestCase {
 
         testDefaults = UserDefaults(suiteName: suiteName)!
         fakeTagReader = FakeTagReaderService()
-        let provider = FakeCoreProvider(tagReader: fakeTagReader)
+        fakePlaybackService = FakePlaybackService()
+        let provider = FakeCoreProvider(
+            playbackService: fakePlaybackService,
+            tagReader: fakeTagReader
+        )
         sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults)
     }
 
     override func tearDown() async throws {
         sut = nil
         fakeTagReader = nil
+        fakePlaybackService = nil
         testDefaults.removePersistentDomain(forName: suiteName)
         testDefaults = nil
         suiteName = nil
@@ -167,6 +173,110 @@ final class AppStateErrorHandlingTests: XCTestCase {
         XCTAssertNotNil(
             sut.lastError,
             "lastError must be set when at least one metadata read fails"
+        )
+    }
+
+    // MARK: - Slice 9-F: lastErrorDetail
+
+    /// Loads one track into the SUT's playlist and returns it.
+    private func loadOneTrack(named name: String = "test-track") async -> Track {
+        let url = URL(fileURLWithPath: "/tmp/\(name).mp3")
+        await sut.load(urls: [url])
+        return sut.playlist.tracks[0]
+    }
+
+    /// Slice 9-F: `testLastErrorDetail_PlayTrackDecodeFailure_ContainsCodeAndPath`
+    ///
+    /// Given `play(trackID:)` throws `.failedToDecode`,
+    /// when the error occurs,
+    /// then `lastErrorDetail` contains `"failedToDecode"` and `track.url.path`.
+    func testLastErrorDetail_PlayTrackDecodeFailure_ContainsCodeAndPath() async throws {
+        // Given
+        fakePlaybackService.stubbedLoadError = PlaybackError.failedToDecode
+        let track = await loadOneTrack(named: "decode-fail")
+
+        // When
+        await sut.play(trackID: track.id)
+
+        // Then
+        let detail = try XCTUnwrap(sut.lastErrorDetail, "lastErrorDetail must be set on play(trackID:) failure")
+        XCTAssertTrue(
+            detail.contains("failedToDecode"),
+            "lastErrorDetail must contain error code, got: \(detail)"
+        )
+        XCTAssertTrue(
+            detail.contains(track.url.path),
+            "lastErrorDetail must contain track.url.path, got: \(detail)"
+        )
+    }
+
+    /// Slice 9-F: `testLastErrorDetail_InaccessibleTrack_ContainsCodeAndPath`
+    ///
+    /// Given `play(trackID:)` is called with an inaccessible track,
+    /// when the inaccessibility gate trips,
+    /// then `lastErrorDetail` contains `"failedToOpenFile"` and `track.url.path`.
+    func testLastErrorDetail_InaccessibleTrack_ContainsCodeAndPath() async throws {
+        // Given
+        let track = await loadOneTrack(named: "inaccessible")
+        sut.playlists[0].tracks[0].isAccessible = false
+
+        // When
+        await sut.play(trackID: track.id)
+
+        // Then
+        let detail = try XCTUnwrap(sut.lastErrorDetail, "lastErrorDetail must be set when inaccessibility gate trips")
+        XCTAssertTrue(
+            detail.contains("failedToOpenFile"),
+            "lastErrorDetail must contain error code, got: \(detail)"
+        )
+        XCTAssertTrue(
+            detail.contains(track.url.path),
+            "lastErrorDetail must contain track.url.path, got: \(detail)"
+        )
+    }
+
+    /// Slice 9-F: `testLastErrorDetail_SeekFailure_ContainsCodeAndNoTrack`
+    ///
+    /// Given `seek(to:)` throws,
+    /// when the error occurs,
+    /// then `lastErrorDetail` contains the error code and `"(no active track)"`
+    /// because the seek catch path does not know which track it was seeking in.
+    func testLastErrorDetail_SeekFailure_ContainsCodeAndNoTrack() async throws {
+        // Given
+        fakePlaybackService.stubbedSeekError = PlaybackError.invalidState
+
+        // When
+        await sut.seek(to: 30)
+
+        // Then
+        let detail = try XCTUnwrap(sut.lastErrorDetail, "lastErrorDetail must be set on seek failure")
+        XCTAssertTrue(
+            detail.contains("invalidState"),
+            "lastErrorDetail must contain error code, got: \(detail)"
+        )
+        XCTAssertTrue(
+            detail.contains("(no active track)"),
+            "lastErrorDetail must contain '(no active track)' marker on seek catch path, got: \(detail)"
+        )
+    }
+
+    /// Slice 9-F: `testLastErrorDetail_ClearedOnClearLastError`
+    ///
+    /// Given `lastErrorDetail` is set,
+    /// when `clearLastError()` is called,
+    /// then `lastErrorDetail` is `nil`.
+    func testLastErrorDetail_ClearedOnClearLastError() {
+        // Given
+        sut.lastErrorDetail = "failedToDecode: /tmp/some/path.mp3"
+        XCTAssertNotNil(sut.lastErrorDetail, "precondition: lastErrorDetail must be set before clearLastError")
+
+        // When
+        sut.clearLastError()
+
+        // Then
+        XCTAssertNil(
+            sut.lastErrorDetail,
+            "clearLastError() must set lastErrorDetail to nil"
         )
     }
 }
