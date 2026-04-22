@@ -820,7 +820,9 @@ fix(slice 9-h): propagate AppState and playbackState from MiniPlayer view
   unresponsive.
 - Add .focusedSceneObject(appState) and
   .focusedValue(\.playbackState, ...) to MiniPlayerView.body,
-  mirroring the pattern established in ContentView by Slice 8-A.
+  replicating the two focus modifiers the main window already has
+  (.focusedSceneObject at the scene level in HarmoniaPlayerApp,
+  .focusedValue inside ContentView) since Slice 8-A.
 ```
 
 ---
