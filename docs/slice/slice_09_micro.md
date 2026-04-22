@@ -755,25 +755,29 @@ pattern must be re-registered on the second scene.
 
 Fix MiniPlayer menu bar failure: when the main window is `orderOut`
 during MiniPlayer activation, `HarmoniaPlayerCommands` loses access
-to `AppState` and `PlaybackState` because only `ContentView`
-registers them via `.focusedSceneObject` / `.focusedValue`. Result:
-menu bar items become disabled or unresponsive while MiniPlayer is
-the key window.
+to `AppState` and `PlaybackState` because only the main window scene
+(via `HarmoniaPlayerApp` + `ContentView`) registers them in the
+SwiftUI focus system. Result: menu bar items become disabled or
+unresponsive while MiniPlayer is the key window.
 
 ### Root cause
 
-`ContentView` propagates `appState` via `.focusedSceneObject` and
-`playbackState` via `.focusedValue`, which is why the main window
-menu bar works (Slice 8-A). Slice 8-B added `MiniPlayerView` and the
-second `Window` scene but did not register these values into the
-SwiftUI focus system. When MiniPlayer becomes the key window,
+The main window menu bar works (Slice 8-A) because two focus
+modifiers are in place: `HarmoniaPlayerApp` applies
+`.focusedSceneObject(appState)` on the main
+`WindowGroup { ContentView() }` scene, and `ContentView.body` itself
+applies `.focusedValue(\.playbackState, appState.playbackState)`.
+Slice 8-B added `MiniPlayerView` and the second
+`Window("Mini Player", ...)` scene but did not register either
+modifier for that scene. When MiniPlayer becomes the key window,
 `HarmoniaPlayerCommands` reads `nil` from `@FocusedObject` and
 `@FocusedValue`, disabling all playback menu items.
 
 ### Change
 
-Add two modifiers to `MiniPlayerView.body`, mirroring the pattern
-already in `ContentView`:
+Add two modifiers to `MiniPlayerView.body`, replicating the two
+focus modifiers the main window already has (one applied at the
+scene level in `HarmoniaPlayerApp`, the other inside `ContentView`):
 
 ```swift
 .focusedSceneObject(appState)
