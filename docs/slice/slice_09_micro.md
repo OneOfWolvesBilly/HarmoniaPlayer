@@ -32,8 +32,9 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | v0.1 |
 | 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | v0.1 |
 | 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
-| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | v0.1 |
-| 9-H | Fix Xcode warnings (cosmetic) | Free | v0.1 |
+| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ (resolved by 8-A) |
+| 9-H | MiniPlayer focus propagation fix (MiniPlayerView `.focusedSceneObject` + `.focusedValue`) | Free | v0.1 |
+| 9-I | Fix Xcode warnings (cosmetic) | Free | v0.1 |
 
 ### Goals (v0.1)
 
@@ -49,7 +50,8 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 - Convert FileInfoView from `.sheet` to independent `WindowGroup`
 - Fix polling loop CPU issue (proper `CancellationError` handling)
 - Add error reporting Phase 1 (mailto prefilled)
-- Investigate Play/Pause menu label update reliability
+- Investigate Play/Pause menu label update reliability — verified resolved in Slice 8-A ✅
+- Fix MiniPlayer menu bar becoming non-functional when main window is ordered out
 - Fix Xcode warnings in test files
 
 ### Non-goals
@@ -684,47 +686,142 @@ ContentView button, and adds the localized string.
 
 ---
 
-## Slice 9-G: Play/Pause Menu Label Investigation
+## Slice 9-G: Play/Pause Menu Label Investigation ✅
 
-### Goal
-Investigate and fix the known issue where the Play/Pause menu label does
-not update reliably due to `@FocusedObject` SwiftUI limitation.
+### Status
 
-### Scope
-- Investigate root cause: `@FocusedObject` does not reliably re-evaluate
-  `Commands` body when a published property changes
-- Evaluate alternatives:
-  - `@FocusedValue` with scalar `PlaybackState` (already partially implemented
-    in Slice 8-A `PlaybackFocusedValues`)
-  - Timer-based polling of the label
-  - `NSMenuItem` direct manipulation via AppKit
-- Implement the most reliable solution
-- If no perfect solution exists, document the limitation and the best
-  available workaround
+**Closed — resolved retroactively by Slice 8-A.**
 
-### Files
+### Background
 
-- `macOS/Free/Views/HarmoniaPlayerCommands.swift` (modify)
-- `Shared/Views/PlaybackFocusedValues.swift` (possibly modify)
-- Other files TBD based on investigation
+At the time Slice 9-G was scoped, the Play/Pause menu bar label was
+suspected to update unreliably because `@FocusedObject` does not
+reliably re-evaluate a `Commands` body when a `@Published` property
+of the focused object changes.
+
+### Resolution
+
+Slice 8-A already applied the SwiftUI-recommended workaround:
+
+- `Shared/Views/PlaybackFocusedValues.swift` defines
+  `PlaybackStateFocusedKey` carrying `PlaybackState` as a scalar value.
+- `ContentView` propagates live state via
+  `.focusedValue(\.playbackState, appState.playbackState)`.
+- `HarmoniaPlayerCommands` reads it via
+  `@FocusedValue(\.playbackState) private var focusedPlaybackState`.
+- `playPauseLabel` is driven by `focusedPlaybackState`, not by
+  `appState?.playbackState` observed through `@FocusedObject`.
+
+This matches the pattern recommended in WWDC23 "SwiftUI cookbook for
+focus": a scalar `FocusedValue` re-evaluates Commands reliably on
+every state change, whereas `@FocusedObject` property observation
+inside Commands can miss updates.
+
+### Verification
+
+Real-world manual testing after Slice 8-A landed confirmed the menu
+bar Play/Pause label updates correctly on every state transition
+(play → pause → stop → play, including cross-application focus
+changes in the main window). No further code change is required for
+v0.1.
+
+### Files touched by Slice 8-A (retrospective reference)
+
+- `Shared/Views/PlaybackFocusedValues.swift` (added)
+- `Shared/Views/ContentView.swift` (`.focusedValue` propagation)
+- `macOS/Free/Views/HarmoniaPlayerCommands.swift` (`@FocusedValue` adoption)
 
 ### Done criteria
 
-- ⬜ Play/Pause menu label updates correctly when playback state changes
-- ⬜ Or: limitation documented with best-effort workaround implemented
-- ⬜ All tests green
+- ✅ Play/Pause menu label updates correctly when playback state changes
+- ✅ Root cause and adopted workaround documented
+- ✅ No open `@FocusedObject` reliability issue remaining in v0.1
+
+### Future considerations
+
+If a future slice needs additional scalar state propagated to Commands
+(e.g. Repeat mode or Shuffle state label live updates), extend
+`PlaybackFocusedValues.swift` with additional `FocusedValueKey` types
+rather than adding more `@FocusedObject`-observed properties.
+
+See also: Slice 9-H for the MiniPlayer-window case where the same
+pattern must be re-registered on the second scene.
+
+---
+
+## Slice 9-H: MiniPlayer Focus Propagation Fix
+
+### Goal
+
+Fix MiniPlayer menu bar failure: when the main window is `orderOut`
+during MiniPlayer activation, `HarmoniaPlayerCommands` loses access
+to `AppState` and `PlaybackState` because only `ContentView`
+registers them via `.focusedSceneObject` / `.focusedValue`. Result:
+menu bar items become disabled or unresponsive while MiniPlayer is
+the key window.
+
+### Root cause
+
+`ContentView` propagates `appState` via `.focusedSceneObject` and
+`playbackState` via `.focusedValue`, which is why the main window
+menu bar works (Slice 8-A). Slice 8-B added `MiniPlayerView` and the
+second `Window` scene but did not register these values into the
+SwiftUI focus system. When MiniPlayer becomes the key window,
+`HarmoniaPlayerCommands` reads `nil` from `@FocusedObject` and
+`@FocusedValue`, disabling all playback menu items.
+
+### Change
+
+Add two modifiers to `MiniPlayerView.body`, mirroring the pattern
+already in `ContentView`:
+
+```swift
+.focusedSceneObject(appState)
+.focusedValue(\.playbackState, appState.playbackState)
+```
+
+### Scope
+
+- ✅ `MiniPlayerView.swift` body modifier additions
+- ❌ No changes to `HarmoniaPlayerApp.swift`, `ContentView.swift`,
+  `HarmoniaPlayerCommands.swift`, or `PlaybackFocusedValues.swift`
+- ❌ No changes to `AppState` or HarmoniaCore
+
+### TDD matrix
+
+Not applicable. SwiftUI focus system propagation requires real
+window server key-window state; Swift Testing / XCTest cannot
+reliably simulate cross-scene focus transitions. Verification is
+manual real-device testing.
+
+### Done criteria
+
+- ⬜ `MiniPlayerView` exposes `appState` via `.focusedSceneObject`
+- ⬜ `MiniPlayerView` exposes `playbackState` via `.focusedValue`
+- ⬜ Manual test: open MiniPlayer, Playback menu items are enabled
+- ⬜ Manual test: Play/Pause menu label reflects live state in MiniPlayer mode
+- ⬜ Manual test: switching back to main window preserves menu behavior
+- ⬜ No regressions to main window menu behavior
 
 ### Commit message
 
 ```
-fix(slice 9-G): improve Play/Pause menu label update reliability
+fix(slice 9-h): propagate AppState and playbackState from MiniPlayer view
 
-- (details TBD after investigation)
+- Slice 8-B added the MiniPlayer Window scene but did not register
+  appState and playbackState into the SwiftUI focus system. When
+  MiniPlayer becomes the key window (main window ordered out),
+  HarmoniaPlayerCommands sees nil for @FocusedObject and
+  @FocusedValue, and menu bar Playback items become disabled or
+  unresponsive.
+- Add .focusedSceneObject(appState) and
+  .focusedValue(\.playbackState, ...) to MiniPlayerView.body,
+  mirroring the pattern established in ContentView by Slice 8-A.
 ```
 
 ---
 
-## Slice 9-H: Fix Xcode Warnings (Cosmetic)
+## Slice 9-I: Fix Xcode Warnings (Cosmetic)
 
 ### Goal
 Fix the "Switch condition evaluates to a constant" warnings in
@@ -749,7 +846,7 @@ Fix the "Switch condition evaluates to a constant" warnings in
 ### Commit message
 
 ```
-fix(slice 9-H): resolve "Switch condition evaluates to a constant" warnings
+fix(slice 9-i): resolve "Switch condition evaluates to a constant" warnings
 
 - Refactor switch statements in PlaybackErrorTests and PlaybackStateTests
 ```
