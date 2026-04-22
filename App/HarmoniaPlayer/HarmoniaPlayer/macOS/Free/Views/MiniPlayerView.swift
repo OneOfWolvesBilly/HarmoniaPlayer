@@ -230,6 +230,14 @@ struct MiniPlayerView: View {
         .onReceive(NotificationCenter.default.publisher(for: .bringMainWindowToFront)) { _ in
             closeMiniPlayer()
         }
+        // Register MiniPlayer scene in the SwiftUI focus system so that
+        // HarmoniaPlayerCommands can observe AppState and PlaybackState
+        // while MiniPlayer is the key window (main window ordered out).
+        // Replicates the two focus modifiers the main window already has:
+        // .focusedSceneObject at the scene level in HarmoniaPlayerApp and
+        // .focusedValue inside ContentView, both in place since Slice 8-A.
+        .focusedSceneObject(appState)
+        .focusedSceneValue(\.playbackState, appState.playbackState)
     }
 
     // MARK: - Playlist Picker Row

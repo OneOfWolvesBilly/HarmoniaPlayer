@@ -142,7 +142,6 @@
 "marquee_settings_title" = "マーキー設定";
 "settings_mini_player_always_on_top" = "常に最前面に表示";
 "settings_mini_player_always_on_top_desc" = "ミニプレーヤーを常に他のウィンドウの前面に表示する";
-"mini_player_expand" = "フルプレーヤーに戻る";
 
 // Slice 8-C: ReplayGain
 "settings_replay_gain_mode" = "Replay Gain モード";

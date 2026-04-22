@@ -79,7 +79,7 @@ struct HarmoniaPlayerApp: App {
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
-        .windowStyle(.plain)
+        .windowStyle(.hiddenTitleBar)
         .defaultLaunchBehavior(.suppressed)
 
         // File Info — independent, non-modal window identified by Track.ID.
