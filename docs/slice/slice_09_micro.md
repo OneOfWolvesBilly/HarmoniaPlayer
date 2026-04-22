@@ -27,14 +27,14 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 |---|---|---|---|
 | 9-A | StoreKit 2 IAP infra + Paywall (built, UI hidden) + v0.1 Free load gate | — | ✅ |
 | Post-9-A | v0.1 freeze fixes + architecture cleanup (pre-9-B preparation) | Free | ✅ |
-| 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | Free | v0.1 |
-| 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | Free | v0.1 |
-| 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | v0.1 |
-| 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | v0.1 |
-| 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
-| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ (resolved by 8-A) |
-| 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | v0.1 |
-| 9-I | Fix Xcode warnings (cosmetic) | Free | v0.1 |
+| 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | Free | ✅ |
+| 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | Free | ✅ |
+| 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | ✅ |
+| 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | ✅ |
+| 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | ✅ |
+| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ |
+| 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | ✅ |
+| 9-I | Fix Xcode warnings (cosmetic) | Free |  |
 
 ### Goals (v0.1)
 
@@ -876,23 +876,23 @@ testing, already completed during spec investigation.
 
 ### Done criteria
 
-- ⬜ `HarmoniaPlayerApp` applies `.windowStyle(.hiddenTitleBar)` to
+- ✅ `HarmoniaPlayerApp` applies `.windowStyle(.hiddenTitleBar)` to
   the MiniPlayer `Window` scene
-- ⬜ `MiniPlayerView.body` applies `.focusedSceneObject(appState)`
+- ✅ `MiniPlayerView.body` applies `.focusedSceneObject(appState)`
   and `.focusedSceneValue(\.playbackState, ...)`
-- ⬜ Expand button removed from `playlistPickerRow`; left-side
+- ✅ Expand button removed from `playlistPickerRow`; left-side
   balance spacer added so the playlist menu stays centred
-- ⬜ `"mini_player_expand"` key removed from all three
+- ✅ `"mini_player_expand"` key removed from all three
   `Localizable.strings` files
-- ⬜ Manual test: open MiniPlayer, play a track, open Playback
+- ✅ Manual test: open MiniPlayer, play a track, open Playback
   menu → all items are enabled
-- ⬜ Manual test: Play/Pause menu label reflects live state in
+- ✅ Manual test: Play/Pause menu label reflects live state in
   MiniPlayer mode (shows "Pause" when playing, "Play" when paused)
-- ⬜ Manual test: red close button on MiniPlayer returns user to
+- ✅ Manual test: red close button on MiniPlayer returns user to
   the main window
-- ⬜ Manual test: switching back to main window preserves menu
+- ✅ Manual test: switching back to main window preserves menu
   behaviour (no regression in main window)
-- ⬜ Manual test: cold launch without MiniPlayer → main window
+- ✅ Manual test: cold launch without MiniPlayer → main window
   menu still works as before
 
 ### Commit message
