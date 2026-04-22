@@ -33,7 +33,7 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-E | Fix polling loop CPU issue (`CancellationError` handling) | Free | v0.1 |
 | 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | v0.1 |
 | 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ (resolved by 8-A) |
-| 9-H | MiniPlayer focus propagation fix (MiniPlayerView `.focusedSceneObject` + `.focusedValue`) | Free | v0.1 |
+| 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | v0.1 |
 | 9-I | Fix Xcode warnings (cosmetic) | Free | v0.1 |
 
 ### Goals (v0.1)
@@ -744,85 +744,188 @@ If a future slice needs additional scalar state propagated to Commands
 `PlaybackFocusedValues.swift` with additional `FocusedValueKey` types
 rather than adding more `@FocusedObject`-observed properties.
 
-See also: Slice 9-H for the MiniPlayer-window case where the same
-pattern must be re-registered on the second scene.
+See also: Slice 9-H for a related menu-bar symptom in the
+MiniPlayer window.
 
 ---
 
-## Slice 9-H: MiniPlayer Focus Propagation Fix
+## Slice 9-H: Fix MiniPlayer Menu Bar and Remove Expand Button
 
 ### Goal
 
-Fix MiniPlayer menu bar failure: when the main window is `orderOut`
-during MiniPlayer activation, `HarmoniaPlayerCommands` loses access
-to `AppState` and `PlaybackState` because only the main window scene
-(via `HarmoniaPlayerApp` + `ContentView`) registers them in the
-SwiftUI focus system. Result: menu bar items become disabled or
-unresponsive while MiniPlayer is the key window.
+Make the macOS menu bar Playback menu functional and correctly
+labelled while MiniPlayer is the key window, and remove the
+redundant expand button. The original `Window` scene used
+`.windowStyle(.plain)`, which renders a borderless panel whose
+underlying `NSWindow` returns `NO` from `canBecomeKeyWindow`. With
+no key window, the SwiftUI focus system cannot propagate `AppState`
+or `PlaybackState` to `HarmoniaPlayerCommands`, so all Playback
+menu items render disabled while MiniPlayer is foreground. In
+addition, the expand button in `playlistPickerRow` duplicates
+behaviour already provided by the window's close button
+(`WindowCloseObserver` brings the main window to front when
+MiniPlayer closes).
+
+### Prerequisite investigation
+
+Confirmed via Apple documentation and independent macOS 15.6+
+manual testing:
+
+1. **`.windowStyle(.plain)` blocks `canBecomeKeyWindow`.** The
+   `NSWindow` SwiftUI creates for `.plain` scenes overrides
+   `canBecomeKeyWindow` to return `false`, producing the runtime
+   log `-[NSWindow makeKeyWindow] ... returned NO from
+   -[NSWindow canBecomeKeyWindow]`. With no key window the SwiftUI
+   focus system has no active view chain, so every `@FocusedObject`
+   / `@FocusedValue` / `@FocusedSceneValue` reads `nil` in
+   `HarmoniaPlayerCommands`.
+2. **`.focusedValue(_:_:)` requires an inner focused view.** Apple
+   documentation: "SwiftUI will set the value of FocusedValue to
+   `nil` as soon as the view loses the focus. You can use the
+   focusedSceneValue view modifier whenever you need to share
+   focused value between views in different scenes." MiniPlayer
+   contains only Button and Slider controls with no naturally
+   focused view, so `.focusedValue` never propagates here. The
+   scene-scoped `.focusedSceneValue(_:_:)` must be used instead.
+3. **`.focusedSceneObject(_:)` is already scene-scoped,** so it
+   propagates correctly once the window is allowed to become key.
+   No change to its call site is needed beyond adding the modifier
+   to `MiniPlayerView.body`.
 
 ### Root cause
 
-The main window menu bar works (Slice 8-A) because two focus
-modifiers are in place: `HarmoniaPlayerApp` applies
-`.focusedSceneObject(appState)` on the main
-`WindowGroup { ContentView() }` scene, and `ContentView.body` itself
-applies `.focusedValue(\.playbackState, appState.playbackState)`.
-Slice 8-B added `MiniPlayerView` and the second
-`Window("Mini Player", ...)` scene but did not register either
-modifier for that scene. When MiniPlayer becomes the key window,
-`HarmoniaPlayerCommands` reads `nil` from `@FocusedObject` and
-`@FocusedValue`, disabling all playback menu items.
+Two independent issues combine to disable the menu bar in
+MiniPlayer mode:
+
+- **Window style blocks focus entirely.** `HarmoniaPlayerApp`
+  configures the MiniPlayer scene with `.windowStyle(.plain)`,
+  which forbids the window from becoming key. When the main
+  window is `orderOut` during MiniPlayer activation, no window is
+  key, the focus system has no active view chain, and
+  `@FocusedObject appState` in `HarmoniaPlayerCommands` reads
+  `nil`. Every Playback menu item's `.disabled(playlistIsEmpty)`
+  computes to `true` because `appState?.playlist.tracks.isEmpty
+  != false` is `true` when `appState` is `nil`.
+- **`.focusedValue` is the wrong API for this scene.** Even after
+  the window can become key, exposing `playbackState` via
+  `.focusedValue(\.playbackState, ...)` from `MiniPlayerView.body`
+  still reads `nil` in `HarmoniaPlayerCommands`, because
+  `.focusedValue` is view-scope and requires an inner focused view.
+  MiniPlayer has no naturally focused view, so the Play/Pause
+  label stays stuck on "Play" even while playback is active.
 
 ### Change
 
-Add two modifiers to `MiniPlayerView.body`, replicating the two
-focus modifiers the main window already has (one applied at the
-scene level in `HarmoniaPlayerApp`, the other inside `ContentView`):
+1. **`HarmoniaPlayerApp.swift`**: change the MiniPlayer scene
+   modifier from `.windowStyle(.plain)` to
+   `.windowStyle(.hiddenTitleBar)`. Preserves the minimal-chrome
+   look while allowing `canBecomeKeyWindow = true`.
 
-```swift
-.focusedSceneObject(appState)
-.focusedValue(\.playbackState, appState.playbackState)
-```
+2. **`MiniPlayerView.swift`** (body tail): add two scene-scoped
+   focus modifiers so `HarmoniaPlayerCommands` can read them when
+   MiniPlayer is the key window:
+   ```swift
+   .focusedSceneObject(appState)
+   .focusedSceneValue(\.playbackState, appState.playbackState)
+   ```
+   Note: `.focusedSceneValue`, not `.focusedValue` — the latter is
+   view-scope and does not propagate in MiniPlayer's view tree.
+
+3. **`MiniPlayerView.swift`** (`playlistPickerRow`): remove the
+   expand button (`rectangle.expand.vertical` Image + `.help`
+   tooltip + `closeMiniPlayer()` action). Its behaviour is fully
+   covered by the window's close button via `WindowCloseObserver`.
+   Replace the removed button with a 30pt-wide `Color.clear`
+   balance spacer on the left side so the playlist menu stays
+   horizontally centred (mirroring the existing right-side balance
+   spacer). `closeMiniPlayer()` itself is retained because the
+   `.bringMainWindowToFront` notification observer still calls it
+   when a Pro-format gate triggers.
+
+4. **Localizable.strings** (en, zh-Hant, ja): remove the
+   `"mini_player_expand"` key, which becomes unused after change 3.
 
 ### Scope
 
-- ✅ `MiniPlayerView.swift` body modifier additions
-- ❌ No changes to `HarmoniaPlayerApp.swift`, `ContentView.swift`,
-  `HarmoniaPlayerCommands.swift`, or `PlaybackFocusedValues.swift`
+- ✅ `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift`
+  — one line change (window style)
+- ✅ `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/MiniPlayerView.swift`
+  — body tail modifiers + expand button removal + balance spacer
+- ✅ `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings`
+  — remove `"mini_player_expand"`
+- ✅ `App/HarmoniaPlayer/HarmoniaPlayer/zh-Hant.lproj/Localizable.strings`
+  — remove `"mini_player_expand"`
+- ✅ `App/HarmoniaPlayer/HarmoniaPlayer/ja.lproj/Localizable.strings`
+  — remove `"mini_player_expand"`
+- ❌ No changes to `ContentView.swift` (its existing `.focusedValue`
+  still works because `PlaylistView`'s List provides an inner
+  focused view)
+- ❌ No changes to `HarmoniaPlayerCommands.swift` or
+  `PlaybackFocusedValues.swift`
 - ❌ No changes to `AppState` or HarmoniaCore
+- ❌ No changes to `WindowDragArea`, `FloatingWindowController`, or
+  `WindowCloseObserver`
 
 ### TDD matrix
 
-Not applicable. SwiftUI focus system propagation requires real
-window server key-window state; Swift Testing / XCTest cannot
-reliably simulate cross-scene focus transitions. Verification is
-manual real-device testing.
+Not applicable. SwiftUI focus system behaviour,
+`canBecomeKeyWindow` semantics, and `NSEventTrackingRunLoopMode`
+interactions require a real window server and cannot be simulated
+in Swift Testing / XCTest. Verification is manual real-device
+testing, already completed during spec investigation.
 
 ### Done criteria
 
-- ⬜ `MiniPlayerView` exposes `appState` via `.focusedSceneObject`
-- ⬜ `MiniPlayerView` exposes `playbackState` via `.focusedValue`
-- ⬜ Manual test: open MiniPlayer, Playback menu items are enabled
-- ⬜ Manual test: Play/Pause menu label reflects live state in MiniPlayer mode
-- ⬜ Manual test: switching back to main window preserves menu behavior
-- ⬜ No regressions to main window menu behavior
+- ⬜ `HarmoniaPlayerApp` applies `.windowStyle(.hiddenTitleBar)` to
+  the MiniPlayer `Window` scene
+- ⬜ `MiniPlayerView.body` applies `.focusedSceneObject(appState)`
+  and `.focusedSceneValue(\.playbackState, ...)`
+- ⬜ Expand button removed from `playlistPickerRow`; left-side
+  balance spacer added so the playlist menu stays centred
+- ⬜ `"mini_player_expand"` key removed from all three
+  `Localizable.strings` files
+- ⬜ Manual test: open MiniPlayer, play a track, open Playback
+  menu → all items are enabled
+- ⬜ Manual test: Play/Pause menu label reflects live state in
+  MiniPlayer mode (shows "Pause" when playing, "Play" when paused)
+- ⬜ Manual test: red close button on MiniPlayer returns user to
+  the main window
+- ⬜ Manual test: switching back to main window preserves menu
+  behaviour (no regression in main window)
+- ⬜ Manual test: cold launch without MiniPlayer → main window
+  menu still works as before
 
 ### Commit message
 
 ```
-fix(slice 9-h): propagate AppState and playbackState from MiniPlayer view
+fix(slice 9-h): make MiniPlayer menu bar functional and remove expand button
 
-- Slice 8-B added the MiniPlayer Window scene but did not register
-  appState and playbackState into the SwiftUI focus system. When
-  MiniPlayer becomes the key window (main window ordered out),
-  HarmoniaPlayerCommands sees nil for @FocusedObject and
-  @FocusedValue, and menu bar Playback items become disabled or
-  unresponsive.
+- Root cause 1: the MiniPlayer Window scene used .windowStyle(.plain),
+  which makes its NSWindow return NO from canBecomeKeyWindow. With
+  the main window ordered out during MiniPlayer activation, no
+  window is key, the SwiftUI focus system has no active view chain,
+  and HarmoniaPlayerCommands reads nil for @FocusedObject. All
+  Playback menu items render disabled.
+- Root cause 2: Slice 8-B attempted to expose playbackState via
+  .focusedValue(\.playbackState, ...) inside MiniPlayerView.body,
+  but .focusedValue is view-scope and requires an inner focused
+  view. MiniPlayer contains only buttons and sliders, so the value
+  never propagates; the Play/Pause label stays wrong even once
+  focus works.
+- Change HarmoniaPlayerApp MiniPlayer scene to
+  .windowStyle(.hiddenTitleBar) so canBecomeKeyWindow is true; the
+  minimal-chrome visual is preserved.
 - Add .focusedSceneObject(appState) and
-  .focusedValue(\.playbackState, ...) to MiniPlayerView.body,
-  replicating the two focus modifiers the main window already has
-  (.focusedSceneObject at the scene level in HarmoniaPlayerApp,
-  .focusedValue inside ContentView) since Slice 8-A.
+  .focusedSceneValue(\.playbackState, ...) to MiniPlayerView.body
+  so both modifiers are scene-scope and propagate once the window
+  can become key.
+- Remove the expand button from playlistPickerRow. Its
+  close-and-return behaviour is fully covered by the window close
+  button (WindowCloseObserver already brings the main window to
+  front). Add a mirrored 30pt Color.clear balance spacer on the
+  left so the playlist menu stays centred.
+- Remove the now-unused "mini_player_expand" key from en, zh-Hant,
+  and ja Localizable.strings.
 ```
 
 ---
