@@ -478,6 +478,7 @@ final class AppState: ObservableObject {
     /// Clears the last playback error. Called when the user dismisses an error alert.
     func clearLastError() {
         lastError = nil
+        lastErrorDetail = nil
         failedTrackName = nil
         showFileNotFoundAlert = false
         skippedInaccessibleNames = []
