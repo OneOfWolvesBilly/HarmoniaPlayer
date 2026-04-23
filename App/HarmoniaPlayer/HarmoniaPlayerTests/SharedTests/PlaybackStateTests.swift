@@ -40,14 +40,23 @@ final class PlaybackStateTests: XCTestCase {
     // This file will not compile if any case is missing.
 
     func testPlaybackState_AllCasesExist() {
-        let state: PlaybackState = .idle
-        switch state {
-        case .idle:    break
-        case .loading: break
-        case .playing: break
-        case .paused:  break
-        case .stopped: break
-        case .error:   break
+        let states: [PlaybackState] = [
+            .idle,
+            .loading,
+            .playing,
+            .paused,
+            .stopped,
+            .error(.unsupportedFormat),
+        ]
+        for state in states {
+            switch state {
+            case .idle:    break
+            case .loading: break
+            case .playing: break
+            case .paused:  break
+            case .stopped: break
+            case .error:   break
+            }
         }
     }
 }

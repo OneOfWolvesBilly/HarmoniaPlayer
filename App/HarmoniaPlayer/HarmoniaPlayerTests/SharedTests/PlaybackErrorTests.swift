@@ -42,14 +42,23 @@ final class PlaybackErrorTests: XCTestCase {
     // which is the intended red-bar signal.
 
     func testPlaybackError_AllCasesExist() {
-        let error: PlaybackError = .unsupportedFormat
-        switch error {
-        case .unsupportedFormat: break
-        case .failedToOpenFile:  break
-        case .failedToDecode:    break
-        case .outputError:       break
-        case .invalidState:      break
-        case .invalidArgument:   break
+        let errors: [PlaybackError] = [
+            .unsupportedFormat,
+            .failedToOpenFile,
+            .failedToDecode,
+            .outputError,
+            .invalidState,
+            .invalidArgument,
+        ]
+        for error in errors {
+            switch error {
+            case .unsupportedFormat: break
+            case .failedToOpenFile:  break
+            case .failedToDecode:    break
+            case .outputError:       break
+            case .invalidState:      break
+            case .invalidArgument:   break
+            }
         }
     }
 
