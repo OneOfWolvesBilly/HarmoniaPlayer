@@ -34,7 +34,10 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | Free | ✅ |
 | 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ |
 | 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | ✅ |
-| 9-I | Fix Xcode warnings (cosmetic) | Free |  |
+| 9-I | Fix Xcode warnings (cosmetic) | Free | ✅ |
+| 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ⬜ |
+| 9-K | Equalizer (10-band, global, custom presets) | Free | ⬜ |
+| 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ⬜ |
 
 ### Goals (v0.1)
 
@@ -930,7 +933,7 @@ fix(slice 9-h): make MiniPlayer menu bar functional and remove expand button
 
 ---
 
-## Slice 9-I: Fix Xcode Warnings (Cosmetic)
+## Slice 9-I: Fix Xcode Warnings (Cosmetic) ✅
 
 ### Goal
 Fix the "Switch condition evaluates to a constant" warnings in
@@ -948,9 +951,9 @@ Fix the "Switch condition evaluates to a constant" warnings in
 
 ### Done criteria
 
-- ⬜ No Xcode warnings from these two test files
-- ⬜ Test coverage unchanged
-- ⬜ All tests green
+- ✅ No Xcode warnings from these two test files
+- ✅ Test coverage unchanged
+- ✅ All tests green
 
 ### Commit message
 
@@ -959,3 +962,907 @@ fix(slice 9-i): resolve "Switch condition evaluates to a constant" warnings
 
 - Refactor switch statements in PlaybackErrorTests and PlaybackStateTests
 ```
+
+---
+
+## Slice 9-J: Lyrics Display (USLT + sidecar .lrc) ⬜
+
+### Goal
+
+Display embedded USLT lyrics or sidecar `.lrc` file content as **full text**
+(no synchronized scrolling, timestamps fully stripped), with user-selectable
+encoding and per-track source memory. All tiers.
+
+### Scope
+
+- HarmoniaCore: `TagBundle.lyrics: String?` added; `AVMetadataTagReaderAdapter`
+  reads USLT frame.
+- HarmoniaPlayer Integration: `HarmoniaTagReaderAdapter` maps
+  `TagBundle.lyrics` to `Track.lyrics`.
+- HarmoniaPlayer Application:
+  - `Track.lyrics: String?` added.
+  - `LyricsService` protocol: resolves lyrics from embedded USLT or
+    sidecar `.lrc` file, with variant filename search and encoding
+    handling.
+  - `LyricsPreferenceStore`: per-track source + encoding preference,
+    UserDefaults-backed.
+  - `AppState`: `@Published var showLyrics: Bool`,
+    `@Published var lyricsResolution: LyricsResolution?`, plus toggle
+    and preference setters.
+- HarmoniaPlayer UI:
+  - `PlayerView`: lyrics toggle button, hidden when
+    `lyricsResolution == nil`.
+  - `LyricsPanel`: Source picker + Encoding picker + scrollable text area.
+
+### Source priority and resolution order
+
+**Default source priority when preference not set:**
+1. sidecar `.lrc` (any variant — see sidecar search order below)
+2. embedded USLT
+3. no lyrics → button hidden
+
+**Sidecar `.lrc` search order:**
+1. `<same-dir>/<filename>.lrc`  (e.g. `song.lrc` for `song.mp3`)
+2. `<same-dir>/<filename-with-ext>.lrc`  (e.g. `song.mp3.lrc`)
+3. `<same-dir>/Lyrics/<filename>.lrc`
+4. `<same-dir>/lyrics/<filename>.lrc`
+
+First match wins. No recursive search beyond these fixed paths.
+
+**User override:** Source picker in `LyricsPanel` lets user switch between
+Embedded and LRC file (auto) when both available. Choice is persisted.
+
+### Custom source selection (NOT in 9-J)
+
+Custom file selection (`LRC file (custom)` and
+`Embedded from another file (custom)`) is **deferred to v0.15**,
+implemented together as a single sub-slice using `NSOpenPanel`. The
+`LyricsPreference` schema in 9-J reserves a `customPath: String?` field
+for forward compatibility but never writes to it.
+
+### Encoding strategy
+
+- **Auto detection order:** UTF-8 → UTF-16 (BOM) → GB18030 → Big5 →
+  Shift-JIS → ISO-8859-1.
+- **Manual selection:** full `String.availableStringEncodings` list,
+  sorted by `String.localizedName(of:)`, presented alphabetically.
+- Sidecar `.lrc` and embedded USLT each track their own encoding
+  preference per file. Embedded USLT's encoding is normally declared in
+  the ID3 frame header, but user may override.
+
+### Timestamp handling (.lrc files)
+
+- **All `[mm:ss.xx]` timestamps are stripped from display text.**
+- **All `[tag:value]` metadata headers** (e.g. `[ti:title]`,
+  `[ar:artist]`, `[al:album]`, `[by:lyricist]`, `[offset:]`) **are also
+  stripped.**
+- Only the plain text after timestamps is shown.
+- Blank lines in the original file are preserved (for stanza breaks).
+- Timestamp parsing logic is retained internally for future v0.15
+  synchronized scrolling upgrade, but not surfaced in 9-J UI.
+
+### Persistence
+
+- **UserDefaults key:** `hp.lyrics.prefs.<absolute-file-path>[#track=<n>]`
+  - Non-CUE tracks: no `#track=` suffix
+    (e.g. `hp.lyrics.prefs./Music/song.mp3`)
+  - CUE virtual tracks: `#track=<n>` suffix for each virtual track
+    (e.g. `hp.lyrics.prefs./Music/Album.flac#track=3`)
+  - Key generation function handles both cases; CUE support is latent
+    in 9-J (Track model's `cueTrackNumber` is added in Phase 3a) and
+    activates when CUE ships in v0.15.
+- **Value (Codable):**
+
+  ```swift
+  struct LyricsPreference: Codable {
+      var source: LyricsSource   // .embedded | .lrc
+      var encoding: String       // IANA charset name, "auto" = detect
+      var customPath: String?    // reserved for v0.15, always nil in 9-J
+  }
+  ```
+
+- **Scope:** preferences are keyed by file path (and CUE track number
+  when applicable), shared across all playlists. Same file in playlist
+  A and playlist B uses identical preference.
+
+### Button visibility — resolution pipeline (β strategy)
+
+To avoid button flicker on track change:
+
+1. **On track load** (not playback start): synchronously check USLT
+   availability (already in `Track.lyrics` from tag read) AND check
+   sidecar `.lrc` existence (`FileManager.fileExists` across the 4
+   variant paths).
+2. Set `lyricsResolution.hasAny: Bool` based on these two cheap checks.
+3. Button visibility binds to `hasAny`.
+4. **On button tap or panel open**: lazily read actual content (USLT
+   text from Track, or `.lrc` file via `String(contentsOf:encoding:)`)
+   with encoding detection. This is the slow path (ms-range for `.lrc`
+   reads).
+
+**Future v0.15 γ upgrade note:** full preload — read next track's
+lyrics content (not just existence) when current track nears end.
+Requires `PlaybackService.preloadNext()` API in HarmoniaCore (Phase 3a
+deliverable) and HarmoniaPlayer-side preload orchestration. 9-J
+deliberately stops at β to keep this slice focused.
+
+### Files
+
+**HarmoniaCore**
+
+- `apple-swift/Sources/HarmoniaCore/Models/TagBundle.swift` (modify)
+  — add `lyrics: String?`
+- `apple-swift/Sources/HarmoniaCore/Adapters/AVMetadataTagReaderAdapter.swift`
+  (modify) — read USLT frame
+  (key `AVMetadataKey.id3MetadataKeyUnsynchronizedLyric`) into
+  `TagBundle.lyrics`
+
+**HarmoniaPlayer — Integration Layer**
+
+- `Shared/Services/HarmoniaTagReaderAdapter.swift` (modify)
+  — map `TagBundle.lyrics` to `Track.lyrics`
+
+**HarmoniaPlayer — Application Layer**
+
+- `Shared/Models/Track.swift` (modify) — add `lyrics: String?`
+  (default nil)
+- `Shared/Models/LyricsSource.swift` (new)
+
+  ```swift
+  enum LyricsSource: String, Codable {
+      case embedded
+      case lrc
+  }
+  ```
+
+- `Shared/Models/LyricsPreference.swift` (new) — Codable struct
+  (see above)
+- `Shared/Models/LyricsResolution.swift` (new)
+
+  ```swift
+  struct LyricsResolution {
+      let hasAny: Bool               // fast check result
+      let currentSource: LyricsSource?
+      let content: String?           // nil until lazily loaded
+      let availableSources: Set<LyricsSource>
+  }
+  ```
+
+- `Shared/Services/LyricsService.swift` (new) — protocol + default impl
+  - `resolveAvailability(for: Track) -> LyricsResolution`
+    (fast, sync)
+  - `resolveContent(for: Track, source: LyricsSource, encoding: String?) throws -> String`
+    (slow, async)
+  - `stripLRCTimestamps(_ raw: String) -> String`  (pure function)
+  - `detectEncoding(of: Data) -> String.Encoding`
+    (auto-detect fallback chain)
+- `Shared/Services/LyricsPreferenceStore.swift` (new)
+  - `key(for: Track) -> String`  (handles `#track=` for CUE)
+  - `load(for: Track) -> LyricsPreference?`
+  - `save(_ pref: LyricsPreference, for: Track)`
+- `Shared/Models/AppState.swift` (modify)
+  - inject `LyricsService` + `LyricsPreferenceStore`
+  - `@Published var showLyrics: Bool`
+  - `@Published var lyricsResolution: LyricsResolution?`
+  - `toggleLyrics()`
+  - `setLyricsSource(_: LyricsSource)`
+  - `setLyricsEncoding(_: String)`
+  - call `lyricsService.resolveAvailability(for:)` on currentTrack
+    change
+- `Shared/Services/CoreServiceProviding.swift` (modify)
+  — add `makeLyricsService()` factory
+- `Shared/Services/CoreFactory.swift` (modify) — wire `LyricsService`
+- `Shared/Services/HarmoniaCoreProvider.swift` (modify)
+  — construct default `LyricsService`
+
+**HarmoniaPlayer — UI**
+
+- `Shared/Views/LyricsPanel.swift` (new)
+  - Source picker (SegmentedControl or Menu, only shows available
+    sources)
+  - Encoding picker (Auto + full localized list from
+    `String.availableStringEncodings`)
+  - `ScrollView { Text(content) }` for content
+- `Shared/Views/PlayerView.swift` (modify)
+  - lyrics toggle button, conditional on
+    `lyricsResolution?.hasAny == true`
+  - embed `LyricsPanel` when `showLyrics`
+
+**Tests** (`HarmoniaPlayerTests/SharedTests/`)
+
+- `LyricsServiceTests.swift` (new)
+- `LyricsPreferenceStoreTests.swift` (new)
+- `LRCStripTests.swift` (new)
+- `EncodingDetectionTests.swift` (new)
+- `AppStateLyricsTests.swift` (new)
+
+**Localisation** (en / zh-Hant / ja)
+
+- `lyrics_toggle_button_label`
+- `lyrics_source_picker_label`
+- `lyrics_source_embedded`
+- `lyrics_source_lrc`
+- `lyrics_encoding_picker_label`
+- `lyrics_encoding_auto`
+- `lyrics_parse_failed`
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testTrack_DefaultLyrics_IsNil` | new `Track(url:)` | read `lyrics` | `nil` |
+| `testUSLT_MappedFromTagBundle` | `TagBundle(lyrics: "hello")` | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics == "hello"` |
+| `testLRCStrip_RemovesTimestamps` | `"[00:12.00]line1\n[00:15.50]line2"` | `stripLRCTimestamps` | `"line1\nline2"` |
+| `testLRCStrip_RemovesMetadataTags` | `"[ti:title]\n[ar:artist]\n[00:12.00]line"` | `stripLRCTimestamps` | `"line"` (blank lines preserved as-is) |
+| `testLRCStrip_KeepsBlankLines` | `"[00:12]a\n\n[00:15]b"` | `stripLRCTimestamps` | `"a\n\nb"` |
+| `testEncodingDetection_UTF8` | valid UTF-8 `.lrc` bytes | `detectEncoding` | `.utf8` |
+| `testEncodingDetection_GB18030Fallback` | GB18030 bytes (fails UTF-8) | `detectEncoding` | `.gb18030` |
+| `testEncodingDetection_Big5Fallback` | Big5 bytes | `detectEncoding` | `.big5` |
+| `testEncodingDetection_ShiftJISFallback` | Shift-JIS bytes | `detectEncoding` | `.shiftJIS` |
+| `testSidecarSearch_SameFilename` | `song.mp3` + `song.lrc` | `LyricsService.resolveAvailability` | finds `song.lrc` |
+| `testSidecarSearch_FilenameWithExt` | `song.mp3` + `song.mp3.lrc` (no `song.lrc`) | `resolveAvailability` | finds `song.mp3.lrc` |
+| `testSidecarSearch_LyricsSubdir` | `song.mp3` + `Lyrics/song.lrc` | `resolveAvailability` | finds subdir file |
+| `testSidecarSearch_PrefersDirectFirst` | both `song.lrc` + `song.mp3.lrc` exist | `resolveAvailability` | returns `song.lrc` |
+| `testResolveAvailability_PrefersLRCWhenNoPref` | USLT + `.lrc` both present, no pref | `resolveAvailability` | `.currentSource == .lrc` |
+| `testResolveAvailability_FallsBackToEmbeddedNoLRC` | USLT only | `resolveAvailability` | `.currentSource == .embedded` |
+| `testResolveAvailability_HasAnyFalseWhenNothing` | no USLT, no `.lrc` | `resolveAvailability` | `.hasAny == false` |
+| `testResolveContent_EmbeddedReturnsUSLT` | Track with USLT | `resolveContent(.embedded)` | returns USLT string |
+| `testResolveContent_LRCStripsTimestamps` | `.lrc` with timestamps | `resolveContent(.lrc)` | timestamps removed |
+| `testResolveContent_UsesPreferredEncoding` | `.lrc` in Big5, pref = Big5 | `resolveContent(.lrc, "big5")` | decoded correctly |
+| `testPreferenceStore_NonCueKey` | Track without `cueTrackNumber` | `key(for:)` | `"hp.lyrics.prefs./path/song.mp3"` |
+| `testPreferenceStore_CueKey` | Track with `cueTrackNumber = 3` | `key(for:)` | `"hp.lyrics.prefs./path/Album.flac#track=3"` |
+| `testPreferenceStore_PersistsAcrossSessions` | save, recreate store | load | equal values |
+| `testPreferenceStore_SharedAcrossPlaylists` | same path, 2 playlists | save in A, load in B | equal values |
+| `testAppState_ToggleLyrics_FlipsVisibility` | `showLyrics == false` | `toggleLyrics()` | `true` |
+| `testAppState_OnTrackChange_UpdatesResolution` | change currentTrack | publisher fires | `lyricsResolution` reflects new track |
+
+### Done criteria
+
+- ⬜ `PlayerView` shows lyrics toggle button only when
+  `lyricsResolution?.hasAny == true`
+- ⬜ Tapping button toggles `LyricsPanel` visibility
+- ⬜ Panel shows full-text USLT content for MP3 with embedded lyrics
+- ⬜ Panel shows stripped `.lrc` content (no `[mm:ss.xx]`, no
+  `[tag:value]` metadata) for track with sidecar file
+- ⬜ Sidecar search finds all 4 variant paths (`song.lrc`,
+  `song.mp3.lrc`, `Lyrics/song.lrc`, `lyrics/song.lrc`)
+- ⬜ Source picker switches between Embedded and LRC when both available
+- ⬜ Encoding Auto correctly decodes UTF-8 / GB18030 / Big5 / Shift-JIS
+- ⬜ Encoding manual selection overrides Auto and persists
+- ⬜ Preferences persist across app launches
+- ⬜ Same file across playlists shares preference
+- ⬜ Preference key format: non-CUE uses path only;
+  CUE virtual tracks use `#track=<n>` suffix
+- ⬜ Button visibility check is sync/fast (no flicker on track change)
+- ⬜ All Slice 1–9 previous tests still green
+- ⬜ All new tests green
+
+### Non-goals (explicit)
+
+- **No SYLT reading.** Deferred to v0.15.
+- **No synchronized scrolling / line highlighting.** Deferred to v0.15.
+- **No custom file selection** (`LRC file (custom)`,
+  `Embedded from another file (custom)`). Deferred to v0.15.
+- **No USLT content splitting.** A single USLT blob containing lyrics
+  for multiple songs is displayed as-is; no heuristic splitting (format
+  has no standard for segmentation, user must pre-split into separate
+  files).
+- **No lyrics editing.** Deferred to v0.2 Tag Editor.
+- **No full content preload on track change** (β strategy only; γ full
+  preload deferred to v0.15 after Phase 3a adds HarmoniaCore preload
+  API).
+
+### Related future work
+
+- **Phase 3a (HarmoniaCore refactor):** add
+  `PlaybackService.preloadNext()` API serving both v0.2 gapless
+  playback and v0.15 lyrics γ-strategy preload.
+- **v0.15:** SYLT reading, synchronized line scrolling, custom file
+  selection (both LRC custom and Embedded-from-another-file custom),
+  γ-strategy full preload.
+- **v0.2:** gapless playback built on Phase 3a preload API, lyrics
+  editing in Tag Editor.
+
+---
+
+## Slice 9-K: Equalizer (10-band) ⬜
+
+### Goal
+
+Provide a 10-band parametric equalizer with built-in presets and custom
+preset support, accessible via Window menu as a separate EQ window. All
+tiers (Free).
+
+### Scope
+
+**HarmoniaCore:**
+- New `EQPort` protocol (audio chain DSP node abstraction).
+- New `AVAudioUnitEQAdapter` implementing `EQPort` using
+  `AVAudioUnitEQ` (10 bands, parametric type, fixed Q = 0.7071).
+- `DefaultPlaybackService` inserts EQ node into the audio chain
+  between decoder and audio output.
+- `PlaybackService` exposes EQ control surface
+  (`setEQEnabled(_:)`, `setEQPreamp(_:)`, `setEQBandGains(_:)`).
+
+**HarmoniaPlayer Application:**
+- New `EQService` protocol (Application Layer abstraction over
+  HarmoniaCore EQ).
+- `AppState`: EQ state (`eqEnabled`, `eqBands[10]`, `preamp`,
+  `currentPresetName`, `customPresets[]`).
+- EQ is **global state** (v0.1 scope — not per-track, not
+  per-playlist).
+- EQ + ReplayGain coexistence: preamp and ReplayGain track gain are
+  combined additively before final output gain.
+
+**HarmoniaPlayer Integration:**
+- New `HarmoniaEQAdapter` bridging Core's `EQPort`-controlling API to
+  `EQService` protocol.
+- `CoreServiceProviding` adds `makeEQService()`.
+
+**HarmoniaPlayer UI:**
+- New `EQView`: 10 vertical sliders + preamp slider + preset picker +
+  enable toggle + "Save as Preset…" button + "Delete Preset" button.
+- Window menu: new "Equalizer" entry (⌘⌥E shortcut, matching macOS
+  Music.app convention).
+- New EQ Window via `WindowGroup` (separate window, like FileInfoView
+  pattern).
+
+### Frequency bands (10-band ISO standard)
+
+```
+Band  Frequency  Default Gain
+ 1    32 Hz        0 dB
+ 2    64 Hz        0 dB
+ 3    125 Hz       0 dB
+ 4    250 Hz       0 dB
+ 5    500 Hz       0 dB
+ 6    1 kHz        0 dB
+ 7    2 kHz        0 dB
+ 8    4 kHz        0 dB
+ 9    8 kHz        0 dB
+10    16 kHz       0 dB
+```
+
+- Gain range per band: −12 dB to +12 dB (clamped in adapter).
+- Preamp range: −12 dB to +12 dB (clamped in adapter).
+- Q factor: fixed 0.7071 (Butterworth), not user-adjustable in 9-K.
+
+### Built-in presets
+
+Names presented in localised form via key lookup; underlying band
+values are fixed numerical arrays. User cannot edit built-in presets
+— selecting a built-in preset and modifying any band switches state
+to "Unsaved/Custom".
+
+| Preset | Description |
+|---|---|
+| Flat | All bands 0 dB |
+| Rock | Boost low + high, scoop mids |
+| Pop | Boost mids and high |
+| Jazz | Gentle boost low + high, flat mids |
+| Classical | Slight boost low, flat mids/high |
+| Vocal | Boost mid (1k–4k), reduce extremes |
+| Bass Boost | Boost low (32–250 Hz) |
+| Treble Boost | Boost high (4k–16k Hz) |
+
+Exact dB values defined as Swift constants in
+`Shared/Models/EQPresets.swift`.
+
+### Custom presets
+
+- User can save current band/preamp configuration as a custom preset
+  with a user-given name.
+- User can delete custom presets (built-in presets cannot be deleted).
+- Custom presets persisted in UserDefaults as Codable array.
+- No naming collision with built-in presets (validation rejects on
+  save).
+
+### EQ + ReplayGain interaction
+
+Both EQ preamp and ReplayGain produce a master gain adjustment in dB.
+They combine **additively** before final volume application:
+
+```
+finalGain_dB = volume_dB + replayGain_trackGain_dB + eqPreamp_dB
+```
+
+This is documented behaviour. Tests verify the additive combination.
+
+### Persistence (with schema versioning)
+
+Forward-compatible schema with explicit version field. 9-K introduces
+schema version **1**. Future slices (e.g. v0.15 per-track EQ, v0.15/v0.2
+user-adjustable Q) will bump version and migrate via `EQSchemaMigrator`.
+
+**UserDefaults keys:**
+
+```
+hp.eq.schemaVersion: Int           // 9-K = 1
+hp.eq.enabled: Bool
+hp.eq.preamp: Float                // dB
+hp.eq.bands: Data                  // Codable [EQBandState], 10 elements
+hp.eq.currentPresetName: String?   // nil = "Unsaved/Custom"
+hp.eq.customPresets: Data          // Codable [EQPreset]
+```
+
+**Codable types:**
+
+```swift
+struct EQBandState: Codable {
+    var gain: Float          // -12...+12 dB
+    var q: Float             // reserved for future; 9-K always 0.7071
+}
+
+struct EQPreset: Codable {
+    var name: String
+    var bands: [EQBandState]
+    var preamp: Float
+    var isBuiltin: Bool
+}
+```
+
+**Migration strategy:**
+
+On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
+- Missing / nil → fresh install, no migration needed, initialise
+  with defaults and write version 1.
+- 1 → current, load directly.
+- > 1 (future) → delegate to `EQSchemaMigrator.migrate(from:to:)`.
+
+9-K ships `EQSchemaMigrator` skeleton but contains no migration logic
+(only version 1 exists). Future slices will add migration steps.
+
+### Files
+
+**HarmoniaCore**
+
+- `apple-swift/Sources/HarmoniaCore/Ports/EQPort.swift` (new)
+
+  ```swift
+  public protocol EQPort {
+      var isEnabled: Bool { get set }
+      var preamp: Float { get set }       // dB, -12...+12
+      var bandGains: [Float] { get set }  // 10 elements, dB, -12...+12
+      func attach(to engine: AVAudioEngine, after: AVAudioNode) throws
+  }
+  ```
+
+- `apple-swift/Sources/HarmoniaCore/Adapters/AVAudioUnitEQAdapter.swift`
+  (new) — wraps `AVAudioUnitEQ(numberOfBands: 10)`, sets parametric
+  type per band with ISO frequencies, Q = 0.7071. Clamps gain and
+  preamp to ±12 dB.
+- `apple-swift/Sources/HarmoniaCore/Services/PlaybackService.swift`
+  (modify) — add control surface:
+  `setEQEnabled(_: Bool)`,
+  `setEQPreamp(_: Float)`,
+  `setEQBandGains(_: [Float])`.
+- `apple-swift/Sources/HarmoniaCore/Services/DefaultPlaybackService.swift`
+  (modify) — inject `EQPort` via constructor; insert EQ node into
+  audio chain in `load(url:)`.
+
+**HarmoniaPlayer — Integration Layer**
+
+- `Shared/Services/HarmoniaEQAdapter.swift` (new) — bridges Core
+  PlaybackService EQ control surface to `EQService` protocol.
+
+**HarmoniaPlayer — Application Layer**
+
+- `Shared/Models/EQBand.swift` (new) — frequency + default gain.
+- `Shared/Models/EQBandState.swift` (new) — Codable gain + q.
+- `Shared/Models/EQPreset.swift` (new) — Codable preset record.
+- `Shared/Models/EQPresets.swift` (new) — static built-in preset
+  array.
+- `Shared/Services/EQService.swift` (new) — protocol:
+  `setEnabled(_:)`, `setPreamp(_:)`, `setBandGains(_:)`.
+- `Shared/Services/EQPersistenceStore.swift` (new) — UserDefaults
+  load/save for EQ state and custom presets, schema version
+  checking.
+- `Shared/Services/EQSchemaMigrator.swift` (new) — skeleton for
+  future migration logic; 9-K contains only version 1 identity.
+- `Shared/Models/AppState.swift` (modify)
+  - inject `EQService` + `EQPersistenceStore`
+  - `@Published var eqEnabled: Bool`
+  - `@Published var eqBands: [Float]` (10 values)
+  - `@Published var preamp: Float`
+  - `@Published var currentPresetName: String?`
+  - `@Published var customPresets: [EQPreset]`
+  - `setEQEnabled(_:)`, `setEQBand(index:gain:)`, `setEQPreamp(_:)`,
+    `selectPreset(_:)`, `saveAsCustomPreset(name:)`,
+    `deleteCustomPreset(_:)`
+- `Shared/Services/CoreServiceProviding.swift` (modify) — add
+  `makeEQService()` factory.
+- `Shared/Services/CoreFactory.swift` (modify) — wire `EQService`.
+- `Shared/Services/HarmoniaCoreProvider.swift` (modify) — construct
+  default EQ service stack.
+
+**HarmoniaPlayer — UI**
+
+- `Shared/Views/EQView.swift` (new)
+  - 10 vertical sliders (one per band, label = frequency)
+  - Preamp vertical slider (left of bands)
+  - Enable toggle (top)
+  - Preset picker (top, dropdown)
+  - "Save as Preset…" button (alert with name input)
+  - "Delete Preset" button (only enabled for custom presets)
+- `Shared/Views/EQWindow.swift` (new) — WindowGroup wrapper,
+  following FileInfoView pattern.
+- `macOS/HarmoniaPlayerApp.swift` (modify) — register EQ
+  WindowGroup + add Window menu entry "Equalizer" (⌘⌥E).
+- `Shared/Views/HarmoniaPlayerCommands.swift` (modify) — add
+  `.focusedSceneValue` for "Equalizer" command.
+
+**Tests — HarmoniaPlayer** (`HarmoniaPlayerTests/SharedTests/`)
+
+- `EQServiceTests.swift` (new)
+- `EQPersistenceStoreTests.swift` (new)
+- `EQPresetsTests.swift` (new)
+- `EQSchemaMigratorTests.swift` (new)
+- `AppStateEQTests.swift` (new)
+- `EQReplayGainInteractionTests.swift` (new)
+
+**Tests — HarmoniaCore** (`Tests/HarmoniaCoreTests/`)
+
+- `AVAudioUnitEQAdapterTests.swift` (new) — band attachment + gain
+  setting + isEnabled toggle + clamping.
+
+**Localisation** (en / zh-Hant / ja)
+
+- `eq_window_title`
+- `eq_enabled_toggle`
+- `eq_preamp_label`
+- `eq_band_label_32hz` … `eq_band_label_16khz` (10 keys)
+- `eq_preset_picker_label`
+- `eq_preset_flat`, `eq_preset_rock`, `eq_preset_pop`,
+  `eq_preset_jazz`, `eq_preset_classical`, `eq_preset_vocal`,
+  `eq_preset_bass_boost`, `eq_preset_treble_boost`
+- `eq_preset_save_button`
+- `eq_preset_save_dialog_title`
+- `eq_preset_save_dialog_placeholder`
+- `eq_preset_delete_button`
+- `eq_preset_name_collision_alert`
+- `menu_equalizer`
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testEQPort_DefaultIsDisabled` | new `AVAudioUnitEQAdapter` | read `isEnabled` | `false` |
+| `testEQPort_DefaultBandsAreFlat` | new adapter | read `bandGains` | all 10 values == 0 |
+| `testEQPort_SetBandGain_Updates` | adapter, set band[3] = 6 | read `bandGains[3]` | `6` |
+| `testEQPort_SetPreamp_Updates` | adapter, set preamp = -3 | read `preamp` | `-3` |
+| `testEQPort_GainClamping_LowBound` | set band[0] = -20 | read `bandGains[0]` | `-12` (clamped) |
+| `testEQPort_GainClamping_HighBound` | set preamp = 20 | read `preamp` | `12` (clamped) |
+| `testPlaybackService_LoadInsertsEQNode` | `load(url:)` | inspect audio chain | EQ node present between decoder and output |
+| `testEQService_PassesThroughToPort` | `EQService.setEnabled(true)` | `EQPort` | `isEnabled == true` |
+| `testEQPersistence_RoundTrip` | save state, recreate store | load | values match |
+| `testEQPersistence_WritesSchemaVersion` | save any state | read `hp.eq.schemaVersion` | `1` |
+| `testEQPersistence_FreshInstall_NoMigrationNeeded` | empty UserDefaults | load | returns defaults, writes version 1 |
+| `testEQSchemaMigrator_Version1_IsIdentity` | state at version 1 | `migrate(from:1, to:1)` | unchanged |
+| `testEQPresets_FlatBuiltinExists` | builtin presets array | find "Flat" | exists, all bands 0 |
+| `testEQPresets_RockHasExpectedShape` | builtin "Rock" | inspect bands | low + high boosted, mid scooped (specific dB values) |
+| `testAppState_SelectBuiltinPreset_AppliesGains` | AppState | `selectPreset("Rock")` | `eqBands` matches preset, `eqService.bandGains` matches |
+| `testAppState_ModifyBand_MarksAsCustomState` | preset selected | modify band[2] | `currentPresetName == nil` |
+| `testAppState_SaveCustomPreset_AppendsToList` | unsaved state | `saveAsCustomPreset("My EQ")` | `customPresets` contains it |
+| `testAppState_SaveCustomPreset_RejectsBuiltinName` | unsaved state | `saveAsCustomPreset("Rock")` | throws / returns failure |
+| `testAppState_DeleteCustomPreset_RemovesFromList` | custom preset exists | `deleteCustomPreset("My EQ")` | not in list |
+| `testAppState_DeleteBuiltin_Rejected` | builtin "Rock" | `deleteCustomPreset("Rock")` | rejected, list unchanged |
+| `testEQReplayGainInteraction_AdditiveCombination` | preamp = -3, RG = -2, volume = 0 | compute final gain | `-5` dB |
+| `testEQDisabled_BypassesEntirely` | `eqEnabled = false`, all bands = 6 | playback | EQ node passes through (no gain change) |
+
+### Done criteria
+
+- ⬜ HarmoniaCore `EQPort` protocol defined
+- ⬜ `AVAudioUnitEQAdapter` implements 10-band ISO parametric EQ with
+  fixed Q = 0.7071
+- ⬜ `DefaultPlaybackService` inserts EQ node into audio chain on load
+- ⬜ `EQView` displays 10 vertical sliders + preamp + preset picker
+- ⬜ Window menu has "Equalizer" entry with ⌘⌥E shortcut
+- ⬜ Selecting built-in preset applies gains to audio in real-time
+- ⬜ Modifying any band switches preset state to "Unsaved/Custom"
+  (`currentPresetName == nil`)
+- ⬜ "Save as Preset" creates new custom preset; rejects built-in
+  name collision
+- ⬜ Custom presets persist across app launches
+- ⬜ Built-in presets cannot be deleted
+- ⬜ Disabling EQ bypasses processing entirely (verified via test)
+- ⬜ EQ preamp + ReplayGain combine additively
+- ⬜ Gain values clamped to ±12 dB (band) and ±12 dB (preamp)
+- ⬜ `hp.eq.schemaVersion` written as `1` on any save
+- ⬜ Fresh install triggers no migration, initialises with defaults
+- ⬜ All Slice 1–9 previous tests still green
+- ⬜ All new tests green
+
+### Non-goals (explicit)
+
+- **No 31-band EQ.** 10-band is final scope.
+- **No spectrum visualiser** (real-time FFT display). Future work.
+- **No preset import/export to file.** UserDefaults only. Future work.
+- **No per-track EQ memory.** EQ is global in v0.1. Future work
+  (v0.15 / v0.2) will migrate schema.
+- **No frequency response curve visualisation.** Slider-only UI.
+- **No Q factor / bandwidth user control.** Fixed Butterworth
+  Q = 0.7071 in 9-K. Future (v0.15 / v0.2) may expose Q control via
+  schema version bump.
+- **No automatic EQ via DRC** (Dynamic Range Control). Future work.
+
+### Related future work
+
+- **Phase 3a (HarmoniaCore refactor):** `EQPort` architecture may be
+  generalised to a wider `AudioProcessorChain` supporting multiple
+  insertable processors (EQ, fade, future HarmoniaAlarm needs).
+- **v0.15:** consider per-track EQ memory (schema version 2,
+  migration writes per-track keys `hp.eq.track.<path>...`); consider
+  user-adjustable Q (schema version 3); preset import/export.
+- **v0.2 (Pro):** spectrum visualiser, optional 31-band advanced EQ
+  (Pro-only decision deferred), DRC.
+- **HarmoniaAlarm:** alarm sound rarely needs EQ; `EQPort` being an
+  optional processor in the audio chain means HarmoniaAlarm can skip
+  instantiating it cleanly.
+
+---
+
+## Slice 9-L: macOS Now Playing Integration ⬜
+
+### Goal
+
+Integrate HarmoniaPlayer with macOS system media center so playback is
+visible and controllable from Control Center, lock screen, Bluetooth
+headphones (AirPods), keyboard media keys, and Siri. All tiers (Free).
+
+### Scope
+
+**HarmoniaPlayer Application Layer:**
+- New `NowPlayingService` protocol (Application Layer abstraction).
+- Methods: `updateCurrentTrack(_:)`, `updatePlaybackState(_:rate:)`,
+  `updateElapsedTime(_:)`, `clear()`.
+- Command callbacks registered via protocol: `onPlay`, `onPause`,
+  `onTogglePlayPause`, `onNext`, `onPrevious`, `onStop`,
+  `onSeek(_:)`.
+
+**HarmoniaPlayer Integration Layer:**
+- New `MPNowPlayingAdapter` (`import MediaPlayer`, macOS-only)
+  implementing `NowPlayingService`.
+- Pushes metadata to `MPNowPlayingInfoCenter.default().nowPlayingInfo`.
+- Registers command handlers on `MPRemoteCommandCenter.shared()`.
+- Loads artwork as `MPMediaItemArtwork` from track image data.
+
+**HarmoniaPlayer AppState integration:**
+- `AppState` injects `NowPlayingService`.
+- Calls `updateCurrentTrack(_:)` on `currentTrack` change.
+- Calls `updatePlaybackState(_:rate:)` on `playbackState` change.
+- Calls `updateElapsedTime(_:)` throttled from existing 1 Hz
+  `currentTime` polling loop.
+- Calls `clear()` on stop and on `currentTrack = nil`.
+- Wires command callbacks to existing AppState methods.
+
+### Command map
+
+| System command | AppState method |
+|---|---|
+| `MPRemoteCommand.playCommand` | `AppState.play()` |
+| `MPRemoteCommand.pauseCommand` | `AppState.pause()` |
+| `MPRemoteCommand.togglePlayPauseCommand` | `AppState.togglePlayPause()` |
+| `MPRemoteCommand.nextTrackCommand` | `AppState.next()` |
+| `MPRemoteCommand.previousTrackCommand` | `AppState.previous()` |
+| `MPRemoteCommand.changePlaybackPositionCommand` | `AppState.seek(to:)` |
+| `MPRemoteCommand.stopCommand` | `AppState.stop()` |
+
+Commands explicitly NOT wired in 9-L: `skipForwardCommand`,
+`skipBackwardCommand`, `ratingCommand`, `likeCommand`, `dislikeCommand`.
+
+### Now Playing info fields
+
+| Key | Source |
+|---|---|
+| `MPMediaItemPropertyTitle` | `track.title` |
+| `MPMediaItemPropertyArtist` | `track.artist` |
+| `MPMediaItemPropertyAlbumTitle` | `track.album` |
+| `MPMediaItemPropertyPlaybackDuration` | `track.duration` |
+| `MPMediaItemPropertyArtwork` | `track.artworkData` (when present) |
+| `MPNowPlayingInfoPropertyElapsedPlaybackTime` | `currentTime` (1 Hz polling) |
+| `MPNowPlayingInfoPropertyPlaybackRate` | `1.0` (playing) / `0.0` (paused/stopped) |
+| `MPNowPlayingInfoPropertyMediaType` | `.audio` |
+
+### Update cadence
+
+- **On track change:** update title / artist / album / duration /
+  artwork immediately (single batch).
+- **On playback state change:** update `playbackRate` immediately.
+- **Elapsed time:** piggyback on existing 1 Hz `currentTime` polling
+  loop (no independent timer). Updates only the
+  `elapsedPlaybackTime` key, not the full info dict.
+- **On stop:** clear the entire info dict
+  (`nowPlayingInfo = nil`).
+
+**Pause behaviour:** pausing does **not** clear the widget. Widget
+remains visible with paused state (rate = 0.0) so user can resume
+playback from widget. Matches macOS Music.app behaviour.
+
+### Artwork handling
+
+- If `track.artworkData` is non-nil: decode to `NSImage`, wrap in
+  `MPMediaItemArtwork` using the `boundsSize` + `requestHandler`
+  pattern, push to info dict.
+- If nil: omit the `MPMediaItemPropertyArtwork` key entirely
+  (system shows generic audio icon).
+- No artwork cache — pushed fresh on each `updateCurrentTrack`.
+  Memory cost negligible for typical album artwork sizes.
+
+### Lifecycle
+
+- `NowPlayingService` constructed once at app launch via
+  `CoreServiceProviding.makeNowPlayingService()`.
+- Command handlers registered in adapter `init` and **never
+  unregistered** during app lifetime. This ensures Bluetooth
+  headphones / media keys / Siri work any time after app launch,
+  regardless of current playback state.
+- Adapter observes `NSApplicationWillTerminate` and clears
+  `nowPlayingInfo` on quit to avoid stale widget info after app
+  close.
+
+### Testing strategy
+
+**Adapter itself is NOT unit-tested.** `MPNowPlayingInfoCenter` and
+`MPRemoteCommandCenter` are system singletons — any test touching them
+would create cross-test state pollution. Adapter correctness is
+verified via manual QA using the Done criteria checklist.
+
+AppState wiring correctness IS unit-tested via `FakeNowPlayingService`.
+
+This testing strategy is re-evaluated during Phase 3a HarmoniaCore
+refactor (if `NowPlayingService` interface grows or system integration
+changes warrant deeper automated testing).
+
+### Files
+
+**HarmoniaPlayer — Application Layer**
+
+- `Shared/Services/NowPlayingService.swift` (new)
+
+  ```swift
+  protocol NowPlayingService: AnyObject {
+      func updateCurrentTrack(_ track: Track?)
+      func updatePlaybackState(_ state: PlaybackState, rate: Double)
+      func updateElapsedTime(_ seconds: Double)
+      func clear()
+
+      var onPlay: (() -> Void)? { get set }
+      var onPause: (() -> Void)? { get set }
+      var onTogglePlayPause: (() -> Void)? { get set }
+      var onNext: (() -> Void)? { get set }
+      var onPrevious: (() -> Void)? { get set }
+      var onStop: (() -> Void)? { get set }
+      var onSeek: ((Double) -> Void)? { get set }
+  }
+  ```
+
+**HarmoniaPlayer — Integration Layer**
+
+- `Shared/Services/MPNowPlayingAdapter.swift` (new, `import MediaPlayer`)
+  - Implements `NowPlayingService`
+  - Manages `MPNowPlayingInfoCenter` info dict
+  - Registers `MPRemoteCommandCenter` handlers in `init`
+  - Observes `NSApplicationWillTerminate` to clear on quit
+
+**HarmoniaPlayer — AppState**
+
+- `Shared/Models/AppState.swift` (modify)
+  - inject `NowPlayingService` via constructor
+  - wire command callbacks in `init`
+    (`nowPlayingService.onPlay = { [weak self] in self?.play() }` etc.)
+  - observe `$currentTrack` → call `updateCurrentTrack(_:)`
+  - observe `$playbackState` → call `updatePlaybackState(_:rate:)`
+  - in existing polling loop → call `updateElapsedTime(_:)` at 1 Hz
+- `Shared/Services/CoreServiceProviding.swift` (modify) — add
+  `makeNowPlayingService()` factory
+- `Shared/Services/CoreFactory.swift` (modify) — wire service
+- `Shared/Services/HarmoniaCoreProvider.swift` (modify) — construct
+  default `MPNowPlayingAdapter`
+
+**Tests** (`HarmoniaPlayerTests/SharedTests/`)
+
+- `AppStateNowPlayingTests.swift` (new) — uses `FakeNowPlayingService`
+  to verify AppState calls correct methods at correct times
+
+**Test Fakes** (`HarmoniaPlayerTests/Fakes/`)
+
+- `FakeNowPlayingService.swift` (new) — records calls for assertion
+
+**Localisation**
+
+- None. System widgets use system-localised labels. No user-facing UI
+  strings introduced by this slice.
+
+### TDD matrix
+
+| Test | Given | When | Then |
+|---|---|---|---|
+| `testAppState_OnTrackChange_CallsUpdateCurrentTrack` | fake NP service, change currentTrack | publisher fires | `updateCurrentTrack` called with new track |
+| `testAppState_OnTrackChangeToNil_CallsClear` | currentTrack set, then set to nil | publisher fires | `clear()` called |
+| `testAppState_OnPlay_UpdatesPlaybackState` | paused state | `play()` | `updatePlaybackState(.playing, rate: 1.0)` called |
+| `testAppState_OnPause_UpdatesPlaybackState` | playing | `pause()` | `updatePlaybackState(.paused, rate: 0.0)` called |
+| `testAppState_OnPause_DoesNotClear` | playing | `pause()` | `clear()` NOT called |
+| `testAppState_OnStop_ClearsNowPlaying` | playing | `stop()` | `clear()` called |
+| `testAppState_Polling_UpdatesElapsedTime` | playing, polling tick | time advances | `updateElapsedTime(_:)` called with current time |
+| `testAppState_OnPlayCommand_InvokesPlay` | NP service `onPlay` invoked externally | callback fires | `AppState.play()` executes |
+| `testAppState_OnPauseCommand_InvokesPause` | `onPause` invoked | callback fires | `AppState.pause()` executes |
+| `testAppState_OnNextCommand_InvokesNext` | `onNext` invoked | callback fires | `AppState.next()` executes |
+| `testAppState_OnPrevCommand_InvokesPrevious` | `onPrevious` invoked | callback fires | `AppState.previous()` executes |
+| `testAppState_OnSeekCommand_InvokesSeek` | `onSeek(42.0)` invoked | callback fires | `AppState.seek(to: 42.0)` executes |
+| `testAppState_OnTogglePlayPause_Toggles` | playing state, `onTogglePlayPause` | callback fires | state becomes paused |
+| `testAppState_OnStopCommand_InvokesStop` | playing, `onStop` invoked | callback fires | `AppState.stop()` executes |
+
+### Done criteria
+
+**Unit test criteria (automated):**
+
+- ⬜ AppState calls `updateCurrentTrack` on track change
+- ⬜ AppState calls `updatePlaybackState` on play / pause / stop
+- ⬜ AppState calls `updateElapsedTime` during polling
+- ⬜ AppState calls `clear` on stop and on `currentTrack = nil`
+- ⬜ `pause()` does NOT clear (widget remains visible)
+- ⬜ Command callbacks (play / pause / next / prev / seek /
+  togglePlayPause / stop) correctly trigger corresponding AppState
+  methods
+- ⬜ All Slice 1–9 previous tests still green
+- ⬜ All new tests green
+
+**Manual QA criteria (system integration):**
+
+- ⬜ With HarmoniaPlayer playing, Control Center shows title /
+  artist / album / artwork
+- ⬜ Tapping play / pause in Control Center controls HarmoniaPlayer
+- ⬜ Tapping next / previous in Control Center advances HarmoniaPlayer
+- ⬜ Dragging the progress slider in Control Center seeks HarmoniaPlayer
+- ⬜ With HarmoniaPlayer playing and Mac locked, lock screen shows
+  playback widget (macOS 14+)
+- ⬜ AirPods / Bluetooth headphones single-press toggles play / pause
+- ⬜ AirPods double-press advances to next track
+- ⬜ Keyboard media keys (F7/F8/F9) control playback
+- ⬜ "Hey Siri, pause music" pauses HarmoniaPlayer
+- ⬜ "Hey Siri, next song" advances HarmoniaPlayer
+- ⬜ Quitting HarmoniaPlayer clears Control Center widget (no stale
+  info)
+
+### Non-goals (explicit)
+
+- **No CarPlay integration.** Requires separate
+  `MPPlayableContentManager` + entitlements. HarmoniaPlayer is a
+  desktop app, not in-vehicle scope.
+- **No custom Siri intents.** System defaults via
+  `MPRemoteCommandCenter` only.
+- **No rating / like / dislike commands.** Not applicable to
+  file-based player (streaming-service concepts).
+- **No skipForward / skipBackward custom intervals.** Use next /
+  previous only; music is not consumed in 15-second skips.
+- **No chapter navigation.** Track model has no chapter metadata
+  concept.
+- **No queue preview.** Control Center will not show "Up Next" list.
+  `MPNowPlayingInfoPropertyPlaybackQueueIndex` /
+  `MPNowPlayingInfoPropertyPlaybackQueueCount` NOT populated in 9-L.
+- **Not cross-platform.** MediaPlayer framework is Apple-only.
+  HarmoniaPlayer's Linux/C++ counterpart will need its own MPRIS
+  implementation; separate slice in Linux repo.
+
+### Related future work
+
+- **Phase 3a (HarmoniaCore refactor):** no direct impact.
+  `NowPlayingService` stays in HarmoniaPlayer — HarmoniaCore is UI /
+  system-framework agnostic per module boundary rules. Re-evaluate
+  testing strategy at that time (if interface grows or integration
+  changes warrant deeper automated testing).
+- **v0.15:** re-evaluate the six Non-goals above to see whether
+  user feedback, Pro feature planning, or scope changes justify
+  adding any of them. Also consider user-configurable elapsed-time
+  polling frequency (currently fixed 1 Hz). Consider populating
+  `PlaybackQueueIndex` / `PlaybackQueueCount` for richer widget
+  info.
+- **v0.2 (Pro):** chapter navigation if chapter metadata support
+  lands. Rating / like if Pro tier adds library-like features
+  (unlikely given file-based positioning).
+- **HarmoniaAlarm:** will likely use `MPNowPlayingInfoCenter`
+  differently (alarm-specific UI) or skip entirely. No shared code
+  expected.
+- **Linux/C++ HarmoniaPlayer:** requires MPRIS (Media Player Remote
+  Interface Specification) implementation. Separate slice in the
+  Linux repo.
