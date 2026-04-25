@@ -17,8 +17,8 @@ mini player window, and implements ReplayGain volume normalisation.
 | Sub-slice | Content | Status |
 |---|---|---|
 | 8-A | Menu bar UX fixes + UndoManager | ✅ |
-| 8-B | Mini Player floating window | |
-| 8-C | ReplayGain volume normalisation | |
+| 8-B | Mini Player floating window | ✅ |
+| 8-C | ReplayGain volume normalisation | ✅ |
 
 > **8-E (Play statistics + track rating)** — deferred to backlog. Fields
 > (`playCount`, `lastPlayedAt`, `rating`) are already defined in `Track`
@@ -184,7 +184,7 @@ feat(slice 8-A): fix menu disabled states, Play/Pause label, and add UndoManager
 
 ---
 
-## Slice 8-B: Mini Player
+## Slice 8-B: Mini Player ✅
 
 ### Goal
 Add a compact floating mini player window showing now-playing info and
@@ -223,7 +223,7 @@ feat(slice 8-B): add mini player floating window
 
 ---
 
-## Slice 8-C: ReplayGain
+## Slice 8-C: ReplayGain ✅
 
 ### Goal
 Read ReplayGain tags from audio file metadata and apply gain adjustment

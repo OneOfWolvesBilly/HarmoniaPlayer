@@ -519,7 +519,7 @@ feat(slice 7-F): add UI localisation for 24 languages
 
 ---
 
-## Slice 7-G: Column Customization
+## Slice 7-G: Column Customization ✅
 
 ### Goal
 Allow users to show/hide optional metadata columns in `PlaylistView`, drag
@@ -627,7 +627,7 @@ HarmoniaPlayer:
 
 ---
 
-## Slice 7-H: File Info Panel
+## Slice 7-H: File Info Panel ✅
 
 ### Goal
 Show technical file information for the selected track via right-click →
