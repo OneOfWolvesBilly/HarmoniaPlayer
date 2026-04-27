@@ -1024,6 +1024,19 @@ API and reference-implementation findings that informed this slice's design.
 - 9-J adopts array-of-variants model (decision C-2):
   `lyrics: [LyricsLanguageVariant]?`.
 
+**6. Swift `String.Encoding` API path for GB18030 / Big5**
+
+- Swift `String.Encoding` exposes `.utf8`, `.utf16`, `.shiftJIS`,
+  `.isoLatin1` as public constants.
+- **GB18030 and Big5 are NOT public Swift constants.** Implementation
+  must construct them via
+  `CFStringConvertEncodingToNSStringEncoding(CFStringEncoding(CFStringEncodings.<name>.rawValue))`
+  using `CFStringEncodings.GB_18030_2000` and `CFStringEncodings.big5`.
+- `LyricsService` wraps these as `static let gb18030` / `static let big5`
+  helpers (one-time conversion).
+- Verified via CotEditor (macOS reference encoder/decoder
+  implementation), which uses the same approach.
+
 **Sources:**
 
 - ID3v2 spec: https://id3.org/id3v2.3.0
@@ -1033,6 +1046,10 @@ API and reference-implementation findings that informed this slice's design.
   https://github.com/jacquesh/foo_openlyrics/issues/115
 - Apple AVMetadataKey:
   https://developer.apple.com/documentation/avfoundation/avmetadatakey/id3metadatakeyunsynchronizedlyric
+- Apple CFStringEncoding / CFStringConvertEncodingToNSStringEncoding:
+  https://developer.apple.com/documentation/corefoundation/cfstringencoding
+- CotEditor source (encoding constants prior art):
+  https://github.com/coteditor/CotEditor
 
 ### Scope
 
@@ -1090,6 +1107,22 @@ for forward compatibility but never writes to it.
 
 - **Auto detection order:** UTF-8 → UTF-16 (BOM) → GB18030 → Big5 →
   Shift-JIS → ISO-8859-1.
+- **Swift `String.Encoding` API path:** `.utf8`, `.utf16`, `.shiftJIS`,
+  and `.isoLatin1` are public Swift constants and used directly.
+  **`.gb18030` and `.big5` are not exposed as public Swift constants**
+  and must be constructed via `CFStringConvertEncodingToNSStringEncoding`:
+  ```swift
+  let gb18030 = String.Encoding(rawValue:
+      CFStringConvertEncodingToNSStringEncoding(
+          CFStringEncoding(CFStringEncodings.GB_18030_2000.rawValue)))
+  let big5 = String.Encoding(rawValue:
+      CFStringConvertEncodingToNSStringEncoding(
+          CFStringEncoding(CFStringEncodings.big5.rawValue)))
+  ```
+  `LyricsService` exposes these as static helpers
+  (`LyricsService.gb18030` / `LyricsService.big5`) to avoid repeated
+  conversion. CotEditor (macOS reference encoder/decoder implementation)
+  uses the same approach.
 - **Manual selection:** full `String.availableStringEncodings` list,
   sorted by `String.localizedName(of:)`, presented alphabetically.
 - Sidecar `.lrc` and embedded USLT each track their own encoding
