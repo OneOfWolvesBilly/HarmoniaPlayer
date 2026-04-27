@@ -973,32 +973,98 @@ Display embedded USLT lyrics or sidecar `.lrc` file content as **full text**
 (no synchronized scrolling, timestamps fully stripped), with user-selectable
 encoding and per-track source memory. All tiers.
 
+### Prerequisite Investigation
+
+API and reference-implementation findings that informed this slice's design.
+
+**1. AVFoundation USLT reading**
+
+- `AVMetadataKey.id3MetadataKeyUnsynchronizedLyric` reads the standard ID3
+  USLT frame.
+- ID3v2 USLT frame structure: text encoding + 3-byte language code (ISO 639-2)
+  + content descriptor + lyrics text.
+- ID3v2.4 permits multiple USLT frames per file, distinguished by language
+  code and content descriptor.
+- AVFoundation exposes per-item sub-fields via `AVMetadataItem.extraAttributes`
+  — same mechanism HarmoniaCore reader already uses for TXXX (see
+  `AVMetadataTagReaderAdapter.swift` L472–475).
+
+**2. AVFoundation USLT writing**
+
+- No official Apple example or documentation for `AVMutableMetadataItem`
+  writing USLT specifically.
+- Third-party Swift libraries (ID3TagEditor) implement direct ID3 USLT write;
+  AVFoundation write support is uncertain.
+- 9-J does not write USLT. v0.2 Tag Editor lyrics editing may require TagLib
+  adapter.
+
+**3. Sidecar `.lrc` filename conventions (foobar2000 OpenLyrics behaviour)**
+
+- Default save filename format: `[%artist% - ][%title%]` (i.e.
+  `Artist - Title.lrc`), not file basename.
+- Search extensions: both `.lrc` and `.txt`.
+- These conventions are popular but not industry-standard. 9-J targets
+  file-basename convention only (decision B-1; v0.15 backlog).
+
+**4. ID3 lyrics frame in foobar2000 (writes)**
+
+- foobar2000 OpenLyrics writes ID3 lyrics as TXXX frames named `LYRICS` /
+  `SYNCEDLYRICS` / `UNSYNCEDLYRICS` / `UNSYNCED LYRICS` — not the standard
+  `USLT` frame.
+- Reading these requires TXXX with description match, not USLT.
+- 9-J reads only standard USLT (decision A-1; v0.15 backlog for foobar2000
+  compatibility).
+
+**5. Multi-language USLT data model**
+
+- A single MP3 may contain English + Chinese + Japanese USLT, each as a
+  separate frame.
+- Single-string `lyrics: String?` model collapses these to whichever
+  AVFoundation returns first (effectively random selection).
+- 9-J adopts array-of-variants model (decision C-2):
+  `lyrics: [LyricsLanguageVariant]?`.
+
+**Sources:**
+
+- ID3v2 spec: https://id3.org/id3v2.3.0
+- foobar2000 OpenLyrics docs:
+  https://wiki.hydrogenaudio.org/index.php?title=Foobar2000:Components/OpenLyrics_(foo_openlyrics)
+- foo_openlyrics Issue #115 (write log evidence):
+  https://github.com/jacquesh/foo_openlyrics/issues/115
+- Apple AVMetadataKey:
+  https://developer.apple.com/documentation/avfoundation/avmetadatakey/id3metadatakeyunsynchronizedlyric
+
 ### Scope
 
-- HarmoniaCore: `TagBundle.lyrics: String?` added; `AVMetadataTagReaderAdapter`
-  reads USLT frame.
+- HarmoniaCore: `TagBundle.lyrics: [LyricsLanguageVariant]?` added;
+  `AVMetadataTagReaderAdapter` reads ALL USLT frames (one variant per frame,
+  language code extracted from `extraAttributes`).
 - HarmoniaPlayer Integration: `HarmoniaTagReaderAdapter` maps
   `TagBundle.lyrics` to `Track.lyrics`.
 - HarmoniaPlayer Application:
-  - `Track.lyrics: String?` added.
+  - `Track.lyrics: [LyricsLanguageVariant]?` added.
+  - `LyricsLanguageVariant` model (new): `languageCode: String?` (ISO 639-2,
+    nil when undeclared), `text: String` (raw, not yet stripped).
   - `LyricsService` protocol: resolves lyrics from embedded USLT or
-    sidecar `.lrc` file, with variant filename search and encoding
-    handling.
-  - `LyricsPreferenceStore`: per-track source + encoding preference,
-    UserDefaults-backed.
+    sidecar `.lrc` file, with variant filename search, language selection,
+    and encoding handling.
+  - `LyricsPreferenceStore`: per-track source + language + encoding
+    preference, UserDefaults-backed.
   - `AppState`: `@Published var showLyrics: Bool`,
-    `@Published var lyricsResolution: LyricsResolution?`, plus toggle
-    and preference setters.
+    `@Published var lyricsResolution: LyricsResolution?`, plus toggle,
+    language setter, and preference setters.
 - HarmoniaPlayer UI:
   - `PlayerView`: lyrics toggle button, hidden when
     `lyricsResolution == nil`.
-  - `LyricsPanel`: Source picker + Encoding picker + scrollable text area.
+  - `LyricsPanel`: Source picker + Language picker (visible when
+    source=.embedded AND availableLanguages.count > 1) + Encoding picker
+    (visible when source=.lrc) + scrollable text area.
 
 ### Source priority and resolution order
 
 **Default source priority when preference not set:**
 1. sidecar `.lrc` (any variant — see sidecar search order below)
-2. embedded USLT
+2. embedded USLT (if multiple language variants present, prefer system locale match; otherwise first variant in file order)
 3. no lyrics → button hidden
 
 **Sidecar `.lrc` search order:**
@@ -1055,9 +1121,10 @@ for forward compatibility but never writes to it.
 
   ```swift
   struct LyricsPreference: Codable {
-      var source: LyricsSource   // .embedded | .lrc
-      var encoding: String       // IANA charset name, "auto" = detect
-      var customPath: String?    // reserved for v0.15, always nil in 9-J
+      var source: LyricsSource     // .embedded | .lrc
+      var encoding: String         // IANA charset name, "auto" = detect
+      var languageCode: String?    // ISO 639-2; applies when source = .embedded; nil = auto (locale match)
+      var customPath: String?      // reserved for v0.15, always nil in 9-J
   }
   ```
 
@@ -1091,11 +1158,14 @@ deliberately stops at β to keep this slice focused.
 **HarmoniaCore**
 
 - `apple-swift/Sources/HarmoniaCore/Models/TagBundle.swift` (modify)
-  — add `lyrics: String?`
+  — add `lyrics: [LyricsLanguageVariant]?`
+- `apple-swift/Sources/HarmoniaCore/Models/LyricsLanguageVariant.swift`
+  (new) — same shape as the HarmoniaPlayer-side struct
 - `apple-swift/Sources/HarmoniaCore/Adapters/AVMetadataTagReaderAdapter.swift`
-  (modify) — read USLT frame
-  (key `AVMetadataKey.id3MetadataKeyUnsynchronizedLyric`) into
-  `TagBundle.lyrics`
+  (modify) — read ALL USLT frames
+  (key `AVMetadataKey.id3MetadataKeyUnsynchronizedLyric`); for each item,
+  extract language code from `extraAttributes` and produce one
+  `LyricsLanguageVariant`; collect into `TagBundle.lyrics`
 
 **HarmoniaPlayer — Integration Layer**
 
@@ -1104,7 +1174,7 @@ deliberately stops at β to keep this slice focused.
 
 **HarmoniaPlayer — Application Layer**
 
-- `Shared/Models/Track.swift` (modify) — add `lyrics: String?`
+- `Shared/Models/Track.swift` (modify) — add `lyrics: [LyricsLanguageVariant]?`
   (default nil)
 - `Shared/Models/LyricsSource.swift` (new)
 
@@ -1115,23 +1185,34 @@ deliberately stops at β to keep this slice focused.
   }
   ```
 
+- `Shared/Models/LyricsLanguageVariant.swift` (new)
+
+  ```swift
+  struct LyricsLanguageVariant: Codable, Equatable {
+      let languageCode: String?  // ISO 639-2; nil if undeclared
+      let text: String           // raw text, not yet stripped
+  }
+  ```
+
 - `Shared/Models/LyricsPreference.swift` (new) — Codable struct
   (see above)
 - `Shared/Models/LyricsResolution.swift` (new)
 
   ```swift
   struct LyricsResolution {
-      let hasAny: Bool               // fast check result
+      let hasAny: Bool                    // fast check result
       let currentSource: LyricsSource?
-      let content: String?           // nil until lazily loaded
       let availableSources: Set<LyricsSource>
+      let availableLanguages: [String?]   // language codes available for current source
+      let currentLanguage: String?        // selected language; nil if not applicable
+      let content: String?                // resolved content for current source+language; nil until lazy-loaded
   }
   ```
 
 - `Shared/Services/LyricsService.swift` (new) — protocol + default impl
   - `resolveAvailability(for: Track) -> LyricsResolution`
     (fast, sync)
-  - `resolveContent(for: Track, source: LyricsSource, encoding: String?) throws -> String`
+  - `resolveContent(for: Track, source: LyricsSource, languageCode: String?, encoding: String?) throws -> String`
     (slow, async)
   - `stripLRCTimestamps(_ raw: String) -> String`  (pure function)
   - `detectEncoding(of: Data) -> String.Encoding`
@@ -1146,6 +1227,7 @@ deliberately stops at β to keep this slice focused.
   - `@Published var lyricsResolution: LyricsResolution?`
   - `toggleLyrics()`
   - `setLyricsSource(_: LyricsSource)`
+  - `setLyricsLanguage(_ languageCode: String?)`
   - `setLyricsEncoding(_: String)`
   - call `lyricsService.resolveAvailability(for:)` on currentTrack
     change
@@ -1160,8 +1242,10 @@ deliberately stops at β to keep this slice focused.
 - `Shared/Views/LyricsPanel.swift` (new)
   - Source picker (SegmentedControl or Menu, only shows available
     sources)
+  - Language picker (visible when source=.embedded AND
+    availableLanguages.count > 1)
   - Encoding picker (Auto + full localized list from
-    `String.availableStringEncodings`)
+    `String.availableStringEncodings`; visible when source=.lrc)
   - `ScrollView { Text(content) }` for content
 - `Shared/Views/PlayerView.swift` (modify)
   - lyrics toggle button, conditional on
@@ -1182,6 +1266,7 @@ deliberately stops at β to keep this slice focused.
 - `lyrics_source_picker_label`
 - `lyrics_source_embedded`
 - `lyrics_source_lrc`
+- `lyrics_language_picker_label`
 - `lyrics_encoding_picker_label`
 - `lyrics_encoding_auto`
 - `lyrics_parse_failed`
@@ -1191,7 +1276,14 @@ deliberately stops at β to keep this slice focused.
 | Test | Given | When | Then |
 |---|---|---|---|
 | `testTrack_DefaultLyrics_IsNil` | new `Track(url:)` | read `lyrics` | `nil` |
-| `testUSLT_MappedFromTagBundle` | `TagBundle(lyrics: "hello")` | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics == "hello"` |
+| `testUSLT_MappedFromTagBundle` | `TagBundle(lyrics: [LyricsLanguageVariant(languageCode: "eng", text: "hello")])` | `HarmoniaTagReaderAdapter.readMetadata` | `Track.lyrics?.first?.text == "hello"` |
+| `testUSLT_MultipleFramesProduceMultipleVariants` | MP3 with 2 USLT frames (eng + chi) | reader | `Track.lyrics` returns 2 variants with correct language codes |
+| `testUSLT_SingleFrameWithoutLanguageProducesOneVariant` | MP3 with 1 USLT frame, no language declared | reader | 1 variant, `languageCode == nil` |
+| `testResolveAvailability_EmbeddedMultiLang_ListsAllLanguages` | Track with 2 USLT variants | `resolveAvailability` | `availableLanguages` contains both codes |
+| `testResolveAvailability_PicksSystemLocaleFirst` | Track with eng+chi variants, system locale = zh | `resolveAvailability` | `currentLanguage == "chi"` |
+| `testResolveAvailability_FallsBackToFirstWhenNoLocaleMatch` | Track with eng+chi variants, system locale = ja | `resolveAvailability` | `currentLanguage` == first variant's code |
+| `testAppState_SetLanguage_UpdatesContent` | embedded source, 2 language variants loaded | `setLyricsLanguage(other)` | `content` updates to other variant text |
+| `testPreferenceStore_PersistsLanguageCode` | save preference with `languageCode = "chi"` | reload store | loaded preference `languageCode == "chi"` |
 | `testLRCStrip_RemovesTimestamps` | `"[00:12.00]line1\n[00:15.50]line2"` | `stripLRCTimestamps` | `"line1\nline2"` |
 | `testLRCStrip_RemovesMetadataTags` | `"[ti:title]\n[ar:artist]\n[00:12.00]line"` | `stripLRCTimestamps` | `"line"` (blank lines preserved as-is) |
 | `testLRCStrip_KeepsBlankLines` | `"[00:12]a\n\n[00:15]b"` | `stripLRCTimestamps` | `"a\n\nb"` |
@@ -1233,6 +1325,13 @@ deliberately stops at β to keep this slice focused.
 - ⬜ Same file across playlists shares preference
 - ⬜ Preference key format: non-CUE uses path only;
   CUE virtual tracks use `#track=<n>` suffix
+- ⬜ Track with multi-language USLT (e.g. eng + chi + jpn) shows all in
+  language picker
+- ⬜ Language picker visible only when source=.embedded AND
+  availableLanguages.count > 1
+- ⬜ Default language selection prefers system locale, falls back to first
+  available variant
+- ⬜ Selected language persists across launches per file
 - ⬜ Button visibility check is sync/fast (no flicker on track change)
 - ⬜ All Slice 1–9 previous tests still green
 - ⬜ All new tests green
@@ -1248,6 +1347,13 @@ deliberately stops at β to keep this slice focused.
   has no standard for segmentation, user must pre-split into separate
   files).
 - **No lyrics editing.** Deferred to v0.2 Tag Editor.
+- **No TXXX-frame lyrics reading** (frames `LYRICS` / `UNSYNCEDLYRICS` /
+  `UNSYNCED LYRICS` / `SYNCEDLYRICS`, written by foobar2000). Deferred
+  to v0.15.
+- **No alternative sidecar filename formats** (e.g. `Artist - Title.lrc`,
+  `.txt` extension). Deferred to v0.15.
+- **No language code extraction from .lrc files.** LRC `[la:xxx]` metadata
+  header is stripped, not parsed. Deferred to v0.15.
 - **No full content preload on track change** (β strategy only; γ full
   preload deferred to v0.15 after Phase 3a adds HarmoniaCore preload
   API).
@@ -1257,6 +1363,21 @@ deliberately stops at β to keep this slice focused.
 - **Phase 3a (HarmoniaCore refactor):** add
   `PlaybackService.preloadNext()` API serving both v0.2 gapless
   playback and v0.15 lyrics γ-strategy preload.
+- **v0.15 lyrics expansion (planned):**
+  - **foobar2000 TXXX compatibility**: read TXXX frames `LYRICS`,
+    `UNSYNCEDLYRICS`, `UNSYNCED LYRICS`, `SYNCEDLYRICS`. These merge into
+    the existing `[LyricsLanguageVariant]` array with `languageCode = nil`
+    (TXXX has no standard language slot). 9-J's reader extension point: a
+    single `readEmbeddedLyrics(items:) -> [LyricsLanguageVariant]`
+    function — v0.15 adds TXXX branches without touching `Track`,
+    `LyricsService`, `AppState`, or UI.
+  - **Alternative sidecar filenames**: add `<artist> - <title>.lrc` and
+    `.txt` extension variants. 9-J's `LyricsService` extension point:
+    keep sidecar search paths as a
+    `private let sidecarSearchPaths: [...]` array of path-builder
+    closures. v0.15 appends entries; no callers change.
+  - **LRC language tag**: parse `[la:xxx]` metadata header in `.lrc`,
+    populate `LyricsLanguageVariant.languageCode` for sidecar source.
 - **v0.15:** SYLT reading, synchronized line scrolling, custom file
   selection (both LRC custom and Embedded-from-another-file custom),
   γ-strategy full preload.
