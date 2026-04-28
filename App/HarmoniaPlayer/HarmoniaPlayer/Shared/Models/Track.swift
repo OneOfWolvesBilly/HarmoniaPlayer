@@ -63,6 +63,16 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var codec: String = ""
     var encoding: String = ""
 
+    // MARK: - Group F: Lyrics (Slice 9-J)
+
+    /// USLT embedded lyrics variants, one per language.
+    ///
+    /// Populated by `HarmoniaTagReaderAdapter` from `TagBundle.lyrics`.
+    /// `nil` when no USLT frames are present in the audio file.
+    /// Sidecar `.lrc` lyrics are resolved at display time by `LyricsService`
+    /// and are NOT stored here.
+    var lyrics: [LyricsLanguageVariant]? = nil
+
     // MARK: - Group E: Playback statistics (reserved — no UI in Slice 7)
 
     var playCount: Int = 0
@@ -135,7 +145,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         playCount: Int = 0,
         lastPlayedAt: Date? = nil,
         rating: Double? = nil,
-        metadataVersion: Int = 0
+        metadataVersion: Int = 0,
+        lyrics: [LyricsLanguageVariant]? = nil
     ) {
         self.id              = id
         self.url             = url
@@ -167,6 +178,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         self.lastPlayedAt    = lastPlayedAt
         self.rating          = rating
         self.metadataVersion = metadataVersion
+        self.lyrics           = lyrics
     }
 
     /// Convenience initializer that derives title from URL filename.
@@ -191,6 +203,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         case codec, encoding
         case playCount, lastPlayedAt, rating
         case metadataVersion
+        case lyrics
     }
 
     // MARK: - Encodable
@@ -235,6 +248,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         try c.encodeIfPresent(lastPlayedAt,   forKey: .lastPlayedAt)
         try c.encodeIfPresent(rating,         forKey: .rating)
         try c.encode(metadataVersion,         forKey: .metadataVersion)
+        try c.encodeIfPresent(lyrics,          forKey: .lyrics)
     }
 
     // MARK: - Decodable
@@ -318,6 +332,9 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         lastPlayedAt = try c.decodeIfPresent(Date.self,   forKey: .lastPlayedAt)
         rating       = try c.decodeIfPresent(Double.self, forKey: .rating)
         metadataVersion = try c.decodeIfPresent(Int.self, forKey: .metadataVersion)  ?? 0
+
+        // Group F — decodeIfPresent for backward compat with older saves
+        lyrics = try c.decodeIfPresent([LyricsLanguageVariant].self, forKey: .lyrics)
     }
 
     // MARK: - Equatable
@@ -354,6 +371,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
               lhs.codec      == rhs.codec,
               lhs.encoding   == rhs.encoding
         else { return false }
+        guard lhs.lyrics == rhs.lyrics else { return false }
         return lhs.playCount    == rhs.playCount &&
                lhs.lastPlayedAt == rhs.lastPlayedAt &&
                lhs.rating       == rhs.rating

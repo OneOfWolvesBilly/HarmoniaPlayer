@@ -47,6 +47,7 @@
 //  fileSize             → fileSize          nil
 //  url.pathExtension    → fileFormat        uppercased()
 //  TagBundle.currentSchemaVersion → metadataVersion
+//  lyrics               → lyrics            nil
 //  ─────────────────────────────────────────────────────────────────────────────
 
 import Foundation
@@ -107,7 +108,10 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
             fileFormat:       fileFormat,
             codec:            bundle.codec    ?? "",
             encoding:         bundle.encoding ?? "",
-            metadataVersion:  TagBundle.currentSchemaVersion
+            metadataVersion:  TagBundle.currentSchemaVersion,
+            lyrics:           bundle.lyrics.map { hcVariants in
+                hcVariants.map { LyricsLanguageVariant(languageCode: $0.languageCode, text: $0.text) }
+            }
         )
     }
 }

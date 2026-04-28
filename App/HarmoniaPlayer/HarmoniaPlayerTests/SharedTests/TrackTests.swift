@@ -353,4 +353,13 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(track.codec,       "")
         XCTAssertEqual(track.encoding,    "")
     }
+    // MARK: - Lyrics field (Slice 9-J)
+
+    func testTrack_DefaultLyrics_IsNil() {
+        // Given / When
+        let track = Track(url: URL(fileURLWithPath: "/tmp/test.mp3"))
+
+        // Then: lyrics is nil by default (no USLT embedded, no .lrc sidecar loaded yet)
+        XCTAssertNil(track.lyrics)
+    }
 }

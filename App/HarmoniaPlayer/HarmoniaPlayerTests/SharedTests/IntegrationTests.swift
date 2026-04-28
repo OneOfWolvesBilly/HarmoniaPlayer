@@ -238,4 +238,54 @@ final class IntegrationTests: XCTestCase {
 
         XCTAssertEqual(sut.currentTime, 1.0, accuracy: 0.5)
     }
+    // MARK: - USLT Lyrics integration tests (Slice 9-J)
+    //
+    // Fixtures required (prepare with Python mutagen before commit 4):
+    //   test_uslt_single.mp3    — 1 USLT frame: lang="eng", text="Verse one"
+    //   test_uslt_multilang.mp3 — 2 USLT frames: eng "Verse one" + chi "第一段"
+    //   test_uslt_no_lang.mp3   — 1 USLT frame: no language tag
+    //
+    // bundleURL(forResource:withExtension:) throws XCTSkip when fixture absent,
+    // so these tests skip (yellow) until fixtures are added to the test bundle.
+
+    /// One USLT frame with language "eng" → Track.lyrics has one variant,
+    /// languageCode == "eng", text non-empty.
+    func testIntegration_USLT_SingleVariant_MapsToTrackLyrics() async throws {
+        let url = try bundleURL(forResource: "test_uslt_single", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        let lyrics = try XCTUnwrap(track.lyrics,
+            "Track.lyrics should be non-nil for a file with embedded USLT")
+        XCTAssertEqual(lyrics.count, 1)
+        XCTAssertEqual(lyrics.first?.languageCode, "eng")
+        XCTAssertFalse(lyrics.first?.text.isEmpty ?? true)
+    }
+
+    /// Two USLT frames (eng + chi) → Track.lyrics has two variants with correct codes.
+    func testIntegration_USLT_MultipleVariants_ProducesCorrectLanguageCodes() async throws {
+        let url = try bundleURL(forResource: "test_uslt_multilang", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        let lyrics = try XCTUnwrap(track.lyrics,
+            "Track.lyrics should be non-nil for a file with 2 USLT frames")
+        XCTAssertEqual(lyrics.count, 2)
+        let codes = Set(lyrics.compactMap { $0.languageCode })
+        XCTAssertTrue(codes.contains("eng"))
+        XCTAssertTrue(codes.contains("chi"))
+    }
+
+    /// USLT frame with no declared language → Track.lyrics has one variant,
+    /// languageCode == nil.
+    func testIntegration_USLT_NilLanguageCode_ProducesVariantWithNilCode() async throws {
+        let url = try bundleURL(forResource: "test_uslt_no_lang", withExtension: "mp3")
+        await sut.load(urls: [url])
+        let track = sut.playlist.tracks[0]
+
+        let lyrics = try XCTUnwrap(track.lyrics,
+            "Track.lyrics should be non-nil for a file with USLT (even without language code)")
+        XCTAssertEqual(lyrics.count, 1)
+        XCTAssertNil(lyrics.first?.languageCode)
+    }
 }
