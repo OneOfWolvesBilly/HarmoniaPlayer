@@ -192,3 +192,22 @@
 "file_info_window_title_fallback" = "ファイル情報";
 "file_info_track_unavailable_title" = "トラックが見つかりません";
 "file_info_track_unavailable_message" = "このトラックは現在のプレイリストに存在しません。";
+
+// Slice 9-J: Lyrics panel
+"lyrics_title" = "歌詞";
+"lyrics_close" = "閉じる";
+"lyrics_toggle" = "歌詞を表示";
+"lyrics_source" = "ソース";
+"lyrics_source_lrc" = "LRC";
+"lyrics_source_embedded" = "埋め込み";
+"lyrics_language" = "言語";
+"lyrics_language_undefined" = "未指定";
+"lyrics_encoding" = "エンコーディング";
+"lyrics_encoding_auto" = "自動検出";
+"lyrics_encoding_utf8" = "UTF-8";
+"lyrics_encoding_gb18030" = "GB18030";
+"lyrics_encoding_big5" = "Big5";
+"lyrics_encoding_shift_jis" = "Shift-JIS";
+"lyrics_decode_failed" = "歌詞をデコードできませんでした。別のエンコーディングを試してください。";
+"lyrics_none_available" = "このトラックの歌詞は利用できません。";
+"lyrics_recheck" = "再確認";

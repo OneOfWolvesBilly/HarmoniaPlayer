@@ -192,3 +192,22 @@
 "file_info_window_title_fallback" = "檔案資訊";
 "file_info_track_unavailable_title" = "曲目已不存在";
 "file_info_track_unavailable_message" = "此曲目已不在目前的播放列表中。";
+
+// Slice 9-J: Lyrics panel
+"lyrics_title" = "歌詞";
+"lyrics_close" = "關閉";
+"lyrics_toggle" = "顯示歌詞";
+"lyrics_source" = "來源";
+"lyrics_source_lrc" = "LRC";
+"lyrics_source_embedded" = "內嵌";
+"lyrics_language" = "語言";
+"lyrics_language_undefined" = "未指定";
+"lyrics_encoding" = "編碼";
+"lyrics_encoding_auto" = "自動偵測";
+"lyrics_encoding_utf8" = "UTF-8";
+"lyrics_encoding_gb18030" = "GB18030";
+"lyrics_encoding_big5" = "Big5";
+"lyrics_encoding_shift_jis" = "Shift-JIS";
+"lyrics_decode_failed" = "無法解碼歌詞,請嘗試其他編碼。";
+"lyrics_none_available" = "此曲目沒有可用的歌詞。";
+"lyrics_recheck" = "重新檢查";

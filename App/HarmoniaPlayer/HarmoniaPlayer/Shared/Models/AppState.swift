@@ -725,6 +725,15 @@ final class AppState: ObservableObject {
         showLyrics.toggle()
     }
 
+    /// Re-runs lyrics availability detection for the current track.
+    ///
+    /// Useful when the user has just added a sidecar `.lrc` file or fixed
+    /// embedded USLT metadata while a track was already loaded — calling
+    /// this re-queries `LyricsService` and refreshes `lyricsResolution`.
+    func recheckLyrics() {
+        updateLyricsResolution(for: currentTrack)
+    }
+
     /// Switches the active lyrics source (`.embedded` ↔ `.lrc`) for the
     /// current track. Persists the choice via `LyricsPreferenceStore`.
     func setLyricsSource(_ source: LyricsSource) {

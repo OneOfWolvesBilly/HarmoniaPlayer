@@ -55,6 +55,16 @@ struct ContentView: View {
             PlayerView()
                 .frame(minWidth: 320, idealWidth: 380)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            // Lyrics column — pushed in from the right when the user
+            // toggles lyrics on. HSplitView handles the divider so the
+            // user can resize it freely; closing it (toggle off) collapses
+            // the column and the window contracts back.
+            if appState.showLyrics && appState.currentTrack != nil {
+                LyricsPanel()
+                    .frame(minWidth: 280, idealWidth: 360)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
         }
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

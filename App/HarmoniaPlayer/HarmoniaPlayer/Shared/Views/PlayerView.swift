@@ -78,26 +78,48 @@ struct PlayerView: View {
             }
             .padding(20)
 
-            // Top-trailing menu button
-            Menu {
-                Button {
-                    openWindow(id: "mini-player")
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        NSApp.windows
-                            .filter { $0.title == "HarmoniaPlayer" }
-                            .first?
-                            .orderOut(nil)
+            // Top-trailing controls
+            HStack(spacing: 8) {
+                // Lyrics toggle — always visible when a track is loaded.
+                // Panel handles the no-lyrics empty state with a Recheck
+                // button so users can drop in a sidecar .lrc and refresh
+                // without re-loading the track.
+                if appState.currentTrack != nil {
+                    Button {
+                        appState.toggleLyrics()
+                    } label: {
+                        Image(systemName: appState.showLyrics
+                              ? "text.bubble.fill"
+                              : "text.bubble")
+                            .font(.system(size: 16))
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(L("lyrics_toggle"))
+                    .accessibilityIdentifier("lyrics-toggle")
+                }
+
+                // Ellipsis menu (mini player + future actions)
+                Menu {
+                    Button {
+                        openWindow(id: "mini-player")
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            NSApp.windows
+                                .filter { $0.title == "HarmoniaPlayer" }
+                                .first?
+                                .orderOut(nil)
+                        }
+                    } label: {
+                        Label(L("menu_mini_player"), systemImage: "rectangle.compress.vertical")
                     }
                 } label: {
-                    Label(L("menu_mini_player"), systemImage: "rectangle.compress.vertical")
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.secondary)
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
             .padding(12)
         }
     }

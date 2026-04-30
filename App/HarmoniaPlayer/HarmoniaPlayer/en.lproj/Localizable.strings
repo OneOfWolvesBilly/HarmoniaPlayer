@@ -192,3 +192,22 @@
 "file_info_window_title_fallback" = "File Info";
 "file_info_track_unavailable_title" = "Track no longer available";
 "file_info_track_unavailable_message" = "This track is no longer in the active playlist.";
+
+// Slice 9-J: Lyrics panel
+"lyrics_title" = "Lyrics";
+"lyrics_close" = "Close";
+"lyrics_toggle" = "Show Lyrics";
+"lyrics_source" = "Source";
+"lyrics_source_lrc" = "LRC";
+"lyrics_source_embedded" = "Embedded";
+"lyrics_language" = "Language";
+"lyrics_language_undefined" = "Undefined";
+"lyrics_encoding" = "Encoding";
+"lyrics_encoding_auto" = "Auto-detect";
+"lyrics_encoding_utf8" = "UTF-8";
+"lyrics_encoding_gb18030" = "GB18030";
+"lyrics_encoding_big5" = "Big5";
+"lyrics_encoding_shift_jis" = "Shift-JIS";
+"lyrics_decode_failed" = "Could not decode lyrics. Try a different encoding.";
+"lyrics_none_available" = "No lyrics available for this track.";
+"lyrics_recheck" = "Recheck";
