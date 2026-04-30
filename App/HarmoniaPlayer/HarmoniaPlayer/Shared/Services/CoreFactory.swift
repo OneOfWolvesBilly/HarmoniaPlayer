@@ -75,4 +75,13 @@ struct CoreFactory {
     func makeTagReaderService() -> TagReaderService {
         return provider.makeTagReaderService()
     }
+
+    /// Create lyrics service
+    ///
+    /// Lyrics display is available in both Free and Pro tiers (v0.1).
+    ///
+    /// - Returns: LyricsService instance
+    func makeLyricsService() -> LyricsService {
+        return provider.makeLyricsService()
+    }
 }

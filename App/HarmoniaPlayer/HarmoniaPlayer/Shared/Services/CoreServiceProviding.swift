@@ -41,4 +41,11 @@ protocol CoreServiceProviding: AnyObject {
     ///
     /// **Note:** Tag reading is available in both Free and Pro tiers
     func makeTagReaderService() -> TagReaderService
+
+    /// Create a lyrics service for resolving USLT and sidecar `.lrc` content.
+    ///
+    /// - Returns: LyricsService instance
+    ///
+    /// **Note:** Lyrics display is available in both Free and Pro tiers (v0.1).
+    func makeLyricsService() -> LyricsService
 }

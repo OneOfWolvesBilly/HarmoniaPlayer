@@ -52,6 +52,9 @@ final class FakeCoreProvider: CoreServiceProviding {
     /// Number of times makeTagReaderService was called
     private(set) var makeTagReaderServiceCallCount = 0
 
+    /// Number of times makeLyricsService was called
+    private(set) var makeLyricsServiceCallCount = 0
+
     // MARK: - Stubs
 
     /// The PlaybackService stub returned by makePlaybackService().
@@ -63,14 +66,21 @@ final class FakeCoreProvider: CoreServiceProviding {
     /// The TagReaderService instance returned by makeTagReaderService().
     var tagReaderServiceStub: TagReaderService
 
+    /// The LyricsService instance returned by makeLyricsService().
+    /// Defaults to FakeLyricsService (no-op, safe across many test instances).
+    /// Tests that need real LyricsService behaviour must inject one explicitly.
+    var lyricsServiceStub: LyricsService
+
     // MARK: - Initialization
 
     init(
         playbackService: FakePlaybackService = FakePlaybackService(),
-        tagReader: TagReaderService = FakeTagReaderService()
+        tagReader: TagReaderService = FakeTagReaderService(),
+        lyricsService: LyricsService = FakeLyricsService()
     ) {
         self.playbackServiceStub = playbackService
         self.tagReaderServiceStub = tagReader
+        self.lyricsServiceStub = lyricsService
     }
 
     // MARK: - CoreServiceProviding
@@ -84,6 +94,11 @@ final class FakeCoreProvider: CoreServiceProviding {
     func makeTagReaderService() -> TagReaderService {
         makeTagReaderServiceCallCount += 1
         return tagReaderServiceStub
+    }
+
+    func makeLyricsService() -> LyricsService {
+        makeLyricsServiceCallCount += 1
+        return lyricsServiceStub
     }
 }
 
@@ -225,4 +240,75 @@ final class FakePlaybackService: PlaybackService {
         setVolumeCallCount += 1
         lastSetVolume = volume
     }
+}
+
+// MARK: - FakeLyricsService
+
+/// No-op LyricsService for tests that do not exercise lyrics behaviour.
+///
+/// All methods return empty / no-result. Tests that want real behaviour must
+/// inject `DefaultLyricsService()` (or a custom fake) explicitly via
+/// `FakeCoreProvider(lyricsService:)`.
+///
+/// **Why a separate fake?** Constructing many `DefaultLyricsService` instances
+/// across the test suite (one per `FakeCoreProvider`) triggers an Xcode 26
+/// beta Swift runtime double-free when those instances coexist or
+/// successively allocate at the same address. `FakeLyricsService` is a tiny
+/// final class with no closure storage and no Locale dependency, sidestepping
+/// the toolchain bug entirely.
+final class FakeLyricsService: LyricsService {
+    func resolveAvailability(for track: Track) -> LyricsResolution {
+        .none
+    }
+
+    func resolveContent(
+        for track: Track,
+        source: LyricsSource,
+        languageCode: String?,
+        encodingName: String?
+    ) throws -> String {
+        throw LyricsServiceError.noEmbeddedLyrics
+    }
+
+    func stripLRCTimestamps(_ raw: String) -> String { raw }
+
+    func detectEncoding(of data: Data) -> String.Encoding { .utf8 }
+}
+
+// MARK: - StubLyricsService
+
+/// Configurable LyricsService stub for tests that need to verify AppState's
+/// reactions to specific `LyricsResolution` outputs.
+///
+/// Unlike `FakeLyricsService` (no-op), this stub lets tests dictate exactly
+/// what `resolveAvailability(for:)` returns for any given track, so AppState
+/// publisher chains and action methods can be exercised without relying on
+/// the real `DefaultLyricsService` (which suffers from a Xcode 26 beta
+/// runtime double-free when multiple instances coexist).
+final class StubLyricsService: LyricsService {
+    /// What `resolveAvailability(for:)` should return.
+    /// Defaults to `.none` so unconfigured tests behave like FakeLyricsService.
+    var stubbedResolution: LyricsResolution = .none
+
+    /// Records each call to `resolveAvailability(for:)` for assertion.
+    private(set) var resolveAvailabilityCallCount = 0
+    private(set) var lastResolvedTrack: Track?
+
+    func resolveAvailability(for track: Track) -> LyricsResolution {
+        resolveAvailabilityCallCount += 1
+        lastResolvedTrack = track
+        return stubbedResolution
+    }
+
+    func resolveContent(
+        for track: Track,
+        source: LyricsSource,
+        languageCode: String?,
+        encodingName: String?
+    ) throws -> String {
+        ""
+    }
+
+    func stripLRCTimestamps(_ raw: String) -> String { raw }
+    func detectEncoding(of data: Data) -> String.Encoding { .utf8 }
 }

@@ -77,6 +77,12 @@ final class AppState: ObservableObject {
     /// File drop service — validates URLs received from drag-and-drop.
     let fileDropService: FileDropService
 
+    /// Lyrics service — resolves USLT + sidecar `.lrc` content.
+    let lyricsService: LyricsService
+
+    /// Lyrics preference store — per-track source/encoding/language persistence.
+    let lyricsPreferenceStore: LyricsPreferenceStore
+
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
@@ -111,6 +117,20 @@ final class AppState: ObservableObject {
     /// is removed from the playlist or the playlist is cleared.
     /// Set via `play(trackID:)`. Does not trigger audio playback.
     @Published var currentTrack: Track?
+
+    // MARK: - Lyrics State (Slice 9-J)
+
+    /// Whether the lyrics panel is currently visible.
+    ///
+    /// Toggled by `toggleLyrics()`. Initialised to `false`.
+    @Published var showLyrics: Bool = false
+
+    /// Lyrics availability + selected source/language for the current track.
+    ///
+    /// `nil` when no track is selected. Updated whenever `currentTrack` changes,
+    /// applying any persisted `LyricsPreference` for the new track.
+    /// `lyricsResolution?.hasAny == true` drives lyrics-button visibility.
+    @Published var lyricsResolution: LyricsResolution?
 
     /// IDs of tracks currently selected in PlaylistView's Table.
     ///
@@ -368,7 +388,8 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
-        undoManager: UndoManager? = nil
+        undoManager: UndoManager? = nil,
+        lyricsPreferenceStore: LyricsPreferenceStore? = nil
     ) {
         // Step 1: Store IAP manager
         self.iapManager = iapManager
@@ -386,6 +407,9 @@ final class AppState: ObservableObject {
         self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService = FileDropService()
+        self.lyricsService = coreFactory.makeLyricsService()
+        self.lyricsPreferenceStore = lyricsPreferenceStore
+            ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
 
         // Step 5: Store UndoManager.
         // Default parameter uses nil instead of UndoManager() to avoid
@@ -444,6 +468,17 @@ final class AppState: ObservableObject {
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.saveState() }
+            .store(in: &cancellables)
+
+        // Step 13: Update lyricsResolution whenever currentTrack changes.
+        // dropFirst skips the initial nil emission at subscription time;
+        // initial resolution is set when play(trackID:) sets currentTrack.
+        $currentTrack
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] track in
+                self?.updateLyricsResolution(for: track)
+            }
             .store(in: &cancellables)
     }
 
@@ -681,5 +716,142 @@ final class AppState: ObservableObject {
         }
 
         if didRefreshAny { saveState() }
+    }
+
+    // MARK: - Lyrics Actions (Slice 9-J)
+
+    /// Toggles the lyrics panel visibility.
+    func toggleLyrics() {
+        showLyrics.toggle()
+    }
+
+    /// Switches the active lyrics source (`.embedded` ↔ `.lrc`) for the
+    /// current track. Persists the choice via `LyricsPreferenceStore`.
+    func setLyricsSource(_ source: LyricsSource) {
+        guard let track = currentTrack,
+              var resolution = lyricsResolution,
+              resolution.availableSources.contains(source) else { return }
+
+        // Recompute language list when switching to/from embedded
+        let availableLanguages: [String?]
+        let currentLanguage: String?
+        if source == .embedded, let variants = track.lyrics, !variants.isEmpty {
+            availableLanguages = variants.map { $0.languageCode }
+            currentLanguage = resolution.currentLanguage
+                ?? variants.first?.languageCode
+        } else {
+            availableLanguages = []
+            currentLanguage = nil
+        }
+
+        resolution = LyricsResolution(
+            hasAny: true,
+            currentSource: source,
+            availableSources: resolution.availableSources,
+            availableLanguages: availableLanguages,
+            currentLanguage: currentLanguage,
+            content: nil
+        )
+        lyricsResolution = resolution
+
+        // Persist
+        let pref = LyricsPreference(
+            source: source,
+            encoding: persistedEncoding(for: track) ?? "auto",
+            languageCode: currentLanguage,
+            customPath: nil
+        )
+        lyricsPreferenceStore.save(pref, for: track)
+    }
+
+    /// Selects a USLT language variant for the current track. Persists the
+    /// choice via `LyricsPreferenceStore`. No-op when source is not `.embedded`.
+    func setLyricsLanguage(_ languageCode: String?) {
+        guard let track = currentTrack,
+              var resolution = lyricsResolution,
+              resolution.currentSource == .embedded else { return }
+
+        resolution = LyricsResolution(
+            hasAny: true,
+            currentSource: .embedded,
+            availableSources: resolution.availableSources,
+            availableLanguages: resolution.availableLanguages,
+            currentLanguage: languageCode,
+            content: nil
+        )
+        lyricsResolution = resolution
+
+        let pref = LyricsPreference(
+            source: .embedded,
+            encoding: persistedEncoding(for: track) ?? "auto",
+            languageCode: languageCode,
+            customPath: nil
+        )
+        lyricsPreferenceStore.save(pref, for: track)
+    }
+
+    /// Sets the .lrc file decoding charset for the current track. Persists
+    /// the choice. `"auto"` triggers auto-detection on next read.
+    func setLyricsEncoding(_ encoding: String) {
+        guard let track = currentTrack,
+              let resolution = lyricsResolution else { return }
+        let pref = LyricsPreference(
+            source: resolution.currentSource ?? .lrc,
+            encoding: encoding,
+            languageCode: resolution.currentLanguage,
+            customPath: nil
+        )
+        lyricsPreferenceStore.save(pref, for: track)
+    }
+
+    // MARK: - Lyrics Internal
+
+    /// Recomputes `lyricsResolution` for the given track, applying any
+    /// persisted preference.
+    ///
+    /// Called automatically by the `$currentTrack` Combine subscription;
+    /// also exposed to tests so they can verify the recomputation logic
+    /// synchronously without depending on Combine dispatch timing.
+    /// Tests should prefer calling this directly over awaiting the
+    /// publisher chain.
+    internal func updateLyricsResolution(for track: Track?) {
+        guard let track else {
+            lyricsResolution = nil
+            return
+        }
+
+        var resolution = lyricsService.resolveAvailability(for: track)
+
+        // Apply persisted preference (overrides defaults from
+        // resolveAvailability) — only when sources match what's actually available.
+        if let pref = lyricsPreferenceStore.load(for: track),
+           resolution.availableSources.contains(pref.source) {
+            let newLang: String?
+            let newAvailableLangs: [String?]
+            if pref.source == .embedded, let variants = track.lyrics, !variants.isEmpty {
+                newAvailableLangs = variants.map { $0.languageCode }
+                newLang = pref.languageCode ?? resolution.currentLanguage
+            } else {
+                newAvailableLangs = []
+                newLang = nil
+            }
+            resolution = LyricsResolution(
+                hasAny: true,
+                currentSource: pref.source,
+                availableSources: resolution.availableSources,
+                availableLanguages: newAvailableLangs,
+                currentLanguage: newLang,
+                content: nil
+            )
+        }
+
+        lyricsResolution = resolution
+    }
+
+    /// Returns the persisted encoding name for the given track, or `nil` if
+    /// no preference is stored. Used to keep encoding stable when the user
+    /// changes only source or language.
+    private func persistedEncoding(for track: Track) -> String? {
+        lyricsPreferenceStore.load(for: track)?.encoding
     }
 }

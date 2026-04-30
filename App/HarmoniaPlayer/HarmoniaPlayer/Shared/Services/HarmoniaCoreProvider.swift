@@ -76,4 +76,16 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
     func makeTagReaderService() -> TagReaderService {
         HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
     }
+
+    /// Creates a `LyricsService` (Application Layer) for USLT + sidecar `.lrc`
+    /// resolution.
+    ///
+    /// `LyricsService` is a pure Application Layer service that does not
+    /// depend on HarmoniaCore — but its construction belongs here so that
+    /// `CoreFactory` remains the single composition root for all services.
+    ///
+    /// - Returns: A `DefaultLyricsService` with system locale defaults.
+    func makeLyricsService() -> LyricsService {
+        DefaultLyricsService()
+    }
 }

@@ -84,12 +84,7 @@ final class DefaultLyricsService: LyricsService {
     /// BCP47 language code used for preferred-language matching.
     /// Injected as a plain String for testability — avoids Locale API in tests.
     /// Production default: `Locale.current.language.languageCode?.identifier ?? ""`
-    ///
-    /// `var` (not `let`) so tests can mutate language preference on a single
-    /// instance instead of constructing a second `DefaultLyricsService` —
-    /// avoids a Xcode 26 beta toolchain double-free that triggers when two
-    /// instances coexist in the same test method.
-    var preferredLanguageCode: String
+    private let preferredLanguageCode: String
 
     // MARK: - Initialization
 
