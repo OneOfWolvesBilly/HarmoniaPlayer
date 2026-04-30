@@ -35,9 +35,10 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | Free | ✅ |
 | 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | ✅ |
 | 9-I | Fix Xcode warnings (cosmetic) | Free | ✅ |
-| 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ⬜ |
+| 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ✅ |
 | 9-K | Equalizer (10-band, global, custom presets) | Free | ⬜ |
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ⬜ |
+| 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ⬜ |
 
 ### Goals (v0.1)
 
@@ -287,7 +288,7 @@ feat(free): add artwork display section to FileInfoView
 
 ---
 
-## Slice 9-B: FileInfoView Read-Only + FileOriginService
+## Slice 9-B: FileInfoView Read-Only + FileOriginService ✅
 
 ### Goal
 Fix HarmoniaCore tag writer to preserve file attributes on write.
@@ -409,7 +410,7 @@ v0.2 Tag Editor slice starts from a ready FileOriginService foundation.
 
 ---
 
-## Slice 9-C: Codec + Encoding Fields
+## Slice 9-C: Codec + Encoding Fields ✅
 
 ### Goal
 Add Codec (e.g. AAC, MP3, ALAC) and Encoding (lossy/lossless) fields to
@@ -470,7 +471,7 @@ HarmoniaPlayer:
 
 ---
 
-## Slice 9-D: FileInfoView `.sheet` → `WindowGroup`
+## Slice 9-D: FileInfoView `.sheet` → `WindowGroup` ✅
 
 ### Goal
 Convert FileInfoView from a modal `.sheet` to an independent `WindowGroup`
@@ -519,7 +520,7 @@ feat(slice 9-D): convert FileInfoView from sheet to independent WindowGroup
 
 ---
 
-## Slice 9-E: Fix Polling Loop CPU Issue
+## Slice 9-E: Fix Polling Loop CPU Issue ✅
 
 ### Goal
 Replace `try? await Task.sleep` in the polling loop with proper `do/catch`
@@ -562,7 +563,7 @@ fix(slice 9-E): replace try? await Task.sleep with proper CancellationError hand
 
 ---
 
-## Slice 9-F: Error Reporting Phase 1
+## Slice 9-F: Error Reporting Phase 1 ✅
 
 ### Goal
 Add a basic error reporting mechanism so users can send diagnostic
@@ -752,7 +753,7 @@ MiniPlayer window.
 
 ---
 
-## Slice 9-H: Fix MiniPlayer Menu Bar and Remove Expand Button
+## Slice 9-H: Fix MiniPlayer Menu Bar and Remove Expand Button ✅
 
 ### Goal
 
@@ -965,7 +966,7 @@ fix(slice 9-i): resolve "Switch condition evaluates to a constant" warnings
 
 ---
 
-## Slice 9-J: Lyrics Display (USLT + sidecar .lrc) ⬜
+## Slice 9-J: Lyrics Display (USLT + sidecar .lrc) ✅
 
 ### Goal
 
@@ -2020,3 +2021,57 @@ changes warrant deeper automated testing).
 - **Linux/C++ HarmoniaPlayer:** requires MPRIS (Media Player Remote
   Interface Specification) implementation. Separate slice in the
   Linux repo.
+---
+
+## Slice 9-M: Re-Enable App Sandbox + Directory Bookmark ⬜
+
+### Status
+
+Skeleton. Full spec to be written as a dedicated slice commit before
+implementation begins.
+
+### Goal
+
+Restore `ENABLE_APP_SANDBOX = YES` for both Debug and Release while
+keeping sibling-file features (sidecar `.lrc`, future cover art lookup,
+future related-file features) functional. App Store distribution
+mandates sandbox; current `project.pbxproj` keeps sandbox = YES, but a
+local override toggled it off during 9-J to allow sibling reads. This
+slice removes that local override permanently.
+
+### Background
+
+- Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) fail under sandbox
+  with `NSCocoaErrorDomain Code=257 (No permission)` because
+  `startAccessingSecurityScopedResource` does not extend access to
+  sibling files of the bookmarked URL.
+- Verified during 9-J: per-file security-scoped bookmarks do not solve
+  this. Only directory-level bookmarks do.
+
+### Long-term solution (this slice)
+
+- Imports use `NSOpenPanel(.canChooseDirectories = true)` so the user
+  grants directory access at import time.
+- Persist a directory-level security-scoped bookmark per imported
+  source on `Track` / `Playlist` (schema TBD).
+- `LyricsService` (and any future sibling-reading service) calls
+  `startAccessingSecurityScopedResource` on the directory bookmark
+  before reading sibling files.
+
+### v0.1 release blocker
+
+- App Store submission requires `ENABLE_APP_SANDBOX = YES`.
+- Therefore 9-M must complete before v0.1 ships.
+
+### Dependencies
+
+- 9-J ✅ (LyricsService is the first concrete consumer of sibling reads)
+- Persistence schema additions on `Track` / `Playlist` may impact the
+  v0.2 SwiftData migration story; flag during full spec write.
+
+### Out of scope
+
+- Re-architecting `AppState.load(urls:)` beyond what is needed for
+  directory grant.
+- Migrating existing single-file persisted bookmarks (out-of-band tool
+  or first-launch repair flow may be considered separately).
