@@ -13,7 +13,7 @@
 import Foundation
 
 /// A named EQ configuration: 10 band states + preamp.
-struct EQPreset: Codable, Equatable, Sendable, Identifiable {
+struct EQPreset: Codable, nonisolated Equatable, Sendable, Identifiable {
 
     /// Display name. Used as identity; built-in names are reserved
     /// (custom presets cannot reuse them).

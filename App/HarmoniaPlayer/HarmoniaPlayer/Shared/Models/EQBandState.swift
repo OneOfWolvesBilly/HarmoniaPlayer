@@ -13,7 +13,7 @@
 import Foundation
 
 /// Editable state of one EQ band.
-struct EQBandState: Codable, Equatable, Sendable {
+struct EQBandState: Codable, nonisolated Equatable, Sendable {
 
     /// Band gain in dB. Range enforced by EQCoordinator: ±12 dB.
     var gain: Float
