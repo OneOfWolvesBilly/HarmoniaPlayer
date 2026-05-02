@@ -1614,16 +1614,26 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
   checking.
 - `Shared/Services/EQSchemaMigrator.swift` (new) — skeleton for
   future migration logic; 9-K contains only version 1 identity.
-- `Shared/Models/AppState.swift` (modify)
-  - inject `EQService` + `EQPersistenceStore`
-  - `@Published var eqEnabled: Bool`
-  - `@Published var eqBands: [Float]` (10 values)
+- `Shared/Models/EQCoordinator.swift` (new) — `@MainActor`
+  ObservableObject that owns all EQ-related observable state and
+  coordinates between `EQService` (Core control surface) and
+  `EQPersistenceStore` (UserDefaults). Follows the existing
+  `LyricsPreferenceStore` pattern: state lives here, AppState only
+  holds a reference.
+  - `@Published var isEnabled: Bool`
+  - `@Published var bandGains: [Float]` (10 values)
   - `@Published var preamp: Float`
   - `@Published var currentPresetName: String?`
   - `@Published var customPresets: [EQPreset]`
-  - `setEQEnabled(_:)`, `setEQBand(index:gain:)`, `setEQPreamp(_:)`,
+  - `setEnabled(_:)`, `setBand(index:gain:)`, `setPreamp(_:)`,
     `selectPreset(_:)`, `saveAsCustomPreset(name:)`,
     `deleteCustomPreset(_:)`
+  - On any state change, calls `EQService` to update Core and
+    `EQPersistenceStore` to persist.
+- `Shared/Models/AppState.swift` (modify)
+  - inject `EQCoordinator`
+  - expose `eqCoordinator` as a `let` property for views
+  - no EQ-specific `@Published` properties or methods on AppState itself
 - `Shared/Services/CoreServiceProviding.swift` (modify) — add
   `makeEQService()` factory.
 - `Shared/Services/CoreFactory.swift` (modify) — wire `EQService`.
@@ -1652,8 +1662,12 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 - `EQPersistenceStoreTests.swift` (new)
 - `EQPresetsTests.swift` (new)
 - `EQSchemaMigratorTests.swift` (new)
-- `AppStateEQTests.swift` (new)
-- `EQReplayGainInteractionTests.swift` (new)
+- `EQCoordinatorTests.swift` (new) — covers the 6 EQCoordinator tests
+  above plus `testEQDisabled_BypassesEntirely` (pure EQ bypass, no
+  ReplayGain interaction)
+- `AppStateReplayGainTests.swift` (extend) — adds
+  `testEQReplayGainInteraction_AdditiveCombination` to existing
+  ReplayGain test file, keeping additive-gain coverage in one place
 
 **Tests — HarmoniaCore** (`Tests/HarmoniaCoreTests/`)
 
@@ -1695,12 +1709,12 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 | `testEQSchemaMigrator_Version1_IsIdentity` | state at version 1 | `migrate(from:1, to:1)` | unchanged |
 | `testEQPresets_FlatBuiltinExists` | builtin presets array | find "Flat" | exists, all bands 0 |
 | `testEQPresets_RockHasExpectedShape` | builtin "Rock" | inspect bands | low + high boosted, mid scooped (specific dB values) |
-| `testAppState_SelectBuiltinPreset_AppliesGains` | AppState | `selectPreset("Rock")` | `eqBands` matches preset, `eqService.bandGains` matches |
-| `testAppState_ModifyBand_MarksAsCustomState` | preset selected | modify band[2] | `currentPresetName == nil` |
-| `testAppState_SaveCustomPreset_AppendsToList` | unsaved state | `saveAsCustomPreset("My EQ")` | `customPresets` contains it |
-| `testAppState_SaveCustomPreset_RejectsBuiltinName` | unsaved state | `saveAsCustomPreset("Rock")` | throws / returns failure |
-| `testAppState_DeleteCustomPreset_RemovesFromList` | custom preset exists | `deleteCustomPreset("My EQ")` | not in list |
-| `testAppState_DeleteBuiltin_Rejected` | builtin "Rock" | `deleteCustomPreset("Rock")` | rejected, list unchanged |
+| `testEQCoordinator_SelectBuiltinPreset_AppliesGains` | EQCoordinator | `selectPreset("Rock")` | `bandGains` matches preset, `eqService.bandGains` matches |
+| `testEQCoordinator_ModifyBand_MarksAsCustomState` | preset selected | modify band[2] | `currentPresetName == nil` |
+| `testEQCoordinator_SaveCustomPreset_AppendsToList` | unsaved state | `saveAsCustomPreset("My EQ")` | `customPresets` contains it |
+| `testEQCoordinator_SaveCustomPreset_RejectsBuiltinName` | unsaved state | `saveAsCustomPreset("Rock")` | throws / returns failure |
+| `testEQCoordinator_DeleteCustomPreset_RemovesFromList` | custom preset exists | `deleteCustomPreset("My EQ")` | not in list |
+| `testEQCoordinator_DeleteBuiltin_Rejected` | builtin "Rock" | `deleteCustomPreset("Rock")` | rejected, list unchanged |
 | `testEQReplayGainInteraction_AdditiveCombination` | preamp = -3, RG = -2, volume = 0 | compute final gain | `-5` dB |
 | `testEQDisabled_BypassesEntirely` | `eqEnabled = false`, all bands = 6 | playback | EQ node passes through (no gain change) |
 
