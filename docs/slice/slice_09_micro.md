@@ -1705,7 +1705,8 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 | `testEQService_PassesThroughToPort` | `EQService.setEnabled(true)` | `EQPort` | `isEnabled == true` |
 | `testEQPersistence_RoundTrip` | save state, recreate store | load | values match |
 | `testEQPersistence_WritesSchemaVersion` | save any state | read `hp.eq.schemaVersion` | `1` |
-| `testEQPersistence_FreshInstall_NoMigrationNeeded` | empty UserDefaults | load | returns defaults, writes version 1 |
+| `testEQPersistence_FreshInstall_ReturnsDefaults` | empty UserDefaults | load | returns defaults |
+| `testEQPersistence_FreshInstall_StampsSchemaVersion` | empty UserDefaults | load | writes version 1 |
 | `testEQSchemaMigrator_Version1_IsIdentity` | state at version 1 | `migrate(from:1, to:1)` | unchanged |
 | `testEQPresets_FlatBuiltinExists` | builtin presets array | find "Flat" | exists, all bands 0 |
 | `testEQPresets_RockHasExpectedShape` | builtin "Rock" | inspect bands | low + high boosted, mid scooped (specific dB values) |
