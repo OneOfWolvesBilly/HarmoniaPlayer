@@ -82,6 +82,19 @@ struct HarmoniaPlayerApp: App {
         .windowStyle(.hiddenTitleBar)
         .defaultLaunchBehavior(.suppressed)
 
+        // Equalizer — single-instance floating utility window
+        // (Slice 9-K). Opened via Window → Equalizer (⌘⌥E).
+        // Singleton: same `id` reused on each open call.
+        // `.defaultLaunchBehavior(.suppressed)` mirrors Mini Player
+        // and File Info so the window is never auto-restored at
+        // launch — only opens in response to an explicit user action.
+        Window("Equalizer", id: "equalizer-window") {
+            EQWindow()
+                .environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+
         // File Info — independent, non-modal window identified by Track.ID.
         // Opened via ContentView's .onChange(of: appState.fileInfoTrack).
         // Multiple File Info windows can coexist; each is keyed by its track's ID.

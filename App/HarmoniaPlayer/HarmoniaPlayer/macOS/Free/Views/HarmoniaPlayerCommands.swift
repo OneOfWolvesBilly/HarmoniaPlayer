@@ -96,7 +96,7 @@ struct HarmoniaPlayerCommands: Commands {
             CommandGroup(replacing: .help) {}
         }
 
-        // Window menu — Mini Player toggle (⌘M).
+        // Window menu — Mini Player toggle (⌘M) + Equalizer (⌘⌥E).
         CommandGroup(replacing: .windowArrangement) {
             Button(L("menu_mini_player")) {
                 openWindow(id: "mini-player")
@@ -108,6 +108,11 @@ struct HarmoniaPlayerCommands: Commands {
                 }
             }
             .keyboardShortcut("m", modifiers: .command)
+
+            Button(L("menu_equalizer")) {
+                openWindow(id: "equalizer-window")
+            }
+            .keyboardShortcut("e", modifiers: [.command, .option])
         }
 
         // Add "Add Files…" and playlist management to the File menu.

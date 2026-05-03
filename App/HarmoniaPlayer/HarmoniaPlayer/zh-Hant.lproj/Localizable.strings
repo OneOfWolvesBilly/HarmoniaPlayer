@@ -211,3 +211,38 @@
 "lyrics_decode_failed" = "無法解碼歌詞,請嘗試其他編碼。";
 "lyrics_none_available" = "此曲目沒有可用的歌詞。";
 "lyrics_recheck" = "重新檢查";
+
+// MARK: - Equalizer (Slice 9-K)
+
+"eq_window_title" = "等化器";
+"eq_enabled_toggle" = "啟用等化器";
+"eq_preamp_label" = "前級增益";
+
+"eq_band_label_32hz" = "32 Hz";
+"eq_band_label_64hz" = "64 Hz";
+"eq_band_label_125hz" = "125 Hz";
+"eq_band_label_250hz" = "250 Hz";
+"eq_band_label_500hz" = "500 Hz";
+"eq_band_label_1khz" = "1 kHz";
+"eq_band_label_2khz" = "2 kHz";
+"eq_band_label_4khz" = "4 kHz";
+"eq_band_label_8khz" = "8 kHz";
+"eq_band_label_16khz" = "16 kHz";
+
+"eq_preset_picker_label" = "預設";
+"eq_preset_flat" = "平直";
+"eq_preset_rock" = "搖滾";
+"eq_preset_pop" = "流行";
+"eq_preset_jazz" = "爵士";
+"eq_preset_classical" = "古典";
+"eq_preset_vocal" = "人聲";
+"eq_preset_bass_boost" = "重低音";
+"eq_preset_treble_boost" = "高音強化";
+
+"eq_preset_save_button" = "另存為預設…";
+"eq_preset_save_dialog_title" = "儲存預設";
+"eq_preset_save_dialog_placeholder" = "預設名稱";
+"eq_preset_delete_button" = "刪除預設";
+"eq_preset_name_collision_alert" = "此名稱已被內建預設使用,請改用其他名稱。";
+
+"menu_equalizer" = "等化器";

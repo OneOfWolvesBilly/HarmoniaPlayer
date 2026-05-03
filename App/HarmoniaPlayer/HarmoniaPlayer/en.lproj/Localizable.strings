@@ -211,3 +211,38 @@
 "lyrics_decode_failed" = "Could not decode lyrics. Try a different encoding.";
 "lyrics_none_available" = "No lyrics available for this track.";
 "lyrics_recheck" = "Recheck";
+
+// MARK: - Equalizer (Slice 9-K)
+
+"eq_window_title" = "Equalizer";
+"eq_enabled_toggle" = "Enable EQ";
+"eq_preamp_label" = "Preamp";
+
+"eq_band_label_32hz" = "32 Hz";
+"eq_band_label_64hz" = "64 Hz";
+"eq_band_label_125hz" = "125 Hz";
+"eq_band_label_250hz" = "250 Hz";
+"eq_band_label_500hz" = "500 Hz";
+"eq_band_label_1khz" = "1 kHz";
+"eq_band_label_2khz" = "2 kHz";
+"eq_band_label_4khz" = "4 kHz";
+"eq_band_label_8khz" = "8 kHz";
+"eq_band_label_16khz" = "16 kHz";
+
+"eq_preset_picker_label" = "Preset";
+"eq_preset_flat" = "Flat";
+"eq_preset_rock" = "Rock";
+"eq_preset_pop" = "Pop";
+"eq_preset_jazz" = "Jazz";
+"eq_preset_classical" = "Classical";
+"eq_preset_vocal" = "Vocal";
+"eq_preset_bass_boost" = "Bass Boost";
+"eq_preset_treble_boost" = "Treble Boost";
+
+"eq_preset_save_button" = "Save as Preset…";
+"eq_preset_save_dialog_title" = "Save Preset";
+"eq_preset_save_dialog_placeholder" = "Preset name";
+"eq_preset_delete_button" = "Delete Preset";
+"eq_preset_name_collision_alert" = "That name is reserved by a built-in preset. Please choose a different name.";
+
+"menu_equalizer" = "Equalizer";
