@@ -184,7 +184,7 @@ CoreAudio / AVAudioEngine)]
 
 **Application Layer (AppState):**
 - Central observable state (`AppState`, split across 5 files)
-- App-layer service protocols (`PlaybackService`, `TagReaderService`) defined here
+- App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) defined here
 - Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`)
 - **May depend on:** App-layer service protocols, CoreFactory, IAPManager
 - **Must not depend on:** HarmoniaCore-Swift, Ports, Adapters, platform-specific APIs
@@ -194,6 +194,7 @@ CoreAudio / AVAudioEngine)]
 - Adapter wrappers bridge HarmoniaCore types to app-layer protocols
 - `HarmoniaPlaybackServiceAdapter`: maps `CoreError` → `PlaybackError`, sync → async
 - `HarmoniaTagReaderAdapter`: maps `TagBundle` → `Track`
+- `HarmoniaEQAdapter`: bridges Core PlaybackService EQ control surface to `EQService` via closure binding (does **not** `import HarmoniaCore`)
 - **Only these 3 files may `import HarmoniaCore`:** `HarmoniaCoreProvider.swift`, `HarmoniaPlaybackServiceAdapter.swift`, `HarmoniaTagReaderAdapter.swift`
 - **Must not depend on:** SwiftUI, UI state
 

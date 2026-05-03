@@ -45,16 +45,23 @@ bridges the two.
 ## 2. Integration Layer
 
 The Integration Layer is the **only** place in HarmoniaPlayer where
-`import HarmoniaCore` is allowed. It consists of exactly three files:
+`import HarmoniaCore` is allowed. It consists of exactly three importing
+files plus one closure-binding adapter that does not import HarmoniaCore:
 
 1. `HarmoniaCoreProvider.swift` — constructs real HarmoniaCore services
 2. `HarmoniaPlaybackServiceAdapter.swift` — wraps `DefaultPlaybackService`
 3. `HarmoniaTagReaderAdapter.swift` — wraps `TagReaderPort`
+4. `HarmoniaEQAdapter.swift` — bridges Core EQ control surface to `EQService`
+   via closures (no `import HarmoniaCore` — see §2.5)
 
 ### 2.1 HarmoniaCoreProvider
 
 The single production implementation of `CoreServiceProviding`. Constructs
-all platform adapters and wires them into HarmoniaCore services:
+all platform adapters and wires them into HarmoniaCore services. It also
+caches the constructed `HarmoniaCore.PlaybackService` in `sharedCore` so
+`makePlaybackService(isProUser:)` and `makeEQService()` operate on the same
+audio chain — the EQ node injected at construction time must be the node
+that the EQ control surface mutates.
 
 ```swift
 import Foundation
@@ -62,22 +69,42 @@ import HarmoniaCore
 
 final class HarmoniaCoreProvider: CoreServiceProviding {
 
+    private var sharedCore: HarmoniaCore.PlaybackService?
+
     func makePlaybackService(isProUser: Bool) -> PlaybackService {
-        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-        let clock   = MonotonicClockAdapter()
-        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio   = AVAudioEngineOutputAdapter(logger: logger)
-        let core    = DefaultPlaybackService(
-            decoder: decoder,
-            audio:   audio,
-            clock:   clock,
-            logger:  logger
-        )
+        let core = buildCore()
+        self.sharedCore = core
         return HarmoniaPlaybackServiceAdapter(core: core)
     }
 
     func makeTagReaderService() -> TagReaderService {
         HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
+    }
+
+    func makeEQService() -> EQService {
+        // Closure binding — keeps HarmoniaCore types out of HarmoniaEQAdapter.
+        let core = sharedCore ?? buildCore()
+        self.sharedCore = core
+        return HarmoniaEQAdapter(
+            setEnabled:   { core.setEQEnabled($0)   },
+            setPreamp:    { core.setEQPreamp($0)    },
+            setBandGains: { core.setEQBandGains($0) }
+        )
+    }
+
+    private func buildCore() -> HarmoniaCore.PlaybackService {
+        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+        let clock   = MonotonicClockAdapter()
+        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
+        let audio   = AVAudioEngineOutputAdapter(logger: logger)
+        let eq      = AVAudioUnitEQAdapter()
+        return DefaultPlaybackService(
+            decoder: decoder,
+            audio:   audio,
+            clock:   clock,
+            logger:  logger,
+            eq:      eq
+        )
     }
 }
 ```
@@ -220,10 +247,67 @@ struct CoreFactory {
     func makeTagReaderService() -> TagReaderService {
         provider.makeTagReaderService()
     }
+
+    func makeEQService() -> EQService {
+        provider.makeEQService()
+    }
 }
 ```
 
 Production wiring uses `HarmoniaCoreProvider`; tests use `FakeCoreProvider`.
+
+### 2.5 HarmoniaEQAdapter (Integration Layer, no HarmoniaCore import)
+
+`HarmoniaEQAdapter` lives in the Integration Layer alongside the three
+importing adapters above, but it **does not** `import HarmoniaCore`. Instead
+of holding a `HarmoniaCore.PlaybackService` reference directly, it holds
+three closures bound by `HarmoniaCoreProvider.makeEQService()`. The closures
+forward `EQService` calls to the Core PlaybackService EQ control surface.
+
+This pattern buys two things:
+
+1. The `import HarmoniaCore` count in HarmoniaPlayer stays at three files
+   (see `module_boundary.md` Section 3.2 rule 2).
+2. `EQServiceTests` can verify forward semantics without importing
+   HarmoniaCore — `IntegrationTests.swift` line 28 forbids HarmoniaCore in
+   tests; this adapter side-steps that constraint by design.
+
+```swift
+import Foundation
+
+final class HarmoniaEQAdapter: EQService {
+
+    private let setEnabledHook:   (Bool)    -> Void
+    private let setPreampHook:    (Float)   -> Void
+    private let setBandGainsHook: ([Float]) -> Void
+
+    init(
+        setEnabled:   @escaping (Bool)    -> Void,
+        setPreamp:    @escaping (Float)   -> Void,
+        setBandGains: @escaping ([Float]) -> Void
+    ) {
+        self.setEnabledHook   = setEnabled
+        self.setPreampHook    = setPreamp
+        self.setBandGainsHook = setBandGains
+    }
+
+    func setEnabled(_ enabled: Bool)    { setEnabledHook(enabled) }
+    func setPreamp(_ db: Float)         { setPreampHook(db) }
+    func setBandGains(_ gains: [Float]) { setBandGainsHook(gains) }
+}
+```
+
+**Swift 6 / Xcode 26 notes:**
+
+- Stored closure types are plain `(Bool) -> Void` / `(Float) -> Void` /
+  `([Float]) -> Void`, **not** `@Sendable`. They inherit MainActor isolation
+  from `HarmoniaCoreProvider.makeEQService()` and capture the non-Sendable
+  `HarmoniaCore.PlaybackService` without crossing an isolation boundary, so
+  no Sendable warning is emitted.
+- The class has no explicit `deinit`, sidestepping the Xcode 26 beta
+  `swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that bites
+  `@MainActor` classes with explicit deinit. The compiler-synthesised deinit
+  walks the fast path.
 
 ---
 

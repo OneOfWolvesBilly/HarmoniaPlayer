@@ -35,16 +35,22 @@ At a high level, the codebase is divided into the following logical modules.
 2. **Application Layer (State & Models)**
    - `AppState` (central observable state, split across 5 files)
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`, etc.)
-   - App-layer service protocols (`PlaybackService`, `TagReaderService`) — defined here
+   - App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) — defined here
      so that `AppState` can depend on them without importing HarmoniaCore.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
      `ErrorReportService` (pure Swift utilities with no HarmoniaCore dependency).
    - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
-3. **Integration Layer** (`import HarmoniaCore` allowed — only these 3 files)
+3. **Integration Layer** (`import HarmoniaCore` allowed — still only these 3 files)
    - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
    - `HarmoniaPlaybackServiceAdapter` — wraps HarmoniaCore `DefaultPlaybackService`,
      maps `CoreError` → `PlaybackError`.
    - `HarmoniaTagReaderAdapter` — wraps `TagReaderPort`, maps `TagBundle` → `Track`.
+   - `HarmoniaEQAdapter` — bridges Core PlaybackService EQ control surface
+     (`setEQEnabled` / `setEQPreamp` / `setEQBandGains`) to `EQService` via closure
+     binding. **Does NOT `import HarmoniaCore` by design**; closures are bound
+     by `HarmoniaCoreProvider.makeEQService()` so the Core type surface stays
+     confined to the provider. Counts as Integration Layer placement but does
+     not consume one of the three import slots.
    - `IAPManager` protocol + `StoreKitIAPManager` (macOS Pro unlock) + `FreeTierIAPManager` (stub).
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
@@ -348,29 +354,53 @@ struct CoreFactory {
 ```
 
 `HarmoniaCoreProvider` (Integration Layer) is the only class that constructs
-real HarmoniaCore adapters:
+real HarmoniaCore adapters. It also caches the constructed
+`HarmoniaCore.PlaybackService` so `makePlaybackService(isProUser:)` and
+`makeEQService()` operate on the same audio chain (the EQ node injected at
+construction time must be the node that EQ control surface mutates):
 
 ```swift
 final class HarmoniaCoreProvider: CoreServiceProviding {
+
+    private var sharedCore: HarmoniaCore.PlaybackService?
+
     func makePlaybackService(isProUser: Bool) -> PlaybackService {
-        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-        let clock   = MonotonicClockAdapter()
-        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio   = AVAudioEngineOutputAdapter(logger: logger)
-        let core    = DefaultPlaybackService(
-            decoder: decoder, audio: audio, clock: clock, logger: logger
-        )
+        let core = buildCore()
+        self.sharedCore = core
         return HarmoniaPlaybackServiceAdapter(core: core)
     }
 
     func makeTagReaderService() -> TagReaderService {
         HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
     }
+
+    func makeEQService() -> EQService {
+        // Closure binding: HarmoniaEQAdapter does not import HarmoniaCore.
+        let core = sharedCore ?? buildCore()
+        self.sharedCore = core
+        return HarmoniaEQAdapter(
+            setEnabled:   { core.setEQEnabled($0)   },
+            setPreamp:    { core.setEQPreamp($0)    },
+            setBandGains: { core.setEQBandGains($0) }
+        )
+    }
+
+    private func buildCore() -> HarmoniaCore.PlaybackService {
+        let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
+        let clock   = MonotonicClockAdapter()
+        let decoder = AVAssetReaderDecoderAdapter(logger: logger)
+        let audio   = AVAudioEngineOutputAdapter(logger: logger)
+        let eq      = AVAudioUnitEQAdapter()
+        return DefaultPlaybackService(
+            decoder: decoder, audio: audio, clock: clock, logger: logger, eq: eq
+        )
+    }
 }
 ```
 
 - All platform-specific details are contained here.
-- The rest of the app only sees `PlaybackService` and `TagReaderService` interfaces.
+- The rest of the app only sees `PlaybackService`, `TagReaderService`, and
+  `EQService` interfaces.
 
 ---
 
@@ -466,6 +496,10 @@ struct PlayerView: View {
   protocols.
 - **Free vs Pro decisions** live in the app (AppState + IAPManager), not in the core engine.
 - **TagReaderService** is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
+- **EQService** is bound to the shared `HarmoniaCore.PlaybackService` EQ control
+  surface via closure binding inside `HarmoniaCoreProvider`. `HarmoniaEQAdapter`
+  itself does not import HarmoniaCore — the closure-binding pattern keeps the
+  Core type surface confined to the provider.
 
 Any pull request that crosses these boundaries (e.g. a view that imports
 HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using audio Ports)

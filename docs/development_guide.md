@@ -138,10 +138,12 @@ HarmoniaPlayer/
 │       │   │   ├── Services/
 │       │   │   │   ├── CoreFactory.swift                     # (App Layer) factory
 │       │   │   │   ├── CoreServiceProviding.swift            # (App Layer) provider protocol
+│       │   │   │   ├── EQService.swift                       # (App Layer) EQ protocol (Slice 9-K)
 │       │   │   │   ├── ExtendedAttributeService.swift        # xattr for kMDItemWhereFroms
 │       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
 │       │   │   │   ├── FreeTierIAPManager.swift              # Stub IAP (Free tier)
 │       │   │   │   ├── HarmoniaCoreProvider.swift            # ⚠ Integration Layer
+│       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import)
 │       │   │   │   ├── HarmoniaPlaybackServiceAdapter.swift  # ⚠ Integration Layer
 │       │   │   │   ├── HarmoniaTagReaderAdapter.swift        # ⚠ Integration Layer
 │       │   │   │   ├── IAPManager.swift                      # IAPManager protocol + IAPError
@@ -214,6 +216,12 @@ depends on app-layer protocols:
 | `[HP] HarmoniaTagReaderAdapter.swift` | Wraps `[HC] TagReaderPort`; maps `TagBundle` → `Track` |
 
 Any other file importing HarmoniaCore is a boundary violation.
+
+> **Slice 9-K note:** `HarmoniaEQAdapter.swift` is in the Integration Layer
+> too, but it does **not** `import HarmoniaCore`. It bridges the Core
+> PlaybackService EQ control surface to `EQService` via three closures bound
+> by `HarmoniaCoreProvider.makeEQService()`, so the Core type surface stays
+> confined to the provider. The 3-file rule above is unchanged.
 
 ### 5.2 Dependency flow
 

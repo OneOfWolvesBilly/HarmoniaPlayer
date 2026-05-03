@@ -474,12 +474,31 @@ protocol IAPManager: AnyObject {
 
 Implementations: `StoreKitIAPManager` (production), `FreeTierIAPManager` (stub), `MockIAPManager` (test).
 
-### 4.4 CoreServiceProviding
+### 4.4 EQService
+
+```swift
+protocol EQService: AnyObject {
+    func setEnabled(_ enabled: Bool)
+    func setPreamp(_ db: Float)
+    func setBandGains(_ gains: [Float])
+}
+```
+
+Implementations: `HarmoniaEQAdapter` (production, closure-binding — does not
+import HarmoniaCore), `FakeEQService` (test).
+
+Slice 9-K. Sync, non-throwing, mirrors the underlying HarmoniaCore
+PlaybackService EQ control surface (`setEQEnabled` / `setEQPreamp` /
+`setEQBandGains`). Clamping (±12 dB band, ±12 dB preamp) is performed
+downstream by `AVAudioUnitEQAdapter`.
+
+### 4.5 CoreServiceProviding
 
 ```swift
 protocol CoreServiceProviding: AnyObject {
     func makePlaybackService(isProUser: Bool) -> PlaybackService
     func makeTagReaderService() -> TagReaderService
+    func makeEQService() -> EQService
 }
 ```
 
@@ -498,6 +517,7 @@ struct CoreFactory {
     init(featureFlags: CoreFeatureFlags, provider: CoreServiceProviding)
     func makePlaybackService() -> PlaybackService
     func makeTagReaderService() -> TagReaderService
+    func makeEQService() -> EQService
 }
 ```
 
@@ -573,15 +593,23 @@ trivially unit-testable.
 ## 6. Integration Layer
 
 These 3 files are the **only** production files allowed to `import HarmoniaCore`.
+A fourth file, `HarmoniaEQAdapter`, is also placed in the Integration Layer but
+**does not import HarmoniaCore by design** — see §6.4.
 
 ### 6.1 HarmoniaCoreProvider
 
-Constructs real HarmoniaCore services with AVFoundation adapters.
+Constructs real HarmoniaCore services with AVFoundation adapters. Caches the
+constructed `HarmoniaCore.PlaybackService` in `sharedCore` so
+`makePlaybackService(isProUser:)` and `makeEQService()` operate on the same
+audio chain.
 
 ```swift
 final class HarmoniaCoreProvider: CoreServiceProviding {
+    private var sharedCore: HarmoniaCore.PlaybackService?
+
     func makePlaybackService(isProUser: Bool) -> PlaybackService
     func makeTagReaderService() -> TagReaderService
+    func makeEQService() -> EQService    // closure-binds against sharedCore
 }
 ```
 
@@ -617,6 +645,33 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
     var currentSchemaVersion: Int  // forwarded from TagBundle.currentSchemaVersion
 }
 ```
+
+### 6.4 HarmoniaEQAdapter
+
+Bridges the HarmoniaCore PlaybackService EQ control surface
+(`setEQEnabled` / `setEQPreamp` / `setEQBandGains`) to `EQService` via three
+closure hooks bound at construction time by `HarmoniaCoreProvider`. **Does
+not `import HarmoniaCore`** — closures keep the Core type surface confined
+to the provider, which lets `EQServiceTests` verify forward semantics
+without crossing the module boundary.
+
+```swift
+final class HarmoniaEQAdapter: EQService {
+    init(
+        setEnabled:   @escaping (Bool)    -> Void,
+        setPreamp:    @escaping (Float)   -> Void,
+        setBandGains: @escaping ([Float]) -> Void
+    )
+    // EQService methods forward to the closures.
+}
+```
+
+Closures are stored as plain `(_) -> Void` (not `@Sendable`). They inherit
+MainActor isolation from `HarmoniaCoreProvider.makeEQService()` and capture
+the non-Sendable `HarmoniaCore.PlaybackService` without crossing an isolation
+boundary, so no Sendable warning is raised. The class has no explicit
+`deinit`, sidestepping the Xcode 26 beta `swift_task_deinitOnExecutorImpl`
+TaskLocal teardown crash.
 
 ---
 
