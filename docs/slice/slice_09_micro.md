@@ -36,7 +36,7 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-H | Fix MiniPlayer menu bar (hiddenTitleBar + focusedSceneValue) + remove expand button | Free | ✅ |
 | 9-I | Fix Xcode warnings (cosmetic) | Free | ✅ |
 | 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ✅ |
-| 9-K | Equalizer (10-band, global, custom presets) | Free | ⬜ |
+| 9-K | Equalizer (10-band, global, custom presets) | Free | ✅ |
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ⬜ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ⬜ |
 
@@ -1420,7 +1420,7 @@ deliberately stops at β to keep this slice focused.
 
 ---
 
-## Slice 9-K: Equalizer (10-band) ⬜
+## Slice 9-K: Equalizer (10-band) ✅
 
 ### Goal
 
