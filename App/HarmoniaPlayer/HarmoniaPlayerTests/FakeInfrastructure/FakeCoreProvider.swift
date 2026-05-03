@@ -345,9 +345,14 @@ final class StubLyricsService: LyricsService {
 /// There is **no closure storage** and **no Locale dependency**, so the
 /// Xcode 26 beta `DefaultLyricsService` double-free pattern (closure
 /// captures + Locale across many short-lived instances) cannot apply here.
-/// There is also **no explicit `deinit`**, so the
-/// `swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that bites
-/// @MainActor classes with explicit deinit is sidestepped.
+///
+/// **Xcode 26 beta isolated-deinit workaround.** With module-level
+/// `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the class would otherwise
+/// be inferred @MainActor and its synthesised deinit would route through
+/// `swift_task_deinitOnExecutorImpl`, which the runtime crashes on.
+/// `nonisolated deinit { }` forces deallocation down the synchronous ARC
+/// path. (Earlier comments here claimed "no explicit deinit avoids the
+/// bug" — that was wrong: the synthesised deinit still hits it.)
 ///
 /// **Usage — identity check:**
 /// ```swift
@@ -401,4 +406,9 @@ final class FakeEQService: EQService {
         setBandGainsCallCount += 1
         lastSetBandGains = gains
     }
+
+    // MARK: - Deinit (Xcode 26 beta workaround)
+
+    /// See class doc-comment for rationale.
+    nonisolated deinit { }
 }

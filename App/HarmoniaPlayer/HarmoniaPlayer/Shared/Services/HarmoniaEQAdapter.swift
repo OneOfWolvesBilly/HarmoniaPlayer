@@ -30,10 +30,18 @@
 //  - No actor annotation: relies on the main module's MainActor inference,
 //    matching HarmoniaPlaybackServiceAdapter / HarmoniaTagReaderAdapter
 //    (also unannotated final classes in the Integration Layer).
-//  - No `deinit` body: avoids the Xcode 26 beta
-//    `swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that bites
-//    @MainActor classes with explicit deinit. Compiler-synthesised deinit
-//    walks the fast path.
+//  - Explicit `nonisolated deinit { }`: with module-level
+//    SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor this class is inferred
+//    @MainActor, which would make the synthesised deinit isolated and
+//    route deallocation through `swift_task_deinitOnExecutorImpl`. That
+//    path crashes in Xcode 26 beta (TaskLocal::StopLookupScope teardown
+//    double-frees the captured-closure boxes when the three escaping
+//    closure properties release their `core` captures). Marking the
+//    deinit nonisolated forces deallocation down the synchronous ARC
+//    fast path. Methods stay @MainActor so call-site isolation is
+//    unchanged. Earlier comments here claimed "no deinit body avoids
+//    the bug" — that was wrong: the compiler-synthesised deinit on an
+//    inferred-MainActor class still hits the bug.
 //  - Stored closure types are plain `(Bool) -> Void` / `(Float) -> Void` /
 //    `([Float]) -> Void`. NOT @Sendable. They inherit MainActor isolation
 //    from their construction site (HarmoniaCoreProvider.makeEQService) and
@@ -83,4 +91,11 @@ final class HarmoniaEQAdapter: EQService {
     func setPreamp(_ db: Float)         { setPreampHook(db) }
 
     func setBandGains(_ gains: [Float]) { setBandGainsHook(gains) }
+
+    // MARK: - Deinit (Xcode 26 beta workaround)
+
+    /// Forces deallocation through the synchronous ARC path, bypassing
+    /// `swift_task_deinitOnExecutorImpl`. See file header SWIFT 6 /
+    /// XCODE 26 NOTES for full rationale.
+    nonisolated deinit { }
 }

@@ -83,6 +83,13 @@ final class AppState: ObservableObject {
     /// Lyrics preference store — per-track source/encoding/language persistence.
     let lyricsPreferenceStore: LyricsPreferenceStore
 
+    /// EQ coordinator — owns all observable EQ state (Slice 9-K commit 6).
+    ///
+    /// AppState holds only this reference; views read EQ state via
+    /// `appState.eqCoordinator.…`. AppState itself has no EQ-specific
+    /// `@Published` properties or methods.
+    let eqCoordinator: EQCoordinator
+
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
@@ -389,7 +396,8 @@ final class AppState: ObservableObject {
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
         undoManager: UndoManager? = nil,
-        lyricsPreferenceStore: LyricsPreferenceStore? = nil
+        lyricsPreferenceStore: LyricsPreferenceStore? = nil,
+        eqCoordinator: EQCoordinator? = nil
     ) {
         // Step 1: Store IAP manager
         self.iapManager = iapManager
@@ -410,6 +418,16 @@ final class AppState: ObservableObject {
         self.lyricsService = coreFactory.makeLyricsService()
         self.lyricsPreferenceStore = lyricsPreferenceStore
             ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
+
+        // Step 4b: Create EQ coordinator. The injected variant is used by
+        // tests that need a pre-seeded coordinator; the default builds
+        // from the same provider's EQService and an EQPersistenceStore
+        // backed by the same UserDefaults instance.
+        self.eqCoordinator = eqCoordinator
+            ?? EQCoordinator(
+                service: coreFactory.makeEQService(),
+                store: EQPersistenceStore(defaults: userDefaults)
+            )
 
         // Step 5: Store UndoManager.
         // Default parameter uses nil instead of UndoManager() to avoid

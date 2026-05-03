@@ -17,6 +17,7 @@ final class AppStateReplayGainTests: XCTestCase {
     private var sut: AppState!
     private var fakePlaybackService: FakePlaybackService!
     private var fakeTagReader: FakeTagReaderService!
+    private var fakeEQService: FakeEQService!
     private var testDefaults: UserDefaults!
     private var suiteName: String!
 
@@ -26,8 +27,10 @@ final class AppStateReplayGainTests: XCTestCase {
         testDefaults = UserDefaults(suiteName: suiteName)!
         fakePlaybackService = FakePlaybackService()
         fakeTagReader = FakeTagReaderService()
+        fakeEQService = FakeEQService()
         let provider = FakeCoreProvider(playbackService: fakePlaybackService,
-                                        tagReader: fakeTagReader)
+                                        tagReader: fakeTagReader,
+                                        eqService: fakeEQService)
         let iap = MockIAPManager(isProUnlocked: false)
         sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
     }
@@ -36,6 +39,7 @@ final class AppStateReplayGainTests: XCTestCase {
         sut = nil
         fakePlaybackService = nil
         fakeTagReader = nil
+        fakeEQService = nil
         testDefaults.removePersistentDomain(forName: suiteName)
         testDefaults = nil
         suiteName = nil
@@ -201,5 +205,46 @@ final class AppStateReplayGainTests: XCTestCase {
         try await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(fakePlaybackService.setVolumeCallCount, callCountBefore)
+    }
+
+    // MARK: - EQ + ReplayGain interaction (Slice 9-K)
+
+    /// EQ preamp and ReplayGain operate on independent signal-chain
+    /// stages: preamp lives in the EQ node (delivered via `EQService`)
+    /// and ReplayGain × master volume lives in the output stage
+    /// (delivered via `PlaybackService.setVolume`). Their dB
+    /// contributions therefore add — they must never multiply or
+    /// double-apply.
+    ///
+    /// Spec §9-K matrix row `testEQReplayGainInteraction_AdditiveCombination`:
+    /// - preamp = -3 dB, RG = -2 dB, master volume = 0 dB (linear 1.0)
+    /// - Total system gain in dB = -3 + (-2) + 0 = **-5 dB**
+    ///
+    /// The total is achieved by verifying each stage independently:
+    /// the EQ node attenuates by exactly -3 dB (preamp arrived
+    /// uncontaminated), and the output stage attenuates by exactly
+    /// -2 dB (RG only — preamp was NOT folded into setVolume).
+    func testEQReplayGainInteraction_AdditiveCombination() async throws {
+        // Given: track tagged with RG = -2 dB
+        let track = await loadTrack(replayGainTrack: -2.0)
+        sut.replayGainMode = .track
+        await sut.setVolume(1.0)
+
+        // And: EQ preamp set to -3 dB via the coordinator
+        sut.eqCoordinator.setPreamp(-3)
+
+        // When: the track plays
+        await sut.play(trackID: track.id)
+
+        // Then: EQ preamp reached the EQ node uncontaminated
+        let actualPreamp = try XCTUnwrap(fakeEQService.lastSetPreamp)
+        XCTAssertEqual(actualPreamp, -3, accuracy: 0.001,
+                       "EQ preamp must be forwarded to EQService verbatim, not folded into setVolume")
+
+        // Then: output stage attenuates by RG only (preamp not double-applied)
+        let expected = expectedVolume(base: 1.0, gainDB: -2.0)
+        let actualVolume = try XCTUnwrap(fakePlaybackService.lastSetVolume)
+        XCTAssertEqual(actualVolume, expected, accuracy: 0.001,
+                       "PlaybackService.setVolume must reflect ReplayGain only — EQ preamp lives in the EQ node, not the output stage")
     }
 }
