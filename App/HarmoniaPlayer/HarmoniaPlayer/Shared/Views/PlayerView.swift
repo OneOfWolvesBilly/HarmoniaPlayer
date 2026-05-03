@@ -99,6 +99,23 @@ struct PlayerView: View {
                     .accessibilityIdentifier("lyrics-toggle")
                 }
 
+                // Equalizer — opens the EQ window (Slice 9-K commit 7-A).
+                // Always visible; icon tint reflects EQ enabled state so
+                // users see at a glance whether the EQ chain is active.
+                // Mirrors lyrics-toggle plain-button + .help() pattern.
+                Button {
+                    openWindow(id: "equalizer-window")
+                } label: {
+                    Image(systemName: "slider.vertical.3")
+                        .font(.system(size: 16))
+                        .foregroundStyle(appState.eqCoordinator.isEnabled
+                                         ? Color.accentColor
+                                         : .secondary)
+                }
+                .buttonStyle(.plain)
+                .help(L("menu_equalizer"))
+                .accessibilityIdentifier("equalizer-button")
+
                 // Ellipsis menu (mini player + future actions)
                 Menu {
                     Button {

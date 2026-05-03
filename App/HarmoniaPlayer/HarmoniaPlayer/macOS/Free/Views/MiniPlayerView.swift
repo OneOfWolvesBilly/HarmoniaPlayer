@@ -175,6 +175,7 @@ private struct WindowDragArea: NSViewRepresentable {
 struct MiniPlayerView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(\.openWindow) private var openWindow
 
     @AppStorage("hp.miniPlayerAlwaysOnTop") private var alwaysOnTop: Bool = true
 
@@ -218,6 +219,10 @@ struct MiniPlayerView: View {
         .background(FloatingWindowController(alwaysOnTop: alwaysOnTop))
         .background(WindowCloseObserver())
         .contextMenu {
+            Button(L("menu_equalizer")) {
+                openWindow(id: "equalizer-window")
+            }
+            Divider()
             Button(L("menu_marquee_settings")) {
                 showMarqueeSettings = true
             }
