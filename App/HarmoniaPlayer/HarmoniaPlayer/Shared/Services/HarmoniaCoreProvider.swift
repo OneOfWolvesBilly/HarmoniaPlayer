@@ -54,11 +54,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         let clock   = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let audio   = AVAudioEngineOutputAdapter(logger: logger)
+        let eq      = AVAudioUnitEQAdapter()
         let core    = DefaultPlaybackService(
             decoder: decoder,
             audio:   audio,
             clock:   clock,
-            logger:  logger
+            logger:  logger,
+            eq:      eq
         )
         return HarmoniaPlaybackServiceAdapter(core: core)
     }

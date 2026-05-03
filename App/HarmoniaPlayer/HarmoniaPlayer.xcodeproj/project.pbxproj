@@ -678,7 +678,7 @@
 			repositoryURL = "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git";
 			requirement = {
 				kind = revision;
-				revision = 6080dd1db4697ce7c4ef22c1e9014a3a5f684742;
+				revision = 1769d6e3a7e503d5686512dabc1961b033203a1e;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
