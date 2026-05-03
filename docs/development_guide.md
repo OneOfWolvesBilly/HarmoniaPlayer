@@ -132,6 +132,10 @@ HarmoniaPlayer/
 │       │   │   │   ├── EQCoordinator.swift          # @MainActor EQ observable (Slice 9-K)
 │       │   │   │   ├── EQPreset.swift               # Named EQ configuration (Slice 9-K)
 │       │   │   │   ├── EQPresets.swift              # Built-in presets (Slice 9-K)
+│       │   │   │   ├── LyricsLanguageVariant.swift  # USLT language variant (Slice 9-J)
+│       │   │   │   ├── LyricsPreference.swift       # Per-track lyrics preference (Slice 9-J)
+│       │   │   │   ├── LyricsResolution.swift       # Lyrics availability + content (Slice 9-J)
+│       │   │   │   ├── LyricsSource.swift           # .embedded / .lrc enum (Slice 9-J)
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
@@ -154,6 +158,8 @@ HarmoniaPlayer/
 │       │   │   │   ├── HarmoniaPlaybackServiceAdapter.swift  # ⚠ Integration Layer
 │       │   │   │   ├── HarmoniaTagReaderAdapter.swift        # ⚠ Integration Layer
 │       │   │   │   ├── IAPManager.swift                      # IAPManager protocol + IAPError
+│       │   │   │   ├── LyricsPreferenceStore.swift           # (App Layer) per-track lyrics prefs (Slice 9-J)
+│       │   │   │   ├── LyricsService.swift                   # (App Layer) USLT + sidecar resolver (Slice 9-J)
 │       │   │   │   ├── M3U8Service.swift                     # M3U8 parse/export
 │       │   │   │   ├── PlaybackService.swift                 # App-layer protocol (async)
 │       │   │   │   ├── StoreKitIAPManager.swift              # StoreKit 2 implementation
@@ -163,6 +169,7 @@ HarmoniaPlayer/
 │       │   │       ├── EQView.swift                          # EQ window content (Slice 9-K)
 │       │   │       ├── EQWindow.swift                        # EQ window wrapper (Slice 9-K)
 │       │   │       ├── FileInfoView.swift                    # File Info panel
+│       │   │       ├── LyricsPanel.swift                     # Lyrics display panel (Slice 9-J)
 │       │   │       ├── PaywallView.swift                     # Pro paywall sheet
 │       │   │       ├── PlaybackFocusedValues.swift           # FocusedValue for Commands
 │       │   │       ├── PlayerView.swift                      # Main player
@@ -386,9 +393,11 @@ All test infrastructure lives in
 
 | Double | Replaces | Key features |
 |--------|----------|--------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, and `FakeEQService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeEQService` call counts |
+| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, and `FakeEQService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeLyricsService` / `makeEQService` call counts |
 | `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
+| `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`, `stripLRCTimestamps` returns input unchanged. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). **Why a fake instead of `DefaultLyricsService`:** the real service triggers an Xcode 26 beta Swift runtime double-free when many short-lived instances coexist across the test suite — the fake sidesteps the toolchain bug entirely with no closure storage and no Locale dependency |
+| `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying AppState reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
 

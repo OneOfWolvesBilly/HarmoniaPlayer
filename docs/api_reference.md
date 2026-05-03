@@ -51,6 +51,13 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var fileSize: Int?          // bytes
     var fileFormat: String      // e.g. "MP3", "AAC"
 
+    // Lyrics (Group F — Slice 9-J)
+    // USLT embedded variants populated by HarmoniaTagReaderAdapter from
+    // TagBundle.lyrics. nil when no USLT frames present. Sidecar `.lrc`
+    // lyrics are NOT stored here; they are resolved at display time by
+    // LyricsService.
+    var lyrics: [LyricsLanguageVariant]?
+
     // Playback statistics (Group E — reserved, no UI yet)
     var playCount: Int
     var lastPlayedAt: Date?
@@ -271,6 +278,75 @@ enum EQPresets {
 
 Built-in set: `Flat`, `Rock`, `Pop`, `Jazz`, `Classical`, `Vocal`, `Bass Boost`, `Treble Boost`. Every preset uses preamp 0 dB and Q 0.7071. Band order (low → high): 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz.
 
+### 1.15 LyricsLanguageVariant
+
+Application Layer representation of one language variant of embedded USLT lyrics. Mirrors `HarmoniaCore.LyricsLanguageVariant` but lives in the Application Layer so `Track` and `AppState` can use it without importing HarmoniaCore. Slice 9-J.
+
+```swift
+struct LyricsLanguageVariant: Codable, Equatable, Sendable {
+    let languageCode: String?  // ISO 639-2 (e.g. "eng", "chi", "jpn"); nil when undeclared
+    let text: String           // Raw lyrics text; not yet stripped of LRC timestamps
+
+    init(languageCode: String?, text: String)
+}
+```
+
+Mapping from `HarmoniaCore.LyricsLanguageVariant` happens inside `HarmoniaTagReaderAdapter` (Integration Layer). LRC timestamp stripping is performed at display time by `LyricsService.stripLRCTimestamps(_:)`.
+
+### 1.16 LyricsSource
+
+The source from which lyrics content is resolved. Slice 9-J.
+
+```swift
+enum LyricsSource: String, Codable, Sendable {
+    case embedded  // USLT frame(s) in the audio file
+    case lrc       // Sidecar `.lrc` file alongside the audio file
+}
+```
+
+### 1.17 LyricsPreference
+
+Per-track user preference for lyrics source, encoding, and language. Persisted via `LyricsPreferenceStore` (UserDefaults-backed). Slice 9-J.
+
+```swift
+struct LyricsPreference: Codable, Equatable {
+    var source: LyricsSource     // .embedded or .lrc
+    var encoding: String         // IANA charset name; "auto" = auto-detect
+    var languageCode: String?    // ISO 639-2; nil = auto (locale match)
+    var customPath: String?      // Reserved for v0.15 custom file selection; always nil in 9-J
+
+    init(source: LyricsSource,
+         encoding: String = "auto",
+         languageCode: String? = nil,
+         customPath: String? = nil)
+}
+```
+
+Persistence key: `hp.lyrics.prefs.<absolute-file-path>` (see §8). The `customPath` field is latent in 9-J — present in the schema for forward compatibility but never written.
+
+### 1.18 LyricsResolution
+
+Result of a lyrics availability check and optional content resolution. Produced by `LyricsService.resolveAvailability(for:)`. Slice 9-J.
+
+```swift
+struct LyricsResolution {
+    let hasAny: Bool                       // Drives lyrics-button visibility
+    let currentSource: LyricsSource?       // nil when hasAny == false
+    let availableSources: Set<LyricsSource>
+    let availableLanguages: [String?]      // ISO 639-2 codes; nil entries for undeclared frames
+    let currentLanguage: String?
+    let content: String?                   // Lazy: nil until LyricsPanel opens
+
+    static let none: LyricsResolution      // hasAny: false, all empty
+}
+```
+
+**β strategy (9-J):** `resolveAvailability` fills everything except `content`, which is `nil` until the user opens `LyricsPanel`. At that point `resolveContent` is called and AppState stores the loaded content in an updated `LyricsResolution`. `hasAny` drives button visibility — checked synchronously on track load.
+
+`currentLanguage` is `nil` when:
+- source is `.lrc` (no language variants in 9-J), or
+- source is `.embedded` with a single variant whose `languageCode` is `nil`.
+
 ---
 
 ## 2. Error Types
@@ -301,6 +377,18 @@ enum ExtendedAttributeError: Error, LocalizedError {
 }
 ```
 
+### 2.4 LyricsServiceError
+
+Slice 9-J. Thrown by `LyricsService.resolveContent(...)` when content cannot be obtained.
+
+```swift
+enum LyricsServiceError: Error {
+    case noEmbeddedLyrics  // source == .embedded but no USLT frames present
+    case sidecarNotFound   // source == .lrc but no `.lrc` file beside the audio
+    case decodingFailed    // sidecar bytes could not be decoded with any encoding candidate
+}
+```
+
 ---
 
 ## 3. AppState
@@ -317,13 +405,12 @@ init(
     provider: CoreServiceProviding,
     userDefaults: UserDefaults = .standard,
     undoManager: UndoManager? = nil,
+    lyricsPreferenceStore: LyricsPreferenceStore? = nil,
     eqCoordinator: EQCoordinator? = nil
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance.
-
-> Note: This signature reflects 9-K scope only. 9-J also added a `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter that is not yet documented here; that gap will be closed in a separate 9-J doc sweep.
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`.
 
 ### 3.2 Services (injected)
 
@@ -332,9 +419,9 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `playbackService` | `PlaybackService` | Audio playback |
 | `tagReaderService` | `TagReaderService` | Metadata reading |
 | `fileDropService` | `FileDropService` | URL validation + directory expansion |
+| `lyricsService` | `LyricsService` | Resolves USLT + sidecar `.lrc` content; encoding detection; LRC timestamp stripping (Slice 9-J) |
+| `lyricsPreferenceStore` | `LyricsPreferenceStore` | Per-track persistence of source / encoding / language preference (Slice 9-J) |
 | `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
-
-> Note: 9-J also adds `lyricsService` and `lyricsPreferenceStore` to AppState's stored properties; those rows will be added in the separate 9-J doc sweep.
 
 ### 3.3 Published Properties
 
@@ -391,6 +478,13 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `fileInfoTrack` | `Track?` | read/write | One-shot signal requesting File Info window to open; ContentView observes and resets to nil |
 | `showPaywall` | `Bool` | read/write | Paywall sheet binding (v0.1: hidden) |
 | `paywallDismissedThisSession` | `Bool` | read/write | Session-only skip flag |
+
+#### Lyrics State (Slice 9-J)
+
+| Property | Type | Access | Description |
+|----------|------|--------|-------------|
+| `showLyrics` | `Bool` | read/write | Whether the lyrics panel is visible. Toggled by `toggleLyrics()`. Default `false`. |
+| `lyricsResolution` | `LyricsResolution?` | read/write | Lyrics availability + selected source/language for the current track. Recomputed when `currentTrack` changes; `lyricsResolution?.hasAny == true` drives lyrics-button visibility. |
 
 #### Settings
 
@@ -489,6 +583,11 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `showPaywallIfNeeded() -> Bool` | Sets showPaywall if Free tier; returns true if blocked |
 | `purchasePro() async throws` | Initiates purchase via IAPManager |
 | `refreshEntitlements() async` | Refreshes Pro status from App Store |
+| `toggleLyrics()` | Toggles `showLyrics`. Slice 9-J. |
+| `recheckLyrics()` | Re-runs lyrics availability detection for `currentTrack`; refreshes `lyricsResolution`. Slice 9-J. |
+| `setLyricsSource(_ source: LyricsSource)` | Switches active source (.embedded ↔ .lrc) for current track; persists choice via `LyricsPreferenceStore`. Slice 9-J. |
+| `setLyricsLanguage(_ languageCode: String?)` | Switches active language for current track; no-op when source is not `.embedded`. Persists. Slice 9-J. |
+| `setLyricsEncoding(_ encoding: String)` | Stores per-track encoding choice; persists. Slice 9-J. |
 
 ---
 
@@ -553,12 +652,63 @@ PlaybackService EQ control surface (`setEQEnabled` / `setEQPreamp` /
 `setEQBandGains`). Clamping (±12 dB band, ±12 dB preamp) is performed
 downstream by `AVAudioUnitEQAdapter`.
 
-### 4.5 CoreServiceProviding
+### 4.5 LyricsService
+
+```swift
+protocol LyricsService: AnyObject {
+    /// Fast synchronous check: which sources are available and what is the default.
+    /// Does NOT read file content (only checks existence).
+    func resolveAvailability(for track: Track) -> LyricsResolution
+
+    /// Slow path: read actual content for the given source/language/encoding.
+    /// - languageCode: ISO 639-2; nil uses first variant.
+    /// - encodingName: IANA charset; nil or "auto" triggers auto-detection.
+    func resolveContent(
+        for track: Track,
+        source: LyricsSource,
+        languageCode: String?,
+        encodingName: String?
+    ) throws -> String
+
+    /// Strips LRC-style timestamps and metadata headers from raw text.
+    func stripLRCTimestamps(_ raw: String) -> String
+
+    /// Auto-detects encoding using a fallback chain.
+    func detectEncoding(of data: Data) -> String.Encoding
+}
+```
+
+Implementations: `DefaultLyricsService` (production).
+
+Slice 9-J. Pure Application Layer service — does not import HarmoniaCore. The production initializer takes `preferredLanguageCode: String` for testability; default is `Locale.current.language.languageCode?.identifier ?? ""`. `DefaultLyricsService` exposes two static helper constants for non-public Swift encodings: `gb18030` (Simplified Chinese) and `big5` (Traditional Chinese), constructed via `CFStringConvertEncodingToNSStringEncoding`. Throws `LyricsServiceError` (see §2.4) when content cannot be obtained.
+
+### 4.6 LyricsPreferenceStore
+
+```swift
+protocol LyricsPreferenceStore: AnyObject {
+    /// Returns the UserDefaults key for the given track.
+    func key(for track: Track) -> String
+
+    /// Loads the persisted preference, or nil if absent or unreadable.
+    func load(for track: Track) -> LyricsPreference?
+
+    /// Saves the preference. Failures (e.g. encoder errors) are silently ignored —
+    /// preferences are best-effort and must not break playback.
+    func save(_ pref: LyricsPreference, for track: Track)
+}
+```
+
+Implementations: `DefaultLyricsPreferenceStore` (production).
+
+Slice 9-J. UserDefaults-backed, keyed by absolute file path with optional `#track=<n>` suffix for CUE virtual tracks (latent in 9-J, activated v0.15). Preferences are shared across playlists — the same file in playlist A and playlist B uses the same preference. See §8 for the full key format.
+
+### 4.7 CoreServiceProviding
 
 ```swift
 protocol CoreServiceProviding: AnyObject {
     func makePlaybackService(isProUser: Bool) -> PlaybackService
     func makeTagReaderService() -> TagReaderService
+    func makeLyricsService() -> LyricsService
     func makeEQService() -> EQService
 }
 ```
@@ -578,6 +728,7 @@ struct CoreFactory {
     init(featureFlags: CoreFeatureFlags, provider: CoreServiceProviding)
     func makePlaybackService() -> PlaybackService
     func makeTagReaderService() -> TagReaderService
+    func makeLyricsService() -> LyricsService
     func makeEQService() -> EQService
 }
 ```
@@ -759,7 +910,8 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 
     func makePlaybackService(isProUser: Bool) -> PlaybackService
     func makeTagReaderService() -> TagReaderService
-    func makeEQService() -> EQService    // closure-binds against sharedCore
+    func makeLyricsService() -> LyricsService    // returns DefaultLyricsService
+    func makeEQService() -> EQService            // closure-binds against sharedCore
 }
 ```
 
@@ -861,8 +1013,11 @@ Persisted via `UserDefaults` with `hp.` prefix keys.
 | `hp.eq.bands` | `Data` (JSON `[Float]`, 10 elements) | `EQPersistenceStore.save(_:)` |
 | `hp.eq.currentPresetName` | `String?` | `EQPersistenceStore.save(_:)` |
 | `hp.eq.customPresets` | `Data` (JSON `[EQPreset]`) | `EQPersistenceStore.save(_:)` |
+| `hp.lyrics.prefs.<absolute-file-path>[#track=<n>]` | `Data` (JSON `LyricsPreference`) | `DefaultLyricsPreferenceStore.save(_:for:)` |
 
 **EQ schema versioning (Slice 9-K).** The `hp.eq.*` keys are managed by `EQPersistenceStore` (see §5.6), independent of `AppState.saveState()`. Current schema version is `1`. On `load()`, an absent `hp.eq.schemaVersion` indicates a fresh install — the store stamps version 1 and returns `EQPersistedState.defaults`. A present version is decoded and lifted to the current version via `EQSchemaMigrator.migrate(...)` (see §5.7). Future slices (per-track EQ, user-adjustable Q) bump the version; older builds reading a newer version fall back to defaults rather than corrupting state.
+
+**Lyrics preferences (Slice 9-J).** The `hp.lyrics.prefs.*` keys are managed by `DefaultLyricsPreferenceStore` (see §4.6), independent of `AppState.saveState()`. The key prefix is `hp.lyrics.prefs.` followed by the track's absolute file path, with an optional `#track=<n>` suffix for CUE virtual tracks. The CUE suffix branch is **latent in 9-J** — `Track` does not yet carry a `cueTrackNumber` field, so the key generator currently emits the non-CUE form only; v0.15 activates the suffix when CUE support lands. Preferences are keyed by file path (and CUE track number when applicable), so the same file appearing in playlist A and playlist B uses identical preference. Failures during save (encoder errors) are silently ignored — preferences are best-effort and must not break playback.
 
 Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`.
 

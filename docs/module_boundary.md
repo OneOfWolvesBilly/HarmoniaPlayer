@@ -38,8 +38,11 @@ At a high level, the codebase is divided into the following logical modules.
      observable state. Lives in `Shared/Models/` parallel to `AppState`
      (state-bearing observable, not stateless service). Slice 9-K. See §4.3.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
-     `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`, etc.)
-   - App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) — defined here
+     `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
+     `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
+     `LyricsResolution`, etc.)
+   - App-layer service protocols (`PlaybackService`, `TagReaderService`,
+     `EQService`, `LyricsService`, `LyricsPreferenceStore`) — defined here
      so that `AppState` can depend on them without importing HarmoniaCore.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
      `ErrorReportService`, `EQPersistenceStore`, `EQSchemaMigrator` (pure Swift utilities
@@ -276,6 +279,55 @@ constructed `HarmoniaCore.PlaybackService` in `sharedCore` so
 service instance regardless of call order. See §6.3 for the full constructor
 pattern.
 
+### 4.4 Lyrics State and Tag Mapping
+
+Slice 9-J introduced three boundary nuances that warrant explicit clarification.
+This section is structured to parallel §4.3 so the EQ vs lyrics design
+choices can be read side by side.
+
+**(a) Why lyrics state lives directly on `AppState`, not in a parallel coordinator.**
+Unlike EQ, which has five `@Published` properties plus preset / clamping /
+custom-state / persistence logic that justify a dedicated `EQCoordinator`,
+lyrics state in 9-J consists of only two `@Published` properties on
+`AppState` — `showLyrics: Bool` and `lyricsResolution: LyricsResolution?` —
+plus five mutator methods (`toggleLyrics`, `recheckLyrics`, `setLyricsSource`,
+`setLyricsLanguage`, `setLyricsEncoding`). There is no preset model, no
+clamping, and no in-memory aggregation across tracks; the only persisted
+data is per-track `LyricsPreference` handled by `LyricsPreferenceStore`.
+Pulling this into a `LyricsCoordinator` would add a layer without removing
+state from `AppState`, so the design keeps it inline. If the lyrics surface
+grows (multi-language editing, dynamic karaoke timing), splitting out a
+coordinator becomes the same kind of refactor that produced `EQCoordinator`
+and would follow §4.3(a)'s rule of thumb.
+
+**(b) Why `LyricsService` does not wrap a HarmoniaCore port.**
+`TagReaderService` wraps `HarmoniaCore.TagReaderPort` because reading audio
+metadata is fundamentally a HarmoniaCore concern. `LyricsService` is
+different on both inputs:
+
+- USLT lyrics arrive on `Track.lyrics` already mapped from
+  `TagBundle.lyrics` by `HarmoniaTagReaderAdapter` — by the time
+  `LyricsService` sees them, they are pure Application Layer values.
+- Sidecar `.lrc` files are file-system artefacts beside the audio file.
+  Reading them is `Foundation`-only (`FileManager` + `Data` + encoding
+  detection). HarmoniaCore offers no value here because there is no
+  cross-platform decoding logic to share.
+
+Consequently `LyricsService` lives entirely in the Application Layer and
+`DefaultLyricsService` does not `import HarmoniaCore`. This also keeps the
+"three import slots" rule from §4.3(b) intact — adding lyrics did not
+require a new Integration Layer file.
+
+**(c) `LyricsLanguageVariant` mapping at the boundary.**
+`HarmoniaCore.LyricsLanguageVariant` and HP `LyricsLanguageVariant` are
+intentionally parallel types with the same shape (`languageCode: String?` +
+`text: String`). The mapping happens inside `HarmoniaTagReaderAdapter` —
+already one of the three Integration Layer files allowed to
+`import HarmoniaCore` — extending the existing `TagBundle → Track`
+translation. AppState and views never see the HarmoniaCore type. This is
+the same pattern as §4.1 TagReaderService usage; lyrics simply add a new
+field to the mapping without changing the boundary topology.
+
 ---
 
 ## 5. Forbidden Dependencies (Examples)
@@ -401,6 +453,10 @@ struct CoreFactory {
     func makeTagReaderService() -> TagReaderService {
         return provider.makeTagReaderService()
     }
+
+    func makeLyricsService() -> LyricsService {
+        return provider.makeLyricsService()
+    }
 }
 ```
 
@@ -423,6 +479,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 
     func makeTagReaderService() -> TagReaderService {
         HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
+    }
+
+    func makeLyricsService() -> LyricsService {
+        // Pure Application Layer — no HarmoniaCore type to bind, so no
+        // closure-binding pattern is needed (unlike makeEQService below).
+        // See §4.4(b) for the rationale.
+        DefaultLyricsService()
     }
 
     func makeEQService() -> EQService {
@@ -559,6 +622,11 @@ struct PlayerView: View {
   surface via closure binding inside `HarmoniaCoreProvider`. `HarmoniaEQAdapter`
   itself does not import HarmoniaCore — the closure-binding pattern keeps the
   Core type surface confined to the provider.
+- **LyricsService** is pure Application Layer — `DefaultLyricsService` does
+  not import HarmoniaCore. USLT lyrics arrive on `Track.lyrics` already
+  mapped by `HarmoniaTagReaderAdapter` from `TagBundle.lyrics`; sidecar
+  `.lrc` files are read directly via `Foundation` with encoding detection.
+  See §4.4 for the boundary rationale.
 
 Any pull request that crosses these boundaries (e.g. a view that imports
 HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using audio Ports)

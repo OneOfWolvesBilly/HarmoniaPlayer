@@ -36,7 +36,7 @@ HarmoniaPlayer is designed to work together with the following repositories:
 
     * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, ClockPort, LoggerPort, FileAccessPort, EQPort)
     * Services (PlaybackService)
-    * Models (TagBundle, CoreError, StreamInfo)
+    * Models (TagBundle, CoreError, StreamInfo, LyricsLanguageVariant)
 
 **Important:** HarmoniaPlayer never bypasses HarmoniaCore. All audio playback, decoding, metadata reading, and error behavior is delegated to HarmoniaCore-Swift.
 
@@ -118,9 +118,9 @@ flowchart TB
       subgraph ui[UI Layer]
         views[SwiftUI Views
 PlayerView, PlaylistView, ContentView,
-FileInfoView, PaywallView, MiniPlayerView,
-SettingsView, HarmoniaPlayerCommands,
-EQView, EQWindow]
+FileInfoView, LyricsPanel, PaywallView,
+MiniPlayerView, SettingsView,
+HarmoniaPlayerCommands, EQView, EQWindow]
       end
 
       subgraph appLayer[Application Layer]
@@ -195,7 +195,7 @@ CoreAudio / AVAudioEngine)]
 - `EQCoordinator` — parallel `@MainActor` `ObservableObject` owning EQ live
   state and presets; held as `let eqCoordinator` on `AppState`. Views read
   EQ state via `appState.eqCoordinator.…` (Slice 9-K)
-- App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) defined here
+- App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`, `LyricsService`, `LyricsPreferenceStore`) defined here
 - Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`, `EQPersistenceStore`, `EQSchemaMigrator`)
 - **May depend on:** App-layer service protocols, CoreFactory, IAPManager
 - **Must not depend on:** HarmoniaCore-Swift, Ports, Adapters, platform-specific APIs
@@ -262,6 +262,8 @@ All services are injected via constructors:
 final class AppState: ObservableObject {
     let playbackService: PlaybackService
     let tagReaderService: TagReaderService
+    let lyricsService: LyricsService
+    let lyricsPreferenceStore: LyricsPreferenceStore
     let eqCoordinator: EQCoordinator
     private let iapManager: IAPManager
 
@@ -269,6 +271,7 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
+        lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil,
         ...
     ) {
@@ -277,6 +280,9 @@ final class AppState: ObservableObject {
         let coreFactory = CoreFactory(featureFlags: featureFlags, provider: provider)
         self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
+        self.lyricsService = coreFactory.makeLyricsService()
+        self.lyricsPreferenceStore = lyricsPreferenceStore
+            ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
         self.eqCoordinator = eqCoordinator
             ?? EQCoordinator(
                 service: coreFactory.makeEQService(),
@@ -286,17 +292,12 @@ final class AppState: ObservableObject {
 }
 ```
 
-> Note: This signature reflects 9-K scope only. 9-J also adds a
-> `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter and two
-> services (`lyricsService`, `lyricsPreferenceStore`) that are not yet
-> documented here; that gap will be closed in a separate 9-J doc sweep.
-
 **Note:** AppState is split across multiple extension files for maintainability:
 `AppState.swift` (properties + init), `AppState+Playlist.swift`, `AppState+Playback.swift`,
 `AppState+Navigation.swift`, `AppState+M3U8.swift`.
 
 This enables:
-- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeEQService`, `MockIAPManager`)
+- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeLyricsService`, `FakeEQService`, `MockIAPManager`)
 - Runtime configuration (Free vs Pro via `CoreFeatureFlags`)
 - Clear dependency graph
 

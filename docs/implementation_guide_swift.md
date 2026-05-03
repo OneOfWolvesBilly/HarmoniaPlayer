@@ -81,6 +81,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         HarmoniaTagReaderAdapter(port: AVMetadataTagReaderAdapter())
     }
 
+    func makeLyricsService() -> LyricsService {
+        // Pure Application Layer — no HarmoniaCore type to bind, so no
+        // closure-binding pattern is needed (unlike makeEQService below).
+        // See module_boundary.md §4.4(b) for the rationale.
+        DefaultLyricsService()
+    }
+
     func makeEQService() -> EQService {
         // Closure binding — keeps HarmoniaCore types out of HarmoniaEQAdapter.
         let core = sharedCore ?? buildCore()
@@ -253,6 +260,10 @@ struct CoreFactory {
         provider.makeTagReaderService()
     }
 
+    func makeLyricsService() -> LyricsService {
+        provider.makeLyricsService()
+    }
+
     func makeEQService() -> EQService {
         provider.makeEQService()
     }
@@ -350,6 +361,12 @@ final class AppState: ObservableObject {
     let tagReaderService: TagReaderService
     let fileDropService: FileDropService
 
+    // Lyrics services (Slice 9-J). LyricsService resolves USLT + sidecar
+    // `.lrc` content; LyricsPreferenceStore persists per-track source /
+    // encoding / language choice keyed by absolute file path.
+    let lyricsService: LyricsService
+    let lyricsPreferenceStore: LyricsPreferenceStore
+
     // Owns observable EQ state; views read EQ via `appState.eqCoordinator.…`
     // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
     let eqCoordinator: EQCoordinator
@@ -369,11 +386,17 @@ final class AppState: ObservableObject {
     @Published var playbackState: PlaybackState = .idle
     @Published var lastError: PlaybackError?
 
+    // Lyrics state (Slice 9-J). Lives directly on AppState rather than in a
+    // parallel coordinator — see module_boundary.md §4.4(a) for rationale.
+    @Published var showLyrics: Bool = false
+    @Published var lyricsResolution: LyricsResolution?
+
     init(
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
         undoManager: UndoManager? = nil,
+        lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
         self.iapManager   = iapManager
@@ -386,6 +409,12 @@ final class AppState: ObservableObject {
         self.playbackService  = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService  = FileDropService()
+
+        // Lyrics — production builds the default store backed by the same
+        // userDefaults; tests inject a stub via the parameter.
+        self.lyricsService = coreFactory.makeLyricsService()
+        self.lyricsPreferenceStore = lyricsPreferenceStore
+            ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
 
         // EQ coordinator — injected variant for tests, default for production.
         // The default uses the same provider's EQService and a store backed by
@@ -401,7 +430,7 @@ final class AppState: ObservableObject {
         self.playlists      = [Playlist(name: "Playlist 1")]
         self.userDefaults   = userDefaults
         // ... (remaining init: undoManager, languageBundle, restoreState(),
-        //      Combine sinks for replayGainMode/selectedLanguage)
+        //      Combine sinks for replayGainMode/selectedLanguage/lyricsResolution)
     }
 
     // Xcode 26 beta workaround — see development_guide.md §8.6.
@@ -410,11 +439,6 @@ final class AppState: ObservableObject {
 ```
 
 **Wiring flow:** `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
-
-> Note: This signature reflects 9-K scope only. 9-J also added a
-> `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter and two
-> services (`lyricsService`, `lyricsPreferenceStore`) that are not yet
-> documented here; that gap will be closed in a separate 9-J doc sweep.
 
 ### 3.2 Async Playback Methods
 
@@ -807,9 +831,11 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 
 | Double | Replaces | Notable features |
 |--------|----------|------------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService`, `TagReaderService`, and `FakeEQService` stubs |
+| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, and `FakeEQService` stubs |
 | `FakePlaybackService` | `PlaybackService` | Call counts, error stubs, `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs, per-URL error stubs, configurable schema version |
+| `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). Avoids `DefaultLyricsService`'s Xcode 26 beta runtime double-free when many short-lived instances coexist |
+| `StubLyricsService` | `LyricsService` | Configurable: `stubbedResolution` dictates `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Defined inline in `FakeCoreProvider.swift` (Slice 9-J) |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last-value capture; defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, call counts |
 
@@ -906,6 +932,21 @@ let mockIAP = MockIAPManager(isProUnlocked: false)
 mockIAP.purchaseResult = .success
 // or
 mockIAP.purchaseResult = .failure(.userCancelled)
+
+// Stub a lyrics resolution (Slice 9-J)
+let stubLyrics = StubLyricsService()
+stubLyrics.stubbedResolution = LyricsResolution(
+    hasAny: true,
+    currentSource: .embedded,
+    availableSources: [.embedded],
+    availableLanguages: ["eng"],
+    currentLanguage: "eng",
+    content: nil
+)
+let provider = FakeCoreProvider(lyricsService: stubLyrics)
+// ... drive AppState ...
+XCTAssertEqual(stubLyrics.resolveAvailabilityCallCount, 1)
+XCTAssertEqual(stubLyrics.lastResolvedTrack?.id, expectedTrack.id)
 ```
 
 ---
