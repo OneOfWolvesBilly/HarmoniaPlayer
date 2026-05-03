@@ -34,11 +34,16 @@ At a high level, the codebase is divided into the following logical modules.
    - SwiftUI views under `Shared/Views/` and platform-specific view wrappers.
 2. **Application Layer (State & Models)**
    - `AppState` (central observable state, split across 5 files)
-   - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`, etc.)
+   - `EQCoordinator` — `@MainActor` `ObservableObject` owning all EQ-related
+     observable state. Lives in `Shared/Models/` parallel to `AppState`
+     (state-bearing observable, not stateless service). Slice 9-K. See §4.3.
+   - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
+     `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`, etc.)
    - App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) — defined here
      so that `AppState` can depend on them without importing HarmoniaCore.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
-     `ErrorReportService` (pure Swift utilities with no HarmoniaCore dependency).
+     `ErrorReportService`, `EQPersistenceStore`, `EQSchemaMigrator` (pure Swift utilities
+     with no HarmoniaCore dependency).
    - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
 3. **Integration Layer** (`import HarmoniaCore` allowed — still only these 3 files)
    - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
@@ -55,10 +60,11 @@ At a high level, the codebase is divided into the following logical modules.
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
 5. **Ports (HarmoniaCore-Swift)**
-   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`, `TagWriterPort`
+   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`, `TagWriterPort`, `EQPort`
 6. **Platform Adapters (HarmoniaCore-Swift)**
    - `AVAssetReaderDecoderAdapter`
    - `AVAudioEngineOutputAdapter`
+   - `AVAudioUnitEQAdapter`
    - `AVMetadataTagReaderAdapter`
    - `AVMutableTagWriterAdapter`
    - `MonotonicClockAdapter`
@@ -225,6 +231,51 @@ func mapToPlaybackError(_ error: Error) -> PlaybackError {
 
 **See:** [HarmoniaCore Error Models](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/specs/05_models.md)
 
+### 4.3 EQ Coordinator Placement and Signal Chain Wiring
+
+Slice 9-K introduced three boundary nuances that warrant explicit clarification.
+
+**(a) Why `EQCoordinator` lives in `Shared/Models/`, not `Shared/Services/`.**
+`EQCoordinator` is a `@MainActor` `ObservableObject` that owns five `@Published`
+properties (`isEnabled`, `bandGains`, `preamp`, `currentPresetName`,
+`customPresets`). It is *state-bearing*, not a stateless utility — the same
+reason `AppState` lives in `Shared/Models/`. By contrast, `EQPersistenceStore`
+and `EQSchemaMigrator` are stateless and live in `Shared/Services/`. The
+"Models vs Services" split inside the Application Layer is therefore:
+observable state owners → Models, pure utilities and protocol implementations
+→ Services. AppState holds a single `let eqCoordinator: EQCoordinator`
+reference; views read EQ state via `appState.eqCoordinator.…` and AppState
+itself has no EQ-specific `@Published` properties.
+
+**(b) Why `HarmoniaEQAdapter` does not consume one of the three import slots.**
+The Integration Layer rule "`import HarmoniaCore` is restricted to three
+production files" still holds: `HarmoniaCoreProvider`,
+`HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`.
+`HarmoniaEQAdapter` lives in `Shared/Services/` for organisational reasons
+(grouped with the other adapter wrappers) but is bound to the HarmoniaCore EQ
+control surface via three closure hooks supplied by
+`HarmoniaCoreProvider.makeEQService()`. Closures keep all `HarmoniaCore.*`
+type references confined to the provider, so `HarmoniaEQAdapter` itself does
+not `import HarmoniaCore`. This is what makes `EQServiceTests` able to verify
+forward semantics without crossing the module boundary.
+
+**(c) Same-instance constraint at `HarmoniaCoreProvider`.**
+The `EQPort` instance constructed in `buildCore()` MUST be passed to BOTH the
+`AudioOutputPort` adapter AND `DefaultPlaybackService`:
+
+- `AudioOutputPort` splices the EQ node into the live audio chain during
+  `configure(...)`.
+- `DefaultPlaybackService` forwards the control surface
+  (`setEQEnabled` / `setEQPreamp` / `setEQBandGains`) to the same node.
+
+If two distinct `EQPort` instances were created (one for audio splice, one
+for control), slider movements would mutate a node that is not in the audio
+chain and have no audible effect. `HarmoniaCoreProvider` further caches the
+constructed `HarmoniaCore.PlaybackService` in `sharedCore` so
+`makePlaybackService(isProUser:)` and `makeEQService()` both see the same
+service instance regardless of call order. See §6.3 for the full constructor
+pattern.
+
 ---
 
 ## 5. Forbidden Dependencies (Examples)
@@ -389,8 +440,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
         let clock   = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio   = AVAudioEngineOutputAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
+        // The same `eq` instance is handed to both the audio output adapter
+        // (which splices its node into the real signal chain during
+        // configure) AND DefaultPlaybackService (which forwards the EQ
+        // control surface). Sharing one instance is what makes
+        // setEQEnabled / setEQPreamp / setEQBandGains audible — see §4.3(c).
+        let audio   = AVAudioEngineOutputAdapter(logger: logger, eq: eq)
         return DefaultPlaybackService(
             decoder: decoder, audio: audio, clock: clock, logger: logger, eq: eq
         )
@@ -401,6 +457,9 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 - All platform-specific details are contained here.
 - The rest of the app only sees `PlaybackService`, `TagReaderService`, and
   `EQService` interfaces.
+- The `eq` instance must be constructed **before** `audio` so the audio
+  adapter can adopt it during initialisation. Reversing the order would
+  compile but leave the audio chain without an EQ node.
 
 ---
 

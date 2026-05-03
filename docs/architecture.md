@@ -34,7 +34,7 @@ HarmoniaPlayer is designed to work together with the following repositories:
   * Contains both the Swift (`apple-swift/`) and C++ (`linux-cpp/`, deferred) implementations side by side.
   * Provides the cross-platform architecture and contracts for:
 
-    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, ClockPort, LoggerPort, FileAccessPort)
+    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, ClockPort, LoggerPort, FileAccessPort, EQPort)
     * Services (PlaybackService)
     * Models (TagBundle, CoreError, StreamInfo)
 
@@ -119,7 +119,8 @@ flowchart TB
         views[SwiftUI Views
 PlayerView, PlaylistView, ContentView,
 FileInfoView, PaywallView, MiniPlayerView,
-SettingsView, HarmoniaPlayerCommands]
+SettingsView, HarmoniaPlayerCommands,
+EQView, EQWindow]
       end
 
       subgraph appLayer[Application Layer]
@@ -127,6 +128,9 @@ SettingsView, HarmoniaPlayerCommands]
 @MainActor ObservableObject
 split: +Playlist, +Playback,
 +Navigation, +M3U8]
+        eqCoordinator[EQCoordinator
+@MainActor ObservableObject
+EQ live state + presets]
       end
 
       subgraph integration[Integration Layer]
@@ -136,7 +140,8 @@ constructs Core services]
 Pro unlock via StoreKit 2]
         adapWrappers[Adapter Wrappers
 HarmoniaPlaybackServiceAdapter
-HarmoniaTagReaderAdapter]
+HarmoniaTagReaderAdapter
+HarmoniaEQAdapter]
       end
     end
 
@@ -145,10 +150,12 @@ HarmoniaTagReaderAdapter]
       ports[Ports
 DecoderPort, AudioOutputPort,
 TagReaderPort, TagWriterPort,
-ClockPort, LoggerPort, FileAccessPort]
+ClockPort, LoggerPort, FileAccessPort,
+EQPort]
       adapters[Apple Adapters
 AVAssetReaderDecoderAdapter,
 AVAudioEngineOutputAdapter,
+AVAudioUnitEQAdapter,
 AVMetadataTagReaderAdapter,
 AVMutableTagWriterAdapter,
 MonotonicClockAdapter,
@@ -161,6 +168,7 @@ SandboxFileAccessAdapter]
 CoreAudio / AVAudioEngine)]
 
     views --> appState
+    appState --> eqCoordinator
 
     appState --> coreFactory
     appState --> iap
@@ -184,8 +192,11 @@ CoreAudio / AVAudioEngine)]
 
 **Application Layer (AppState):**
 - Central observable state (`AppState`, split across 5 files)
+- `EQCoordinator` — parallel `@MainActor` `ObservableObject` owning EQ live
+  state and presets; held as `let eqCoordinator` on `AppState`. Views read
+  EQ state via `appState.eqCoordinator.…` (Slice 9-K)
 - App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`) defined here
-- Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`)
+- Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`, `EQPersistenceStore`, `EQSchemaMigrator`)
 - **May depend on:** App-layer service protocols, CoreFactory, IAPManager
 - **Must not depend on:** HarmoniaCore-Swift, Ports, Adapters, platform-specific APIs
 
@@ -239,7 +250,7 @@ HarmoniaPlayer follows the same Ports & Adapters pattern as HarmoniaCore:
 1. **UI depends on AppState only** — No direct service access, no ViewModels
 2. **AppState uses app-layer service protocols** — `PlaybackService`, `TagReaderService` defined in HarmoniaPlayer
 3. **CoreFactory constructs services** — Wires Ports to Adapters via `CoreServiceProviding`
-4. **Adapter wrappers at the boundary** — `HarmoniaPlaybackServiceAdapter` maps `CoreError` → `PlaybackError`; `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track`
+4. **Adapter wrappers at the boundary** — `HarmoniaPlaybackServiceAdapter` maps `CoreError` → `PlaybackError`; `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track`; `HarmoniaEQAdapter` bridges the Core PlaybackService EQ control surface to `EQService` via closure binding (does **not** `import HarmoniaCore`)
 5. **`import HarmoniaCore` restricted to 3 files** — Everything else uses app-layer abstractions
 
 ### 6.2 Dependency Injection
@@ -251,24 +262,41 @@ All services are injected via constructors:
 final class AppState: ObservableObject {
     let playbackService: PlaybackService
     let tagReaderService: TagReaderService
+    let eqCoordinator: EQCoordinator
     private let iapManager: IAPManager
 
-    init(iapManager: IAPManager, provider: CoreServiceProviding, ...) {
+    init(
+        iapManager: IAPManager,
+        provider: CoreServiceProviding,
+        userDefaults: UserDefaults = .standard,
+        eqCoordinator: EQCoordinator? = nil,
+        ...
+    ) {
         self.iapManager = iapManager
         let featureFlags = CoreFeatureFlags(iapManager: iapManager)
         let coreFactory = CoreFactory(featureFlags: featureFlags, provider: provider)
         self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
+        self.eqCoordinator = eqCoordinator
+            ?? EQCoordinator(
+                service: coreFactory.makeEQService(),
+                store:   EQPersistenceStore(defaults: userDefaults)
+            )
     }
 }
 ```
+
+> Note: This signature reflects 9-K scope only. 9-J also adds a
+> `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter and two
+> services (`lyricsService`, `lyricsPreferenceStore`) that are not yet
+> documented here; that gap will be closed in a separate 9-J doc sweep.
 
 **Note:** AppState is split across multiple extension files for maintainability:
 `AppState.swift` (properties + init), `AppState+Playlist.swift`, `AppState+Playback.swift`,
 `AppState+Navigation.swift`, `AppState+M3U8.swift`.
 
 This enables:
-- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `MockIAPManager`)
+- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeEQService`, `MockIAPManager`)
 - Runtime configuration (Free vs Pro via `CoreFeatureFlags`)
 - Clear dependency graph
 

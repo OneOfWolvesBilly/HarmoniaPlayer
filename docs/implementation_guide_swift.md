@@ -96,8 +96,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
         let clock   = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio   = AVAudioEngineOutputAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
+        // The same `eq` instance is handed to BOTH the audio output adapter
+        // (which splices its node into the live signal chain during configure)
+        // AND DefaultPlaybackService (which forwards the EQ control surface).
+        // Sharing one instance is what makes setEQEnabled / setEQPreamp /
+        // setEQBandGains audible — see module_boundary.md §4.3(c).
+        let audio   = AVAudioEngineOutputAdapter(logger: logger, eq: eq)
         return DefaultPlaybackService(
             decoder: decoder,
             audio:   audio,
@@ -294,6 +299,9 @@ final class HarmoniaEQAdapter: EQService {
     func setEnabled(_ enabled: Bool)    { setEnabledHook(enabled) }
     func setPreamp(_ db: Float)         { setPreampHook(db) }
     func setBandGains(_ gains: [Float]) { setBandGainsHook(gains) }
+
+    // Xcode 26 beta workaround — see development_guide.md §8.6.
+    nonisolated deinit { }
 }
 ```
 
@@ -304,10 +312,15 @@ final class HarmoniaEQAdapter: EQService {
   from `HarmoniaCoreProvider.makeEQService()` and capture the non-Sendable
   `HarmoniaCore.PlaybackService` without crossing an isolation boundary, so
   no Sendable warning is emitted.
-- The class has no explicit `deinit`, sidestepping the Xcode 26 beta
-  `swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that bites
-  `@MainActor` classes with explicit deinit. The compiler-synthesised deinit
-  walks the fast path.
+- The class declares an **explicit** `nonisolated deinit { }` to sidestep
+  the Xcode 26 beta `swift_task_deinitOnExecutorImpl` TaskLocal teardown
+  crash. Earlier comments in this section claimed *"no explicit deinit
+  avoids the bug"* — that was wrong: it is the **compiler-synthesised**
+  deinit on an inferred-`@MainActor` class that fires the bug, and only the
+  explicit `nonisolated deinit { }` forces deallocation down the synchronous
+  ARC path. The same pattern is applied to `EQCoordinator`, `AppState`, and
+  the test-side `FakeEQService` — see `development_guide.md` §8.6 for the
+  full rationale and inventory.
 
 ---
 
@@ -337,6 +350,10 @@ final class AppState: ObservableObject {
     let tagReaderService: TagReaderService
     let fileDropService: FileDropService
 
+    // Owns observable EQ state; views read EQ via `appState.eqCoordinator.…`
+    // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
+    let eqCoordinator: EQCoordinator
+
     // Dependencies kept private
     private let iapManager: IAPManager
     private let userDefaults: UserDefaults
@@ -356,7 +373,8 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
-        undoManager: UndoManager? = nil
+        undoManager: UndoManager? = nil,
+        eqCoordinator: EQCoordinator? = nil
     ) {
         self.iapManager   = iapManager
         self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
@@ -369,6 +387,16 @@ final class AppState: ObservableObject {
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService  = FileDropService()
 
+        // EQ coordinator — injected variant for tests, default for production.
+        // The default uses the same provider's EQService and a store backed by
+        // the same `userDefaults` instance, so coordinator state and persisted
+        // state stay in sync from t=0.
+        self.eqCoordinator = eqCoordinator
+            ?? EQCoordinator(
+                service: coreFactory.makeEQService(),
+                store:   EQPersistenceStore(defaults: userDefaults)
+            )
+
         self.isProUnlocked  = iapManager.isProUnlocked
         self.playlists      = [Playlist(name: "Playlist 1")]
         self.userDefaults   = userDefaults
@@ -376,13 +404,17 @@ final class AppState: ObservableObject {
         //      Combine sinks for replayGainMode/selectedLanguage)
     }
 
-    // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
-    // Required on all @MainActor classes deallocated in test contexts.
+    // Xcode 26 beta workaround — see development_guide.md §8.6.
     nonisolated deinit {}
 }
 ```
 
 **Wiring flow:** `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
+
+> Note: This signature reflects 9-K scope only. 9-J also added a
+> `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter and two
+> services (`lyricsService`, `lyricsPreferenceStore`) that are not yet
+> documented here; that gap will be closed in a separate 9-J doc sweep.
 
 ### 3.2 Async Playback Methods
 
@@ -625,6 +657,11 @@ struct HarmoniaPlayerApp: App {
         }
         .windowResizability(.contentSize)
 
+        Window("Equalizer", id: "equalizer-window") {
+            EQWindow().environmentObject(appState)
+        }
+        .windowResizability(.contentMinSize)
+
         Settings {
             SettingsView().environmentObject(appState)
         }
@@ -770,9 +807,10 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 
 | Double | Replaces | Notable features |
 |--------|----------|------------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService` and `TagReaderService` stubs |
+| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService`, `TagReaderService`, and `FakeEQService` stubs |
 | `FakePlaybackService` | `PlaybackService` | Call counts, error stubs, `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs, per-URL error stubs, configurable schema version |
+| `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last-value capture; defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, call counts |
 
 ### 6.2 @MainActor Test Classes (Swift 6)

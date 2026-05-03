@@ -216,6 +216,61 @@ struct CoreFeatureFlags: Sendable {
 }
 ```
 
+### 1.11 EQBand
+
+Static configuration of one band of the 10-band graphic EQ. Slice 9-K.
+
+```swift
+struct EQBand: Codable, Equatable, Sendable {
+    let frequency: Float    // Centre frequency in Hz
+    let defaultGain: Float  // Default gain in dB applied on reset to flat
+}
+```
+
+User-editable per-band state lives in `EQBandState`; this struct only carries the immutable band layout.
+
+### 1.12 EQBandState
+
+Mutable per-band state stored in presets and in `EQCoordinator.bandGains`. Slice 9-K.
+
+```swift
+struct EQBandState: Codable, nonisolated Equatable, Sendable {
+    var gain: Float    // Band gain in dB; range ±12 dB (clamped by EQCoordinator)
+    var q: Float       // Q factor; 9-K uses fixed 0.7071 across bands
+}
+```
+
+The `q` field is included for forward compatibility with future variable-Q designs; in 9-K it is informational only.
+
+### 1.13 EQPreset
+
+A named EQ configuration: 10 band states + preamp. Slice 9-K.
+
+```swift
+struct EQPreset: Codable, nonisolated Equatable, Sendable, Identifiable {
+    let name: String          // Display name; built-in names are reserved
+    let bands: [EQBandState]  // Exactly 10 entries, ordered low → high
+    let preamp: Float         // Preamp gain in dB; range ±12 dB
+    let isBuiltin: Bool       // true for built-in, false for user-saved
+
+    var id: String { name }
+}
+```
+
+Built-in presets have `isBuiltin = true` and live in `EQPresets.builtin`. Custom presets are persisted via `EQPersistenceStore` with `isBuiltin = false`.
+
+### 1.14 EQPresets
+
+Statically-defined built-in presets. Slice 9-K.
+
+```swift
+enum EQPresets {
+    static let builtin: [EQPreset]  // 8 presets in display order
+}
+```
+
+Built-in set: `Flat`, `Rock`, `Pop`, `Jazz`, `Classical`, `Vocal`, `Bass Boost`, `Treble Boost`. Every preset uses preamp 0 dB and Q 0.7071. Band order (low → high): 32, 64, 125, 250, 500, 1k, 2k, 4k, 8k, 16k Hz.
+
 ---
 
 ## 2. Error Types
@@ -261,11 +316,14 @@ init(
     iapManager: IAPManager,
     provider: CoreServiceProviding,
     userDefaults: UserDefaults = .standard,
-    undoManager: UndoManager? = nil
+    undoManager: UndoManager? = nil,
+    eqCoordinator: EQCoordinator? = nil
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance.
+
+> Note: This signature reflects 9-K scope only. 9-J also added a `lyricsPreferenceStore: LyricsPreferenceStore? = nil` parameter that is not yet documented here; that gap will be closed in a separate 9-J doc sweep.
 
 ### 3.2 Services (injected)
 
@@ -274,6 +332,9 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `playbackService` | `PlaybackService` | Audio playback |
 | `tagReaderService` | `TagReaderService` | Metadata reading |
 | `fileDropService` | `FileDropService` | URL validation + directory expansion |
+| `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
+
+> Note: 9-J also adds `lyricsService` and `lyricsPreferenceStore` to AppState's stored properties; those rows will be added in the separate 9-J doc sweep.
 
 ### 3.3 Published Properties
 
@@ -588,6 +649,95 @@ The caller (`ContentView`) is responsible for reading runtime versions
 This split keeps `ErrorReportService` itself free of side effects and
 trivially unit-testable.
 
+### 5.6 EQPersistenceStore
+
+**Location:** `Shared/Services/EQPersistenceStore.swift`
+
+**Purpose:** UserDefaults-backed persistence for EQ state (enabled / preamp / band gains / current preset name / custom presets) with explicit schema versioning. Slice 9-K. `nonisolated final class`; safe to construct from any actor. Does not import HarmoniaCore.
+
+```swift
+/// Snapshot of all EQ state persisted to UserDefaults.
+struct EQPersistedState: Codable, nonisolated Equatable, Sendable {
+    var isEnabled: Bool
+    var preamp: Float
+    var bandGains: [Float]
+    var currentPresetName: String?
+    var customPresets: [EQPreset]
+
+    nonisolated static let defaults: EQPersistedState
+}
+
+/// Current schema version this build of HarmoniaPlayer writes.
+nonisolated let eqCurrentSchemaVersion: Int  // = 1 in 9-K
+
+nonisolated final class EQPersistenceStore {
+    init(defaults: UserDefaults = .standard)
+
+    func save(_ state: EQPersistedState)
+    func load() -> EQPersistedState
+    func currentSchemaVersion() -> Int?  // nil on fresh install
+}
+```
+
+`save(_:)` writes all keys atomically with the current schema version. `load()` returns `EQPersistedState.defaults` on fresh install (and stamps the schema version), otherwise decodes and migrates via `EQSchemaMigrator` to the current version. See §8 for the full key list.
+
+### 5.7 EQSchemaMigrator
+
+**Location:** `Shared/Services/EQSchemaMigrator.swift`
+
+**Purpose:** Forward migration of EQ persisted state between schema versions. Slice 9-K. `nonisolated enum`; pure transformation, no I/O.
+
+```swift
+nonisolated enum EQSchemaMigrator {
+    static func migrate(
+        from fromVersion: Int,
+        to toVersion: Int,
+        state: EQPersistedState
+    ) -> EQPersistedState
+}
+```
+
+9-K ships only schema version 1, so the migrator currently only handles `1 → 1` (identity) and falls through to `EQPersistedState.defaults` for any unsupported version. Future slices (e.g. v0.15 per-track EQ, v0.15/v0.2 user-adjustable Q) bump the version and add migration steps here.
+
+### 5.8 EQCoordinator
+
+**Location:** `Shared/Models/EQCoordinator.swift`
+
+**Purpose:** `@MainActor` `ObservableObject` that owns all EQ-related observable state for the UI layer. Coordinates between `EQService` (the Application Layer view of HarmoniaCore's EQ control surface) and `EQPersistenceStore`. Slice 9-K. Lives in `Shared/Models/` (not `Services/`) because, like `AppState`, it is a state-bearing observable object rather than a stateless service. AppState holds a single `let eqCoordinator: EQCoordinator` and views read EQ state via `appState.eqCoordinator.…`; AppState itself has no EQ-specific `@Published` properties or methods.
+
+```swift
+@MainActor
+final class EQCoordinator: ObservableObject {
+
+    @Published private(set) var isEnabled: Bool
+    @Published private(set) var bandGains: [Float]          // 10 entries, low → high
+    @Published private(set) var preamp: Float               // dB, ±12
+    @Published private(set) var currentPresetName: String?  // nil = custom state
+    @Published private(set) var customPresets: [EQPreset]
+
+    init(service: EQService, store: EQPersistenceStore)
+
+    func setEnabled(_ enabled: Bool)
+    func setBand(index: Int, gain: Float)        // clears currentPresetName
+    func setPreamp(_ db: Float)                  // clears currentPresetName
+    func selectPreset(_ name: String)            // built-in or custom
+    func saveAsCustomPreset(name: String) throws // EQCoordinatorError.nameCollidesWithBuiltin
+    func deleteCustomPreset(_ name: String)
+}
+
+enum EQCoordinatorError: Error {
+    case nameCollidesWithBuiltin
+}
+```
+
+**Clamping:** band gains and preamp are clamped to ±12 dB on assignment, mirroring the downstream clamp in `AVAudioUnitEQAdapter` so coordinator state and service state agree on what was stored.
+
+**Custom-state semantics:** `currentPresetName` is `nil` whenever the live state does not match any saved preset. Both `setBand(index:gain:)` and `setPreamp(_:)` clear it, because `EQPreset` defines a preset as bands + preamp together — any change to either makes the live state diverge from the saved preset.
+
+**Init side effect:** the constructor pushes the loaded state to the injected `EQService` (`setEnabled`, `setPreamp`, `setBandGains`) so the audio chain matches the coordinator's published state from t=0.
+
+**Xcode 26 beta workaround:** declared with `nonisolated deinit { }`. With module-level `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the synthesised deinit on an inferred-MainActor class routes deallocation through `swift_task_deinitOnExecutorImpl`, which crashes in Xcode 26 beta during TaskLocal teardown. Methods stay on MainActor; only deinit drops down to the synchronous ARC path. The same pattern is applied to `HarmoniaEQAdapter`, `AppState`, and the test-side `FakeEQService`.
+
 ---
 
 ## 6. Integration Layer
@@ -669,9 +819,12 @@ final class HarmoniaEQAdapter: EQService {
 Closures are stored as plain `(_) -> Void` (not `@Sendable`). They inherit
 MainActor isolation from `HarmoniaCoreProvider.makeEQService()` and capture
 the non-Sendable `HarmoniaCore.PlaybackService` without crossing an isolation
-boundary, so no Sendable warning is raised. The class has no explicit
-`deinit`, sidestepping the Xcode 26 beta `swift_task_deinitOnExecutorImpl`
-TaskLocal teardown crash.
+boundary, so no Sendable warning is raised. The class declares an explicit
+`nonisolated deinit { }` to sidestep the Xcode 26 beta
+`swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that fires when
+the synthesised deinit on an inferred-MainActor class releases captured
+closures. The same pattern is applied to `EQCoordinator`, `AppState`, and the
+test-side `FakeEQService` — see §5.8 for the full rationale.
 
 ---
 
@@ -702,6 +855,14 @@ Persisted via `UserDefaults` with `hp.` prefix keys.
 | `hp.isShuffled` | `Bool` | `saveState()` |
 | `hp.replayGainMode` | `String` | `saveState()` + Combine sink |
 | `hp.isProUnlocked` | `Bool` | `StoreKitIAPManager` (didSet) |
+| `hp.eq.schemaVersion` | `Int` | `EQPersistenceStore.save(_:)` |
+| `hp.eq.enabled` | `Bool` | `EQPersistenceStore.save(_:)` |
+| `hp.eq.preamp` | `Float` | `EQPersistenceStore.save(_:)` |
+| `hp.eq.bands` | `Data` (JSON `[Float]`, 10 elements) | `EQPersistenceStore.save(_:)` |
+| `hp.eq.currentPresetName` | `String?` | `EQPersistenceStore.save(_:)` |
+| `hp.eq.customPresets` | `Data` (JSON `[EQPreset]`) | `EQPersistenceStore.save(_:)` |
+
+**EQ schema versioning (Slice 9-K).** The `hp.eq.*` keys are managed by `EQPersistenceStore` (see §5.6), independent of `AppState.saveState()`. Current schema version is `1`. On `load()`, an absent `hp.eq.schemaVersion` indicates a fresh install — the store stamps version 1 and returns `EQPersistedState.defaults`. A present version is decoded and lifted to the current version via `EQSchemaMigrator.migrate(...)` (see §5.7). Future slices (per-track EQ, user-adjustable Q) bump the version; older builds reading a newer version fall back to defaults rather than corrupting state.
 
 Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`.
 

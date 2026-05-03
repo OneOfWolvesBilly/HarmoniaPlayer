@@ -127,6 +127,11 @@ HarmoniaPlayer/
 │       │   │   │   ├── AppState+M3U8.swift          # M3U8 import/export
 │       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable
 │       │   │   │   ├── CoreFeatureFlags.swift       # Free/Pro feature flags
+│       │   │   │   ├── EQBand.swift                 # Static band config (Slice 9-K)
+│       │   │   │   ├── EQBandState.swift            # Editable per-band state (Slice 9-K)
+│       │   │   │   ├── EQCoordinator.swift          # @MainActor EQ observable (Slice 9-K)
+│       │   │   │   ├── EQPreset.swift               # Named EQ configuration (Slice 9-K)
+│       │   │   │   ├── EQPresets.swift              # Built-in presets (Slice 9-K)
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
@@ -138,6 +143,8 @@ HarmoniaPlayer/
 │       │   │   ├── Services/
 │       │   │   │   ├── CoreFactory.swift                     # (App Layer) factory
 │       │   │   │   ├── CoreServiceProviding.swift            # (App Layer) provider protocol
+│       │   │   │   ├── EQPersistenceStore.swift              # (App Layer) UserDefaults EQ store (Slice 9-K)
+│       │   │   │   ├── EQSchemaMigrator.swift                # (App Layer) EQ schema versioning (Slice 9-K)
 │       │   │   │   ├── EQService.swift                       # (App Layer) EQ protocol (Slice 9-K)
 │       │   │   │   ├── ExtendedAttributeService.swift        # xattr for kMDItemWhereFroms
 │       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
@@ -153,6 +160,8 @@ HarmoniaPlayer/
 │       │   │   │   └── TagReaderService.swift                # App-layer protocol (async)
 │       │   │   └── Views/
 │       │   │       ├── ContentView.swift                     # Root view
+│       │   │       ├── EQView.swift                          # EQ window content (Slice 9-K)
+│       │   │       ├── EQWindow.swift                        # EQ window wrapper (Slice 9-K)
 │       │   │       ├── FileInfoView.swift                    # File Info panel
 │       │   │       ├── PaywallView.swift                     # Pro paywall sheet
 │       │   │       ├── PlaybackFocusedValues.swift           # FocusedValue for Commands
@@ -377,9 +386,10 @@ All test infrastructure lives in
 
 | Double | Replaces | Key features |
 |--------|----------|--------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService` and `TagReaderService` stubs; records `makePlaybackService` / `makeTagReaderService` call counts |
+| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, and `FakeEQService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeEQService` call counts |
 | `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
+| `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
 
 ### 7.2 Test class conventions (Swift 6)
@@ -469,8 +479,11 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 
 - `@MainActor` on `AppState`, all test classes that use AppState, and any
   UI-facing types
-- `nonisolated deinit {}` on `@MainActor` classes deallocated in test
-  contexts (Xcode 26 beta workaround for `TaskLocal::StopLookupScope` crash)
+- `nonisolated deinit {}` on every inferred-`@MainActor` `final class`
+  (Xcode 26 beta workaround for the `swift_task_deinitOnExecutorImpl` /
+  `TaskLocal::StopLookupScope` crash). Applies to long-lived production
+  classes too, not just test-deallocated ones — see §8.6 for the full
+  rationale and inventory.
 - `Sendable` on all models crossing actor boundaries (`Track`, `Playlist`,
   `PlaybackState`, `PlaybackError`, `ViewPreferences`, `CoreFeatureFlags`)
 
@@ -543,6 +556,60 @@ are all pure typed codes.
 - Explanations, chat discussion: Traditional Chinese
 - All Swift code, comments, commit messages, documentation: **English only**
 - No competitor brand names anywhere in docs
+
+### 8.6 `nonisolated deinit` pattern (Xcode 26 beta workaround)
+
+The HarmoniaPlayer module is built with
+`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which causes every `final class`
+without an explicit isolation annotation to be **inferred** as `@MainActor`.
+On Xcode 26 beta, the compiler-synthesised deinit on such a class routes
+deallocation through `swift_task_deinitOnExecutorImpl`, and the runtime
+double-frees TaskLocal storage during teardown
+(`TaskLocal::StopLookupScope`), causing a crash.
+
+**Mitigation:** declare an empty `nonisolated deinit { }` on every affected
+class. Methods stay on the MainActor, but deallocation falls back to the
+synchronous ARC path that does not touch TaskLocal storage.
+
+```swift
+@MainActor                       // explicit OR inferred — both apply
+final class SomeObservable: ObservableObject {
+    // … MainActor-isolated state and methods …
+
+    nonisolated deinit { }       // forces synchronous ARC deallocation
+}
+```
+
+**When the workaround IS needed.** Any class that is `@MainActor` (explicit
+or inferred). The `final` modifier is independent — it does not change the
+deinit behaviour. Four known production / test sites in HarmoniaPlayer:
+
+| Class | File | Why |
+|-------|------|-----|
+| `AppState` | `Shared/Models/AppState.swift` | Explicit `@MainActor`; long-lived but still hits the bug on test teardown |
+| `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Inferred `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
+| `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
+| `FakeEQService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | Inferred `@MainActor` in the main module's actor isolation; many short-lived test instances exercise the crash path repeatedly |
+
+**When the workaround is NOT needed.** Classes already declared
+`nonisolated`, structs, enums, and actors are unaffected because their
+deinit is not `@MainActor`-isolated. Examples in HarmoniaPlayer:
+
+- `nonisolated final class EQPersistenceStore` — no workaround needed
+  (whole class is non-isolated)
+- `nonisolated enum EQSchemaMigrator` — no instance, no deinit
+- `struct EQBand` / `EQBandState` / `EQPreset` / `EQPresets` — value types
+
+**Common mistake:** earlier in-source comments (now corrected) claimed *"if
+the class has no explicit deinit body, the bug is avoided."* That was wrong.
+The compiler-synthesised deinit on an inferred-`@MainActor` class still
+hits the bug — only an **explicit `nonisolated deinit { }`** sidesteps it.
+If you see such a comment in a stale branch, replace it with a reference to
+this section.
+
+When the upstream fix lands, this workaround can be removed in one sweep.
+Until then, every new `@MainActor` `final class` added to the codebase
+should ship with `nonisolated deinit { }` from the first commit.
 
 ---
 
