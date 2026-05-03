@@ -48,4 +48,16 @@ protocol CoreServiceProviding: AnyObject {
     ///
     /// **Note:** Lyrics display is available in both Free and Pro tiers (v0.1).
     func makeLyricsService() -> LyricsService
+
+    /// Create an EQ service bound to the underlying HarmoniaCore PlaybackService
+    /// EQ control surface.
+    ///
+    /// - Returns: EQService instance
+    ///
+    /// **Note:** EQ is available in both Free and Pro tiers (Slice 9-K, v0.1).
+    /// In `HarmoniaCoreProvider` the returned service shares its underlying
+    /// HarmoniaCore.PlaybackService instance with the one created by
+    /// `makePlaybackService(isProUser:)` so EQ control acts on the live audio
+    /// chain. `FakeCoreProvider` returns the injected `eqServiceStub`.
+    func makeEQService() -> EQService
 }

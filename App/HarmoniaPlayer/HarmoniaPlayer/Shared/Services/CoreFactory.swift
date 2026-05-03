@@ -84,4 +84,16 @@ struct CoreFactory {
     func makeLyricsService() -> LyricsService {
         return provider.makeLyricsService()
     }
+
+    /// Create EQ service
+    ///
+    /// EQ is available in both Free and Pro tiers (Slice 9-K, v0.1).
+    /// In production the returned service shares its underlying
+    /// HarmoniaCore.PlaybackService instance with the one returned by
+    /// `makePlaybackService()` so EQ control acts on the live audio chain.
+    ///
+    /// - Returns: EQService instance
+    func makeEQService() -> EQService {
+        return provider.makeEQService()
+    }
 }

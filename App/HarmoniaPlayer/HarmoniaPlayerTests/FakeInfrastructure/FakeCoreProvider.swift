@@ -39,6 +39,14 @@ import Foundation
 /// await sut.play()
 /// XCTAssertEqual(fakeService.playCallCount, 1)
 /// ```
+///
+/// **Usage — EQ service stub access (Slice 9-K):**
+/// ```swift
+/// let knownFake = FakeEQService()
+/// let provider = FakeCoreProvider(eqService: knownFake)
+/// let resolved = provider.makeEQService()
+/// XCTAssertTrue(resolved === knownFake)
+/// ```
 final class FakeCoreProvider: CoreServiceProviding {
 
     // MARK: - Call Recording
@@ -54,6 +62,9 @@ final class FakeCoreProvider: CoreServiceProviding {
 
     /// Number of times makeLyricsService was called
     private(set) var makeLyricsServiceCallCount = 0
+
+    /// Number of times makeEQService was called
+    private(set) var makeEQServiceCallCount = 0
 
     // MARK: - Stubs
 
@@ -71,16 +82,22 @@ final class FakeCoreProvider: CoreServiceProviding {
     /// Tests that need real LyricsService behaviour must inject one explicitly.
     var lyricsServiceStub: LyricsService
 
+    /// The EQService instance returned by makeEQService().
+    /// Defaults to FakeEQService (records calls, no closure storage).
+    var eqServiceStub: EQService
+
     // MARK: - Initialization
 
     init(
         playbackService: FakePlaybackService = FakePlaybackService(),
         tagReader: TagReaderService = FakeTagReaderService(),
-        lyricsService: LyricsService = FakeLyricsService()
+        lyricsService: LyricsService = FakeLyricsService(),
+        eqService: EQService = FakeEQService()
     ) {
         self.playbackServiceStub = playbackService
         self.tagReaderServiceStub = tagReader
         self.lyricsServiceStub = lyricsService
+        self.eqServiceStub = eqService
     }
 
     // MARK: - CoreServiceProviding
@@ -99,6 +116,11 @@ final class FakeCoreProvider: CoreServiceProviding {
     func makeLyricsService() -> LyricsService {
         makeLyricsServiceCallCount += 1
         return lyricsServiceStub
+    }
+
+    func makeEQService() -> EQService {
+        makeEQServiceCallCount += 1
+        return eqServiceStub
     }
 }
 
@@ -311,4 +333,72 @@ final class StubLyricsService: LyricsService {
 
     func stripLRCTimestamps(_ raw: String) -> String { raw }
     func detectEncoding(of data: Data) -> String.Encoding { .utf8 }
+}
+
+// MARK: - FakeEQService
+
+/// No-op EQService for tests that do not exercise EQ behaviour, plus
+/// call-recording so commit 6 EQCoordinator tests can verify forward
+/// semantics from EQCoordinator → EQService.
+///
+/// All stored properties are plain `Int` / `Optional<Bool|Float|[Float]>`.
+/// There is **no closure storage** and **no Locale dependency**, so the
+/// Xcode 26 beta `DefaultLyricsService` double-free pattern (closure
+/// captures + Locale across many short-lived instances) cannot apply here.
+/// There is also **no explicit `deinit`**, so the
+/// `swift_task_deinitOnExecutorImpl` TaskLocal teardown crash that bites
+/// @MainActor classes with explicit deinit is sidestepped.
+///
+/// **Usage — identity check:**
+/// ```swift
+/// let knownFake = FakeEQService()
+/// let provider = FakeCoreProvider(eqService: knownFake)
+/// XCTAssertTrue(provider.makeEQService() === knownFake)
+/// ```
+///
+/// **Usage — call recording (commit 6 EQCoordinator tests):**
+/// ```swift
+/// let fake = FakeEQService()
+/// // ... drive EQCoordinator ...
+/// XCTAssertEqual(fake.setEnabledCallCount, 1)
+/// XCTAssertEqual(fake.lastSetEnabled, true)
+/// ```
+final class FakeEQService: EQService {
+
+    // MARK: - Call Recording
+
+    /// Number of times `setEnabled(_:)` was called.
+    private(set) var setEnabledCallCount = 0
+
+    /// Last Bool value passed to `setEnabled(_:)`.
+    private(set) var lastSetEnabled: Bool?
+
+    /// Number of times `setPreamp(_:)` was called.
+    private(set) var setPreampCallCount = 0
+
+    /// Last Float value passed to `setPreamp(_:)`.
+    private(set) var lastSetPreamp: Float?
+
+    /// Number of times `setBandGains(_:)` was called.
+    private(set) var setBandGainsCallCount = 0
+
+    /// Last `[Float]` value passed to `setBandGains(_:)`.
+    private(set) var lastSetBandGains: [Float]?
+
+    // MARK: - EQService
+
+    func setEnabled(_ enabled: Bool) {
+        setEnabledCallCount += 1
+        lastSetEnabled = enabled
+    }
+
+    func setPreamp(_ db: Float) {
+        setPreampCallCount += 1
+        lastSetPreamp = db
+    }
+
+    func setBandGains(_ gains: [Float]) {
+        setBandGainsCallCount += 1
+        lastSetBandGains = gains
+    }
 }
