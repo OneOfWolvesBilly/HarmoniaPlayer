@@ -148,8 +148,13 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
         let clock   = MonotonicClockAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
-        let audio   = AVAudioEngineOutputAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
+        // The same EQ instance is handed to BOTH the audio output
+        // adapter (which splices its node into the real signal chain
+        // during configure) AND DefaultPlaybackService (which forwards
+        // the EQ control surface). Sharing a single instance is what
+        // makes setEQEnabled/Preamp/BandGains audible.
+        let audio   = AVAudioEngineOutputAdapter(logger: logger, eq: eq)
         return DefaultPlaybackService(
             decoder: decoder,
             audio:   audio,
