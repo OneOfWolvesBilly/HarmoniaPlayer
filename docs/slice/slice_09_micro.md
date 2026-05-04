@@ -1800,8 +1800,10 @@ headphones (AirPods), keyboard media keys, and Siri. All tiers (Free).
 - `AppState` injects `NowPlayingService`.
 - Calls `updateCurrentTrack(_:)` on `currentTrack` change.
 - Calls `updatePlaybackState(_:rate:)` on `playbackState` change.
-- Calls `updateElapsedTime(_:)` throttled from existing 1 Hz
-  `currentTime` polling loop.
+- Calls `updateElapsedTime(_:)` event-driven on track change (with
+  0), playback state change (with current `currentTime`), and on
+  successful `seek(to:)` (with new position). NOT pushed during
+  the existing 1 Hz polling loop.
 - Calls `clear()` on stop and on `currentTrack = nil`.
 - Wires command callbacks to existing AppState methods.
 
@@ -1828,19 +1830,34 @@ Commands explicitly NOT wired in 9-L: `skipForwardCommand`,
 | `MPMediaItemPropertyArtist` | `track.artist` |
 | `MPMediaItemPropertyAlbumTitle` | `track.album` |
 | `MPMediaItemPropertyPlaybackDuration` | `track.duration` |
-| `MPMediaItemPropertyArtwork` | `track.artworkData` (when present) |
-| `MPNowPlayingInfoPropertyElapsedPlaybackTime` | `currentTime` (1 Hz polling) |
+| `MPMediaItemPropertyArtwork` | `track.artworkData` if non-nil, else app icon fallback |
+| `MPNowPlayingInfoPropertyElapsedPlaybackTime` | `currentTime` at last event (track change / playback state change / seek) |
 | `MPNowPlayingInfoPropertyPlaybackRate` | `1.0` (playing) / `0.0` (paused/stopped) |
 | `MPNowPlayingInfoPropertyMediaType` | `.audio` |
 
 ### Update cadence
 
+Pure event-driven. The existing 1 Hz polling loop continues to drive
+in-app UI (progress bar) but does NOT push to
+`MPNowPlayingInfoCenter`. macOS interpolates the displayed elapsed
+time between events using
+`(elapsedPlaybackTime, playbackRate, lastUpdateTimestamp)`. This
+matches Apple's published guidance (WWDC22 "Explore media metadata
+publishing and playback interactions") that nowPlayingInfo should
+only be updated when state changes or position changes via user
+action.
+
 - **On track change:** update title / artist / album / duration /
-  artwork immediately (single batch).
-- **On playback state change:** update `playbackRate` immediately.
-- **Elapsed time:** piggyback on existing 1 Hz `currentTime` polling
-  loop (no independent timer). Updates only the
-  `elapsedPlaybackTime` key, not the full info dict.
+  artwork in a single batch; also push initial
+  `elapsedPlaybackTime = 0` and `playbackRate` matching the new
+  state.
+- **On playback state change:** update `playbackRate` (1.0 playing /
+  0.0 paused/stopped) and re-anchor `elapsedPlaybackTime` to the
+  current `currentTime` so the system can re-start interpolation
+  from a fresh point.
+- **On successful seek:** update `elapsedPlaybackTime` to the new
+  position. `playbackRate` is unchanged unless the seek transitions
+  state (it does not, by current AppState semantics).
 - **On stop:** clear the entire info dict
   (`nowPlayingInfo = nil`).
 
@@ -1850,11 +1867,13 @@ playback from widget. Matches macOS Music.app behaviour.
 
 ### Artwork handling
 
-- If `track.artworkData` is non-nil: decode to `NSImage`, wrap in
-  `MPMediaItemArtwork` using the `boundsSize` + `requestHandler`
-  pattern, push to info dict.
-- If nil: omit the `MPMediaItemPropertyArtwork` key entirely
-  (system shows generic audio icon).
+- If `track.artworkData` is non-nil and decodes to a valid `NSImage`:
+  wrap in `MPMediaItemArtwork` using the `boundsSize` +
+  `requestHandler` pattern, push to info dict.
+- If nil or decode fails: fall back to the HarmoniaPlayer app icon
+  (`NSImage(named: NSImage.applicationIconName)`), wrapped the same
+  way. Matches Apple Music / Cog / mpv behaviour — widget always
+  shows an artwork tile, never blank.
 - No artwork cache — pushed fresh on each `updateCurrentTrack`.
   Memory cost negligible for typical album artwork sizes.
 
@@ -1921,8 +1940,14 @@ changes warrant deeper automated testing).
   - wire command callbacks in `init`
     (`nowPlayingService.onPlay = { [weak self] in self?.play() }` etc.)
   - observe `$currentTrack` → call `updateCurrentTrack(_:)`
+    (also pushes initial `updateElapsedTime(0)`)
   - observe `$playbackState` → call `updatePlaybackState(_:rate:)`
-  - in existing polling loop → call `updateElapsedTime(_:)` at 1 Hz
+    (also pushes current `updateElapsedTime(currentTime)` so the
+    system can re-anchor interpolation)
+  - in `seek(to:)` after success → call `updateElapsedTime(_:)`
+    with the new position
+  - existing 1 Hz polling loop is NOT modified — continues to
+    update in-app UI only, never pushes to `MPNowPlayingInfoCenter`
 - `Shared/Services/CoreServiceProviding.swift` (modify) — add
   `makeNowPlayingService()` factory
 - `Shared/Services/CoreFactory.swift` (modify) — wire service
@@ -1945,22 +1970,24 @@ changes warrant deeper automated testing).
 
 ### TDD matrix
 
-| Test | Given | When | Then |
-|---|---|---|---|
-| `testAppState_OnTrackChange_CallsUpdateCurrentTrack` | fake NP service, change currentTrack | publisher fires | `updateCurrentTrack` called with new track |
-| `testAppState_OnTrackChangeToNil_CallsClear` | currentTrack set, then set to nil | publisher fires | `clear()` called |
-| `testAppState_OnPlay_UpdatesPlaybackState` | paused state | `play()` | `updatePlaybackState(.playing, rate: 1.0)` called |
-| `testAppState_OnPause_UpdatesPlaybackState` | playing | `pause()` | `updatePlaybackState(.paused, rate: 0.0)` called |
-| `testAppState_OnPause_DoesNotClear` | playing | `pause()` | `clear()` NOT called |
-| `testAppState_OnStop_ClearsNowPlaying` | playing | `stop()` | `clear()` called |
-| `testAppState_Polling_UpdatesElapsedTime` | playing, polling tick | time advances | `updateElapsedTime(_:)` called with current time |
-| `testAppState_OnPlayCommand_InvokesPlay` | NP service `onPlay` invoked externally | callback fires | `AppState.play()` executes |
-| `testAppState_OnPauseCommand_InvokesPause` | `onPause` invoked | callback fires | `AppState.pause()` executes |
-| `testAppState_OnNextCommand_InvokesNext` | `onNext` invoked | callback fires | `AppState.next()` executes |
-| `testAppState_OnPrevCommand_InvokesPrevious` | `onPrevious` invoked | callback fires | `AppState.previous()` executes |
-| `testAppState_OnSeekCommand_InvokesSeek` | `onSeek(42.0)` invoked | callback fires | `AppState.seek(to: 42.0)` executes |
-| `testAppState_OnTogglePlayPause_Toggles` | playing state, `onTogglePlayPause` | callback fires | state becomes paused |
-| `testAppState_OnStopCommand_InvokesStop` | playing, `onStop` invoked | callback fires | `AppState.stop()` executes |
+| Test | Given | When | Then | Test File Decision |
+|---|---|---|---|---|
+| `testAppState_OnTrackChange_CallsUpdateCurrentTrack` | fake NP service, change currentTrack | publisher fires | `updateCurrentTrack` called with new track | New `AppStateNowPlayingTests.swift` |
+| `testAppState_OnTrackChangeToNil_CallsClear` | currentTrack set, then set to nil | publisher fires | `clear()` called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnTrackChange_PushesElapsedTimeZero` | currentTrack set to a new track | publisher fires | `updateElapsedTime(0)` called as part of refresh | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPlay_UpdatesPlaybackState` | paused state | `play()` | `updatePlaybackState(.playing, rate: 1.0)` called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPause_UpdatesPlaybackState` | playing | `pause()` | `updatePlaybackState(.paused, rate: 0.0)` called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPlaybackStateChange_PushesCurrentElapsedTime` | playing, currentTime = 12.3, pause() | publisher fires | `updateElapsedTime(12.3)` called alongside `updatePlaybackState` | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPause_DoesNotClear` | playing | `pause()` | `clear()` NOT called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnStop_ClearsNowPlaying` | playing | `stop()` | `clear()` called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnSeekSuccess_UpdatesElapsedTime` | playing track, seek(to: 42.0) succeeds | seek completes | `updateElapsedTime(42.0)` called | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPlayCommand_InvokesPlay` | NP service `onPlay` invoked externally | callback fires | `AppState.play()` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPauseCommand_InvokesPause` | `onPause` invoked | callback fires | `AppState.pause()` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnNextCommand_InvokesNext` | `onNext` invoked | callback fires | `AppState.next()` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnPrevCommand_InvokesPrevious` | `onPrevious` invoked | callback fires | `AppState.previous()` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnSeekCommand_InvokesSeek` | `onSeek(42.0)` invoked | callback fires | `AppState.seek(to: 42.0)` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnTogglePlayPause_Toggles` | playing state, `onTogglePlayPause` | callback fires | state becomes paused | Extend `AppStateNowPlayingTests.swift` |
+| `testAppState_OnStopCommand_InvokesStop` | playing, `onStop` invoked | callback fires | `AppState.stop()` executes | Extend `AppStateNowPlayingTests.swift` |
 
 ### Done criteria
 
@@ -1968,7 +1995,10 @@ changes warrant deeper automated testing).
 
 - ⬜ AppState calls `updateCurrentTrack` on track change
 - ⬜ AppState calls `updatePlaybackState` on play / pause / stop
-- ⬜ AppState calls `updateElapsedTime` during polling
+- ⬜ AppState calls `updateElapsedTime` on track change (with 0), on
+  playback state change (with current `currentTime`), and on
+  successful seek (with new position) — event-driven, NOT during
+  polling
 - ⬜ AppState calls `clear` on stop and on `currentTrack = nil`
 - ⬜ `pause()` does NOT clear (widget remains visible)
 - ⬜ Command callbacks (play / pause / next / prev / seek /
@@ -1991,6 +2021,11 @@ changes warrant deeper automated testing).
 - ⬜ Keyboard media keys (F7/F8/F9) control playback
 - ⬜ "Hey Siri, pause music" pauses HarmoniaPlayer
 - ⬜ "Hey Siri, next song" advances HarmoniaPlayer
+- ⬜ With Apple Music playing, switching to HarmoniaPlayer and
+  pressing play stops Apple Music automatically (audio session is
+  non-mixable). If this behaviour does not occur, the slice scope
+  expands to include `AVAudioEngine` audio session category
+  configuration.
 - ⬜ Quitting HarmoniaPlayer clears Control Center widget (no stale
   info)
 
@@ -2023,8 +2058,10 @@ changes warrant deeper automated testing).
   changes warrant deeper automated testing).
 - **v0.15:** re-evaluate the six Non-goals above to see whether
   user feedback, Pro feature planning, or scope changes justify
-  adding any of them. Also consider user-configurable elapsed-time
-  polling frequency (currently fixed 1 Hz). Consider populating
+  adding any of them. Re-evaluate elapsed-time push strategy if
+  Control Center scrubber drift becomes user-visible (current 9-L
+  is pure event-driven; could move to event-driven + periodic
+  resync if needed). Consider populating
   `PlaybackQueueIndex` / `PlaybackQueueCount` for richer widget
   info.
 - **v0.2 (Pro):** chapter navigation if chapter metadata support
