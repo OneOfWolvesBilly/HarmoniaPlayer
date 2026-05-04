@@ -1959,7 +1959,7 @@ changes warrant deeper automated testing).
 - `AppStateNowPlayingTests.swift` (new) — uses `FakeNowPlayingService`
   to verify AppState calls correct methods at correct times
 
-**Test Fakes** (`HarmoniaPlayerTests/Fakes/`)
+**Test Fakes** (`HarmoniaPlayerTests/FakeInfrastructure/`)
 
 - `FakeNowPlayingService.swift` (new) — records calls for assertion
 
