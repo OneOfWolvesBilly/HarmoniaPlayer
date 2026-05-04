@@ -1796,16 +1796,54 @@ headphones (AirPods), keyboard media keys, and Siri. All tiers (Free).
 - Registers command handlers on `MPRemoteCommandCenter.shared()`.
 - Loads artwork as `MPMediaItemArtwork` from track image data.
 
-**HarmoniaPlayer AppState integration:**
-- `AppState` injects `NowPlayingService`.
-- Calls `updateCurrentTrack(_:)` on `currentTrack` change.
-- Calls `updatePlaybackState(_:rate:)` on `playbackState` change.
-- Calls `updateElapsedTime(_:)` event-driven on track change (with
-  0), playback state change (with current `currentTime`), and on
-  successful `seek(to:)` (with new position). NOT pushed during
-  the existing 1 Hz polling loop.
-- Calls `clear()` on stop and on `currentTrack = nil`.
-- Wires command callbacks to existing AppState methods.
+**HarmoniaPlayer NowPlayingCoordinator integration:**
+
+To keep AppState lean (mirroring Slice 9-K's EQCoordinator
+extraction), all NowPlaying wiring lives in a dedicated
+`NowPlayingCoordinator`. AppState holds a single `let
+nowPlayingCoordinator: NowPlayingCoordinator` reference and has
+zero NowPlaying-specific observation logic, callback assignments,
+or methods.
+
+`NowPlayingCoordinator` receives all dependencies via constructor
+closure injection — it never holds an `AppState` reference and
+never imports `AppState`. This makes the coordinator unit-testable
+without instantiating AppState at all.
+
+- `NowPlayingCoordinator.init` accepts:
+  - `service: NowPlayingService`
+  - `currentTrackPublisher: AnyPublisher<Track?, Never>`
+  - `playbackStatePublisher: AnyPublisher<PlaybackState, Never>`
+  - `currentTimeProvider: @escaping @MainActor () -> TimeInterval`
+  - `play: @escaping @MainActor () async -> Void`
+  - `pause: @escaping @MainActor () async -> Void`
+  - `stop: @escaping @MainActor () async -> Void`
+  - `seek: @escaping @MainActor (TimeInterval) async -> Void`
+  - `next: @escaping @MainActor () async -> Void`
+  - `previous: @escaping @MainActor () async -> Void`
+  - `togglePlayPause: @escaping @MainActor () async -> Void`
+- On `currentTrackPublisher` event: calls
+  `service.updateCurrentTrack(_:)` then
+  `service.updateElapsedTime(0)`. On nil → calls `service.clear()`.
+- On `playbackStatePublisher` event: calls
+  `service.updatePlaybackState(_:rate:)` with rate (1.0 playing /
+  0.0 otherwise), then `service.updateElapsedTime(_:)` with
+  `currentTimeProvider()`. On `.stopped` → also `service.clear()`.
+- On seek wiring: AppState's `seek(to:)` after success calls
+  `nowPlayingCoordinator.notifySeekCompleted(at: seconds)` (the
+  one and only AppState → Coordinator notification, because seek
+  success is not derivable from `playbackStatePublisher`).
+- Wires `service.onPlay = { [weak self] in Task { @MainActor in
+  await self?.play() } }` (and the six other callbacks) to the
+  injected closures.
+
+**AppState integration:**
+- `AppState.init` constructs the coordinator with closures
+  capturing `[weak self]` for the seven action methods, and exposes
+  the `currentTime` getter via `currentTimeProvider`.
+- `AppState.seek(to:)` after success calls
+  `nowPlayingCoordinator.notifySeekCompleted(at:)`. This is the
+  only NowPlaying-related line in AppState beyond the constructor.
 
 ### Command map
 
@@ -1933,19 +1971,27 @@ changes warrant deeper automated testing).
   - Registers `MPRemoteCommandCenter` handlers in `init`
   - Observes `NSApplicationWillTerminate` to clear on quit
 
-**HarmoniaPlayer — AppState**
+**HarmoniaPlayer — NowPlayingCoordinator (new)**
+
+- `Shared/Models/NowPlayingCoordinator.swift` (new) —
+  `@MainActor` final class that owns all NowPlaying wiring.
+  Subscribes to publishers, assigns service callbacks to injected
+  closures, exposes `notifySeekCompleted(at:)` for AppState to call
+  on successful seek. Holds `cancellables: Set<AnyCancellable>`.
+  Mirrors `EQCoordinator.swift` structure (file header, deinit
+  workaround, etc.). **Does not import or reference AppState.**
+
+**HarmoniaPlayer — AppState (modify)**
 
 - `Shared/Models/AppState.swift` (modify)
-  - inject `NowPlayingService` via constructor
-  - wire command callbacks in `init`
-    (`nowPlayingService.onPlay = { [weak self] in self?.play() }` etc.)
-  - observe `$currentTrack` → call `updateCurrentTrack(_:)`
-    (also pushes initial `updateElapsedTime(0)`)
-  - observe `$playbackState` → call `updatePlaybackState(_:rate:)`
-    (also pushes current `updateElapsedTime(currentTime)` so the
-    system can re-anchor interpolation)
-  - in `seek(to:)` after success → call `updateElapsedTime(_:)`
-    with the new position
+  - add `let nowPlayingCoordinator: NowPlayingCoordinator` property
+  - construct the coordinator in `init` with closures capturing
+    `[weak self]` for play / pause / stop / seek / next / previous
+    / togglePlayPause, and `currentTimeProvider`
+  - in `seek(to:)` after success → call
+    `nowPlayingCoordinator.notifySeekCompleted(at: seconds)`
+  - **no other NowPlaying-related code anywhere in AppState or its
+    extensions**
   - existing 1 Hz polling loop is NOT modified — continues to
     update in-app UI only, never pushes to `MPNowPlayingInfoCenter`
 - `Shared/Services/CoreServiceProviding.swift` (modify) — add
@@ -1956,12 +2002,24 @@ changes warrant deeper automated testing).
 
 **Tests** (`HarmoniaPlayerTests/SharedTests/`)
 
-- `AppStateNowPlayingTests.swift` (new) — uses `FakeNowPlayingService`
-  to verify AppState calls correct methods at correct times
+- `NowPlayingCoordinatorTests.swift` (new) — uses
+  `FakeNowPlayingService` and PassthroughSubject-driven publishers
+  plus closure call recorders to verify the coordinator pushes
+  metadata correctly and routes pull-side callbacks to the right
+  injected closure. AppState is NOT instantiated in these tests.
 
 **Test Fakes** (`HarmoniaPlayerTests/FakeInfrastructure/`)
 
 - `FakeNowPlayingService.swift` (new) — records calls for assertion
+  (`updateCurrentTrackCallCount` / `lastUpdatedTrack` /
+  `updatePlaybackStateCallCount` / `lastUpdatedState` /
+  `lastUpdatedRate` / `updateElapsedTimeCallCount` /
+  `lastUpdatedElapsed` / `updatedElapsedHistory` / `clearCallCount`,
+  plus pull-side callbacks `onPlay` / `onPause` / `onStop` /
+  `onSeek` / `onNext` / `onPrevious` / `onTogglePlayPause`).
+  Coordinator tests drive publishers via local `PassthroughSubject`
+  and assert against per-action closure call counters constructed
+  inline in `setUp`.
 
 **Localisation**
 
@@ -1972,22 +2030,22 @@ changes warrant deeper automated testing).
 
 | Test | Given | When | Then | Test File Decision |
 |---|---|---|---|---|
-| `testAppState_OnTrackChange_CallsUpdateCurrentTrack` | fake NP service, change currentTrack | publisher fires | `updateCurrentTrack` called with new track | New `AppStateNowPlayingTests.swift` |
-| `testAppState_OnTrackChangeToNil_CallsClear` | currentTrack set, then set to nil | publisher fires | `clear()` called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnTrackChange_PushesElapsedTimeZero` | currentTrack set to a new track | publisher fires | `updateElapsedTime(0)` called as part of refresh | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPlay_UpdatesPlaybackState` | paused state | `play()` | `updatePlaybackState(.playing, rate: 1.0)` called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPause_UpdatesPlaybackState` | playing | `pause()` | `updatePlaybackState(.paused, rate: 0.0)` called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPlaybackStateChange_PushesCurrentElapsedTime` | playing, currentTime = 12.3, pause() | publisher fires | `updateElapsedTime(12.3)` called alongside `updatePlaybackState` | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPause_DoesNotClear` | playing | `pause()` | `clear()` NOT called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnStop_ClearsNowPlaying` | playing | `stop()` | `clear()` called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnSeekSuccess_UpdatesElapsedTime` | playing track, seek(to: 42.0) succeeds | seek completes | `updateElapsedTime(42.0)` called | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPlayCommand_InvokesPlay` | NP service `onPlay` invoked externally | callback fires | `AppState.play()` executes | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPauseCommand_InvokesPause` | `onPause` invoked | callback fires | `AppState.pause()` executes | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnNextCommand_InvokesNext` | `onNext` invoked | callback fires | `AppState.next()` executes | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnPrevCommand_InvokesPrevious` | `onPrevious` invoked | callback fires | `AppState.previous()` executes | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnSeekCommand_InvokesSeek` | `onSeek(42.0)` invoked | callback fires | `AppState.seek(to: 42.0)` executes | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnTogglePlayPause_Toggles` | playing state, `onTogglePlayPause` | callback fires | state becomes paused | Extend `AppStateNowPlayingTests.swift` |
-| `testAppState_OnStopCommand_InvokesStop` | playing, `onStop` invoked | callback fires | `AppState.stop()` executes | Extend `AppStateNowPlayingTests.swift` |
+| `testCoordinator_OnTrackChange_CallsUpdateCurrentTrack` | publisher subjects, fake NP service | track subject sends new Track | `updateCurrentTrack` called with new track | New `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnTrackChangeToNil_CallsClear` | non-nil track in subject | track subject sends nil | `clear()` called | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnTrackChange_PushesElapsedTimeZero` | publisher subjects | track subject sends new Track | `updateElapsedTime(0)` recorded in history | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPlay_UpdatesPlaybackState` | state subject seeded with `.paused` | state subject sends `.playing` | `updatePlaybackState(.playing, rate: 1.0)` called | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPause_UpdatesPlaybackState` | state subject seeded with `.playing` | state subject sends `.paused` | `updatePlaybackState(.paused, rate: 0.0)` called | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPlaybackStateChange_PushesCurrentElapsedTime` | currentTimeProvider returns 12.3 | state subject sends `.paused` | `updateElapsedTime(12.3)` called alongside `updatePlaybackState` | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPause_DoesNotClear` | state subject seeded `.playing` | state subject sends `.paused` | `clear()` NOT called | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnStop_ClearsNowPlaying` | state subject seeded `.playing` | state subject sends `.stopped` | `clear()` called | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnSeekNotification_UpdatesElapsedTime` | coordinator constructed | `notifySeekCompleted(at: 42.0)` called | `updateElapsedTime(42.0)` recorded | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPlayCommand_InvokesPlayClosure` | injected play closure recorder | `service.onPlay?()` invoked | play closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPauseCommand_InvokesPauseClosure` | injected pause closure recorder | `service.onPause?()` invoked | pause closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnNextCommand_InvokesNextClosure` | injected next closure recorder | `service.onNext?()` invoked | next closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnPrevCommand_InvokesPreviousClosure` | injected previous closure recorder | `service.onPrevious?()` invoked | previous closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnSeekCommand_InvokesSeekClosure` | injected seek closure recorder | `service.onSeek?(42.0)` invoked | seek closure call count ≥ 1 with 42.0 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnTogglePlayPauseCommand_InvokesToggleClosure` | injected toggle closure recorder | `service.onTogglePlayPause?()` invoked | toggle closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
+| `testCoordinator_OnStopCommand_InvokesStopClosure` | injected stop closure recorder | `service.onStop?()` invoked | stop closure call count ≥ 1 | Extend `NowPlayingCoordinatorTests.swift` |
 
 ### Done criteria
 
@@ -1995,10 +2053,16 @@ changes warrant deeper automated testing).
 
 - ⬜ AppState calls `updateCurrentTrack` on track change
 - ⬜ AppState calls `updatePlaybackState` on play / pause / stop
-- ⬜ AppState calls `updateElapsedTime` on track change (with 0), on
-  playback state change (with current `currentTime`), and on
-  successful seek (with new position) — event-driven, NOT during
-  polling
+- ⬜ NowPlayingCoordinator calls `updateElapsedTime` on track change
+  (with 0), on playback state change (with current `currentTime`
+  via injected provider), and on `notifySeekCompleted(at:)`
+  invoked from AppState's successful seek — event-driven, NOT
+  during polling
+- ⬜ AppState contains zero NowPlaying-specific observation,
+  callback assignment, or @Published property — only the
+  coordinator construction in `init` and one
+  `nowPlayingCoordinator.notifySeekCompleted(at:)` call inside
+  `seek(to:)` after success
 - ⬜ AppState calls `clear` on stop and on `currentTrack = nil`
 - ⬜ `pause()` does NOT clear (widget remains visible)
 - ⬜ Command callbacks (play / pause / next / prev / seek /
