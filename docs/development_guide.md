@@ -306,6 +306,7 @@ final class AppState: ObservableObject {
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
         undoManager: UndoManager? = nil,
+        lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
         self.iapManager   = iapManager

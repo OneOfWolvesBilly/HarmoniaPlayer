@@ -586,7 +586,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `refreshEntitlements() async` | Refreshes Pro status from App Store |
 | `toggleLyrics()` | Toggles `showLyrics`. Slice 9-J. |
 | `recheckLyrics()` | Re-runs lyrics availability detection for `currentTrack`; refreshes `lyricsResolution`. Slice 9-J. |
-| `setLyricsSource(_ source: LyricsSource)` | Switches active source (.embedded ↔ .lrc) for current track; persists choice via `LyricsPreferenceStore`. Slice 9-J. |
+| `setLyricsSource(_ source: LyricsSource)` | Switches active source (.embedded ↔ .lrc) for current track; no-op when source is not in `availableSources`. Persists choice via `LyricsPreferenceStore`. Slice 9-J. |
 | `setLyricsLanguage(_ languageCode: String?)` | Switches active language for current track; no-op when source is not `.embedded`. Persists. Slice 9-J. |
 | `setLyricsEncoding(_ encoding: String)` | Stores per-track encoding choice; persists. Slice 9-J. |
 

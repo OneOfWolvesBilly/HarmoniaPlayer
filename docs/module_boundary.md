@@ -144,6 +144,8 @@ TagReaderPort, etc.)]
    - **PlaybackService interface only** (not concrete implementations).
    - **TagReaderService interface** for metadata reading.
    - **EQService interface** for equaliser control (Slice 9-K).
+   - **LyricsService interface** for USLT + sidecar `.lrc` resolution (Slice 9-J).
+   - **LyricsPreferenceStore interface** for per-track lyrics preference persistence (Slice 9-J).
 
    Application Layer **must not**:
    - Instantiate platform adapters directly.
@@ -632,6 +634,8 @@ When reviewing code, check these rules:
 - [ ] Uses `PlaybackService` interface only
 - [ ] Uses `TagReaderService` for metadata reading (not `TagReaderPort`)
 - [ ] Uses `EQService` for equaliser control (not direct EQ adapter / not `EQPort`)
+- [ ] Uses `LyricsService` for lyrics resolution
+- [ ] Uses `LyricsPreferenceStore` for per-track lyrics preference persistence (not direct UserDefaults access for `hp.lyrics.prefs.*`)
 - [ ] No direct use of any HarmoniaCore Ports
 - [ ] No AVFoundation, StoreKit, or OSLog imports
 - [ ] Errors are mapped to `PlaybackError` (typed, no String payloads)
