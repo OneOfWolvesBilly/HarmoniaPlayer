@@ -37,18 +37,25 @@ At a high level, the codebase is divided into the following logical modules.
    - `EQCoordinator` — `@MainActor` `ObservableObject` owning all EQ-related
      observable state. Lives in `Shared/Models/` parallel to `AppState`
      (state-bearing observable, not stateless service). Slice 9-K. See §4.3.
+   - `NowPlayingCoordinator` — `@MainActor` class that owns NowPlaying
+     wiring between AppState publishers, AppState action closures, and
+     the system Now Playing surface via `NowPlayingService`. Lives in
+     `Shared/Models/` parallel to `EQCoordinator` (lifecycle
+     participant, not stateless service). Slice 9-L. See §4.5.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
      `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
      `LyricsResolution`, etc.)
    - App-layer service protocols (`PlaybackService`, `TagReaderService`,
-     `EQService`, `LyricsService`, `LyricsPreferenceStore`) — defined here
-     so that `AppState` can depend on them without importing HarmoniaCore.
+     `EQService`, `LyricsService`, `LyricsPreferenceStore`,
+     `NowPlayingService`) — defined here so that `AppState` /
+     coordinators can depend on them without importing platform
+     frameworks.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
      `ErrorReportService`, `EQPersistenceStore`, `EQSchemaMigrator` (pure Swift utilities
      with no HarmoniaCore dependency).
    - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
-3. **Integration Layer** (`import HarmoniaCore` allowed — still only these 3 files)
+3. **Integration Layer** (only place where `import HarmoniaCore` or other system-bridge frameworks are allowed)
    - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
    - `HarmoniaPlaybackServiceAdapter` — wraps HarmoniaCore `DefaultPlaybackService`,
      maps `CoreError` → `PlaybackError`.
@@ -58,7 +65,12 @@ At a high level, the codebase is divided into the following logical modules.
      binding. **Does NOT `import HarmoniaCore` by design**; closures are bound
      by `HarmoniaCoreProvider.makeEQService()` so the Core type surface stays
      confined to the provider. Counts as Integration Layer placement but does
-     not consume one of the three import slots.
+     not consume one of the three HarmoniaCore-import slots.
+   - `MPNowPlayingAdapter` — bridges `NowPlayingService` to
+     `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`. Slice 9-L. Sole
+     `import MediaPlayer` site in HarmoniaPlayer; does not `import
+     HarmoniaCore` because it bridges to a system-level macOS surface, not
+     the audio core.
    - `IAPManager` protocol + `StoreKitIAPManager` (macOS Pro unlock) + `FreeTierIAPManager` (stub).
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
@@ -142,7 +154,8 @@ TagReaderPort, etc.)]
 3. **Integration Layer** may depend on:
    - Core service interfaces and their concrete implementations.
    - **All HarmoniaCore-Swift ports and platform adapters**.
-   - Platform-specific frameworks required to wire services (e.g. StoreKit).
+   - System-bridge frameworks required to wire to system surfaces
+     (e.g. StoreKit for IAP, MediaPlayer for system Now Playing).
 
    Integration Layer **must not**:
    - Contain UI rendering logic (no SwiftUI views).
@@ -328,6 +341,43 @@ translation. AppState and views never see the HarmoniaCore type. This is
 the same pattern as §4.1 TagReaderService usage; lyrics simply add a new
 field to the mapping without changing the boundary topology.
 
+### 4.5 NowPlaying Coordinator Placement and System Surface Wiring
+
+Slice 9-L introduced two boundary nuances that warrant explicit clarification.
+
+**(a) Why `NowPlayingCoordinator` lives in `Shared/Models/`, not
+`Shared/Services/`.** Same reason as `EQCoordinator` (§4.3(a)) and `AppState`:
+a `@MainActor` lifecycle participant owning Combine subscriptions and
+holding AppState action closures via `[weak self]` capture is not a
+stateless utility. Unlike `EQCoordinator`, `NowPlayingCoordinator` does
+not declare any `@Published` properties — its responsibility is wiring
+glue, not state ownership — but the same "lifecycle participant"
+classification applies because publishers and closures are bound at
+construction and live the AppState lifetime.
+
+**(b) Why `MPNowPlayingAdapter` lives in `Shared/Services/` despite
+being the only `import MediaPlayer` site.** Integration Layer placement
+is by responsibility, not by HarmoniaCore involvement. `MPNowPlayingAdapter`
+bridges the application-layer `NowPlayingService` protocol to a system
+macOS surface (`MPNowPlayingInfoCenter` + `MPRemoteCommandCenter`) — the
+same shape of bridging that `HarmoniaPlaybackServiceAdapter` does for
+HarmoniaCore. The Integration Layer therefore now hosts two flavours of
+adapter: those that bridge to HarmoniaCore (3 files, the original `import
+HarmoniaCore` slots) and those that bridge to system frameworks
+(`MPNowPlayingAdapter` for MediaPlayer, future Linux equivalents to
+MPRIS would slot in here). AppState and views never see the underlying
+framework type.
+
+**Why no `NowPlayingPort` in HarmoniaCore.** `MediaPlayer.framework` is
+Apple-only. Linux has no equivalent — its system Now Playing surface is
+MPRIS over D-Bus, with a fundamentally different shape. Pushing
+`NowPlayingPort` into HarmoniaCore would either restrict it to Apple
+platforms (defeating HarmoniaCore's cross-platform purpose) or force a
+common abstraction over two unrelated APIs (defeating HarmoniaCore's
+"Apple audio engine alignment" purpose). The application-layer
+`NowPlayingService` protocol is the cross-platform abstraction; each
+platform target supplies its own adapter conforming to it.
+
 ---
 
 ## 5. Forbidden Dependencies (Examples)
@@ -369,6 +419,13 @@ architecture clean.
    - ❌ `FileRepresentation(importedContentType:)` gives a temporary file copy that is
      deleted after the callback, causing playback failures.
    - ✅ Use `ProxyRepresentation(exporting:importing:)` to receive the original file URL.
+
+9. **Application Layer importing MediaPlayer**
+   - ❌ `NowPlayingCoordinator` must not call `MPNowPlayingInfoCenter`
+     directly.
+   - ✅ It calls methods on `NowPlayingService`, whose production
+     implementation `MPNowPlayingAdapter` (Integration Layer) is the
+     only file that imports `MediaPlayer`.
 
 ---
 
@@ -457,6 +514,10 @@ struct CoreFactory {
     func makeLyricsService() -> LyricsService {
         return provider.makeLyricsService()
     }
+
+    func makeNowPlayingService() -> NowPlayingService {
+        return provider.makeNowPlayingService()
+    }
 }
 ```
 
@@ -499,6 +560,11 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         )
     }
 
+    func makeNowPlayingService() -> NowPlayingService {
+        // System surface adapter; does not bind to HarmoniaCore.
+        return MPNowPlayingAdapter()
+    }
+
     private func buildCore() -> HarmoniaCore.PlaybackService {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
         let clock   = MonotonicClockAdapter()
@@ -518,8 +584,8 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 ```
 
 - All platform-specific details are contained here.
-- The rest of the app only sees `PlaybackService`, `TagReaderService`, and
-  `EQService` interfaces.
+- The rest of the app only sees `PlaybackService`, `TagReaderService`,
+  `EQService`, and `NowPlayingService` interfaces.
 - The `eq` instance must be constructed **before** `audio` so the audio
   adapter can adopt it during initialisation. Reversing the order would
   compile but leave the audio chain without an EQ node.
@@ -627,6 +693,11 @@ struct PlayerView: View {
   mapped by `HarmoniaTagReaderAdapter` from `TagBundle.lyrics`; sidecar
   `.lrc` files are read directly via `Foundation` with encoding detection.
   See §4.4 for the boundary rationale.
+- **NowPlayingService** is pure Application Layer — `NowPlayingCoordinator`
+  routes AppState publishers and action closures to `NowPlayingService`
+  push and pull surfaces. The production implementation
+  `MPNowPlayingAdapter` is the only file in HarmoniaPlayer that imports
+  `MediaPlayer`. See §4.5 for the boundary rationale.
 
 Any pull request that crosses these boundaries (e.g. a view that imports
 HarmoniaCore-Swift, or an adapter that accesses SwiftUI, or AppState using audio Ports)

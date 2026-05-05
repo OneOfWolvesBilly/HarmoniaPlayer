@@ -136,6 +136,7 @@ HarmoniaPlayer/
 │       │   │   │   ├── LyricsPreference.swift       # Per-track lyrics preference (Slice 9-J)
 │       │   │   │   ├── LyricsResolution.swift       # Lyrics availability + content (Slice 9-J)
 │       │   │   │   ├── LyricsSource.swift           # .embedded / .lrc enum (Slice 9-J)
+│       │   │   │   ├── NowPlayingCoordinator.swift  # @MainActor NowPlaying wiring (Slice 9-L)
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
@@ -161,6 +162,8 @@ HarmoniaPlayer/
 │       │   │   │   ├── LyricsPreferenceStore.swift           # (App Layer) per-track lyrics prefs (Slice 9-J)
 │       │   │   │   ├── LyricsService.swift                   # (App Layer) USLT + sidecar resolver (Slice 9-J)
 │       │   │   │   ├── M3U8Service.swift                     # M3U8 parse/export
+│       │   │   │   ├── MPNowPlayingAdapter.swift             # Integration Layer (imports MediaPlayer, not HarmoniaCore) (Slice 9-L)
+│       │   │   │   ├── NowPlayingService.swift               # (App Layer) NowPlaying protocol (Slice 9-L)
 │       │   │   │   ├── PlaybackService.swift                 # App-layer protocol (async)
 │       │   │   │   ├── StoreKitIAPManager.swift              # StoreKit 2 implementation
 │       │   │   │   └── TagReaderService.swift                # App-layer protocol (async)
@@ -189,6 +192,7 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayerTests/
 │       │   ├── FakeInfrastructure/
 │       │   │   ├── FakeCoreProvider.swift                    # CoreServiceProviding double
+│       │   │   ├── FakeNowPlayingService.swift               # NowPlayingService double (Slice 9-L)
 │       │   │   ├── FakeTagReaderService.swift                # TagReaderService double
 │       │   │   └── MockIAPManager.swift                      # IAPManager double
 │       │   └── SharedTests/                                  # Unit tests (one per SUT)
@@ -211,6 +215,7 @@ HarmoniaPlayer/
 
 **Key rules:**
 - `import HarmoniaCore` is **only** allowed in 3 files in `Shared/Services/` (marked ⚠ Integration Layer)
+- `import MediaPlayer` is **only** allowed in `MPNowPlayingAdapter.swift` (Slice 9-L)
 - `Shared/` contains all cross-platform code; `macOS/Free/` contains the entry point and macOS-only views
 - Test doubles live in `FakeInfrastructure/`; test cases in `SharedTests/` (one file per system under test)
 
@@ -238,6 +243,12 @@ Any other file importing HarmoniaCore is a boundary violation.
 > PlaybackService EQ control surface to `EQService` via three closures bound
 > by `HarmoniaCoreProvider.makeEQService()`, so the Core type surface stays
 > confined to the provider. The 3-file rule above is unchanged.
+
+> **Slice 9-L note:** `MPNowPlayingAdapter.swift` is also in the Integration
+> Layer but imports `MediaPlayer` (not `HarmoniaCore`). It bridges
+> `NowPlayingService` to `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`
+> — system surfaces, not the audio core. This is the only `import MediaPlayer`
+> site in HarmoniaPlayer. The 3-file rule above is unchanged.
 
 ### 5.2 Dependency flow
 
@@ -393,12 +404,13 @@ All test infrastructure lives in
 
 | Double | Replaces | Key features |
 |--------|----------|--------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, and `FakeEQService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeLyricsService` / `makeEQService` call counts |
+| `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, `FakeEQService`, and `FakeNowPlayingService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeLyricsService` / `makeEQService` / `makeNowPlayingService` call counts |
 | `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
 | `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`, `stripLRCTimestamps` returns input unchanged. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). **Why a fake instead of `DefaultLyricsService`:** the real service triggers an Xcode 26 beta Swift runtime double-free when many short-lived instances coexist across the test suite — the fake sidesteps the toolchain bug entirely with no closure storage and no Locale dependency |
 | `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying AppState reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
+| `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
 
 ### 7.2 Test class conventions (Swift 6)

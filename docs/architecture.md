@@ -59,12 +59,14 @@ HarmoniaPlayer is designed to work together with the following repositories:
   * HarmoniaCore-Swift (Swift Package Manager)
   * AVFoundation, CoreAudio
   * StoreKit 2 (macOS Pro IAP)
+  * MediaPlayer.framework (system Now Playing widget integration, Slice 9-L)
 * Architecture:
 
   * SwiftUI-based macOS application.
   * Central `AppState` (@MainActor ObservableObject) — no separate ViewModel layer.
   * Views access AppState directly via `@EnvironmentObject`.
   * Integration layer constructs HarmoniaCore-Swift services and wires them into the app (CoreFactory, IAPManager).
+  * System Now Playing surface (Control Center widget, lock screen, AirPods, media keys, Siri) is bridged via `MPNowPlayingAdapter` (Integration Layer, Slice 9-L).
 
 Detailed interface contracts:
 
@@ -131,6 +133,9 @@ split: +Playlist, +Playback,
         eqCoordinator[EQCoordinator
 @MainActor ObservableObject
 EQ live state + presets]
+        nowPlayingCoordinator[NowPlayingCoordinator
+@MainActor
+NowPlaying wiring]
       end
 
       subgraph integration[Integration Layer]
@@ -142,6 +147,9 @@ Pro unlock via StoreKit 2]
 HarmoniaPlaybackServiceAdapter
 HarmoniaTagReaderAdapter
 HarmoniaEQAdapter]
+        mpAdapter[MPNowPlayingAdapter
+imports MediaPlayer
+not HarmoniaCore]
       end
     end
 
@@ -166,15 +174,22 @@ SandboxFileAccessAdapter]
     fs[(File System)]
     audioStack[(Apple Audio Stack
 CoreAudio / AVAudioEngine)]
+    sysNowPlaying[(System Now Playing
+Control Center / lock screen
+AirPods / media keys / Siri)]
 
     views --> appState
     appState --> eqCoordinator
+    appState --> nowPlayingCoordinator
 
     appState --> coreFactory
     appState --> iap
 
     coreFactory --> adapWrappers
     adapWrappers --> service
+
+    nowPlayingCoordinator --> mpAdapter
+    mpAdapter --> sysNowPlaying
 
     service --> ports
     ports --> adapters
@@ -195,7 +210,15 @@ CoreAudio / AVAudioEngine)]
 - `EQCoordinator` — parallel `@MainActor` `ObservableObject` owning EQ live
   state and presets; held as `let eqCoordinator` on `AppState`. Views read
   EQ state via `appState.eqCoordinator.…` (Slice 9-K)
-- App-layer service protocols (`PlaybackService`, `TagReaderService`, `EQService`, `LyricsService`, `LyricsPreferenceStore`) defined here
+- `NowPlayingCoordinator` — `@MainActor` class owning NowPlaying wiring
+  between AppState publishers, AppState action closures, and the system
+  Now Playing surface via `NowPlayingService`. Held as
+  `nowPlayingCoordinator` on `AppState` (Slice 9-L). Receives all
+  dependencies via constructor closure injection; never holds an
+  AppState reference.
+- App-layer service protocols (`PlaybackService`, `TagReaderService`,
+  `EQService`, `LyricsService`, `LyricsPreferenceStore`,
+  `NowPlayingService`) defined here
 - Application services (`FileDropService`, `M3U8Service`, `ExtendedAttributeService`, `EQPersistenceStore`, `EQSchemaMigrator`)
 - **May depend on:** App-layer service protocols, CoreFactory, IAPManager
 - **Must not depend on:** HarmoniaCore-Swift, Ports, Adapters, platform-specific APIs
@@ -206,7 +229,12 @@ CoreAudio / AVAudioEngine)]
 - `HarmoniaPlaybackServiceAdapter`: maps `CoreError` → `PlaybackError`, sync → async
 - `HarmoniaTagReaderAdapter`: maps `TagBundle` → `Track`
 - `HarmoniaEQAdapter`: bridges Core PlaybackService EQ control surface to `EQService` via closure binding (does **not** `import HarmoniaCore`)
+- `MPNowPlayingAdapter`: bridges `NowPlayingService` to system
+  `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`. Sole `import
+  MediaPlayer` site in HarmoniaPlayer; does **not** `import HarmoniaCore`
+  because it bridges to a system surface, not the audio core (Slice 9-L)
 - **Only these 3 files may `import HarmoniaCore`:** `HarmoniaCoreProvider.swift`, `HarmoniaPlaybackServiceAdapter.swift`, `HarmoniaTagReaderAdapter.swift`
+- **Only `MPNowPlayingAdapter.swift` may `import MediaPlayer`** (Slice 9-L)
 - **Must not depend on:** SwiftUI, UI state
 
 **HarmoniaCore-Swift Package:**
@@ -250,8 +278,8 @@ HarmoniaPlayer follows the same Ports & Adapters pattern as HarmoniaCore:
 1. **UI depends on AppState only** — No direct service access, no ViewModels
 2. **AppState uses app-layer service protocols** — `PlaybackService`, `TagReaderService` defined in HarmoniaPlayer
 3. **CoreFactory constructs services** — Wires Ports to Adapters via `CoreServiceProviding`
-4. **Adapter wrappers at the boundary** — `HarmoniaPlaybackServiceAdapter` maps `CoreError` → `PlaybackError`; `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track`; `HarmoniaEQAdapter` bridges the Core PlaybackService EQ control surface to `EQService` via closure binding (does **not** `import HarmoniaCore`)
-5. **`import HarmoniaCore` restricted to 3 files** — Everything else uses app-layer abstractions
+4. **Adapter wrappers at the boundary** — `HarmoniaPlaybackServiceAdapter` maps `CoreError` → `PlaybackError`; `HarmoniaTagReaderAdapter` maps `TagBundle` → `Track`; `HarmoniaEQAdapter` bridges the Core PlaybackService EQ control surface to `EQService` via closure binding (does **not** `import HarmoniaCore`); `MPNowPlayingAdapter` bridges `NowPlayingService` to system `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter` (sole `import MediaPlayer` site, Slice 9-L)
+5. **`import HarmoniaCore` restricted to 3 files; `import MediaPlayer` restricted to 1 file** — Everything else uses app-layer abstractions
 
 ### 6.2 Dependency Injection
 
@@ -265,6 +293,7 @@ final class AppState: ObservableObject {
     let lyricsService: LyricsService
     let lyricsPreferenceStore: LyricsPreferenceStore
     let eqCoordinator: EQCoordinator
+    private(set) var nowPlayingCoordinator: NowPlayingCoordinator!  // Slice 9-L
     private let iapManager: IAPManager
 
     init(
@@ -288,6 +317,10 @@ final class AppState: ObservableObject {
                 service: coreFactory.makeEQService(),
                 store:   EQPersistenceStore(defaults: userDefaults)
             )
+
+        // Slice 9-L: NowPlayingCoordinator constructed last so action
+        // closures can capture [weak self]. See implementation_guide_swift.md
+        // §3.1 for the full constructor.
     }
 }
 ```
@@ -297,7 +330,7 @@ final class AppState: ObservableObject {
 `AppState+Navigation.swift`, `AppState+M3U8.swift`.
 
 This enables:
-- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeLyricsService`, `FakeEQService`, `MockIAPManager`)
+- Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeLyricsService`, `FakeEQService`, `FakeNowPlayingService`, `MockIAPManager`)
 - Runtime configuration (Free vs Pro via `CoreFeatureFlags`)
 - Clear dependency graph
 
@@ -366,7 +399,7 @@ This separation ensures:
 5. **Testable and verifiable**
 
    * All services are injected via protocols and factory pattern.
-   * Test doubles: `FakeCoreProvider`, `FakePlaybackService`, `FakeTagReaderService`, `MockIAPManager`.
+   * Test doubles: `FakeCoreProvider`, `FakePlaybackService`, `FakeTagReaderService`, `FakeNowPlayingService`, `MockIAPManager`.
    * `@MainActor` on test classes using AppState; `nonisolated deinit {}` for Swift 6 compatibility.
 
 ---

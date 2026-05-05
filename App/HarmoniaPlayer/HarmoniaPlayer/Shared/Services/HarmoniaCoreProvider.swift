@@ -137,22 +137,18 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         )
     }
 
-    /// Slice 9-L Red phase placeholder.
+    /// Construct the production `NowPlayingService`.
     ///
-    /// Returns a no-op `NowPlayingService` so production app startup
-    /// proceeds normally during the Red phase. The Now Playing widget
-    /// will simply not respond — neither showing metadata nor handling
-    /// commands — until the Green phase replaces this with a real
-    /// `MPNowPlayingAdapter`.
+    /// `MPNowPlayingAdapter` owns interactions with
+    /// `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`. It is
+    /// the single point in HarmoniaPlayer that imports
+    /// `MediaPlayer.framework`.
     ///
-    /// Tests never hit this branch; they construct AppState with
+    /// Tests do not hit this branch — they construct AppState with
     /// `FakeCoreProvider`, which returns the injected
     /// `nowPlayingServiceStub`.
-    ///
-    /// **Removed in Green phase:** delete `RedPhaseNoOpNowPlayingService`
-    /// and replace this method body with `MPNowPlayingAdapter()`.
     func makeNowPlayingService() -> NowPlayingService {
-        return RedPhaseNoOpNowPlayingService()
+        return MPNowPlayingAdapter()
     }
 
     // MARK: - Helpers
@@ -181,32 +177,4 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
             eq:      eq
         )
     }
-}
-
-// MARK: - Slice 9-L Red phase NoOp
-
-/// Red-phase placeholder for `NowPlayingService`.
-///
-/// All push methods are no-ops; pull-side callbacks are never
-/// invoked because nothing ever calls into them. This lets the
-/// production app build and run during the Red phase without the
-/// Now Playing widget being functional.
-///
-/// **Deleted entirely in Green phase** — replaced by the real
-/// `MPNowPlayingAdapter` that owns `MPNowPlayingInfoCenter` and
-/// `MPRemoteCommandCenter` interactions.
-private final class RedPhaseNoOpNowPlayingService: NowPlayingService {
-
-    func updateCurrentTrack(_ track: Track?) { /* no-op */ }
-    func updatePlaybackState(_ state: PlaybackState, rate: Double) { /* no-op */ }
-    func updateElapsedTime(_ seconds: Double) { /* no-op */ }
-    func clear() { /* no-op */ }
-
-    var onPlay: (() -> Void)?
-    var onPause: (() -> Void)?
-    var onTogglePlayPause: (() -> Void)?
-    var onNext: (() -> Void)?
-    var onPrevious: (() -> Void)?
-    var onStop: (() -> Void)?
-    var onSeek: ((Double) -> Void)?
 }

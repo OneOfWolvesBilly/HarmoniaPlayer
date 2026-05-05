@@ -45,14 +45,19 @@ bridges the two.
 ## 2. Integration Layer
 
 The Integration Layer is the **only** place in HarmoniaPlayer where
-`import HarmoniaCore` is allowed. It consists of exactly three importing
-files plus one closure-binding adapter that does not import HarmoniaCore:
+`import HarmoniaCore` or `import MediaPlayer` is allowed. It consists
+of exactly three HarmoniaCore-importing files, one closure-binding
+adapter that does not import HarmoniaCore, and one MediaPlayer-importing
+adapter for the system Now Playing surface:
 
 1. `HarmoniaCoreProvider.swift` — constructs real HarmoniaCore services
 2. `HarmoniaPlaybackServiceAdapter.swift` — wraps `DefaultPlaybackService`
 3. `HarmoniaTagReaderAdapter.swift` — wraps `TagReaderPort`
 4. `HarmoniaEQAdapter.swift` — bridges Core EQ control surface to `EQService`
    via closures (no `import HarmoniaCore` — see §2.5)
+5. `MPNowPlayingAdapter.swift` — bridges `NowPlayingService` to system
+   `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter` (only `import
+   MediaPlayer` site — see §2.6)
 
 ### 2.1 HarmoniaCoreProvider
 
@@ -333,6 +338,67 @@ final class HarmoniaEQAdapter: EQService {
   the test-side `FakeEQService` — see `development_guide.md` §8.6 for the
   full rationale and inventory.
 
+### 2.6 MPNowPlayingAdapter (Integration Layer, imports MediaPlayer)
+
+Slice 9-L. `MPNowPlayingAdapter` is the only file in HarmoniaPlayer that
+imports the `MediaPlayer` framework. It bridges the application-layer
+`NowPlayingService` protocol to two system singletons:
+
+- `MPNowPlayingInfoCenter.default()` — receives push updates (metadata,
+  playback state, elapsed time) so the system Now Playing widget reflects
+  HarmoniaPlayer state.
+- `MPRemoteCommandCenter.shared()` — receives user actions on the system
+  surface (Control Center widget, lock screen, AirPods, media keys, Siri)
+  and routes them to the seven `NowPlayingService` pull-side callbacks
+  that `NowPlayingCoordinator` has assigned.
+
+Constructed once at app launch via `HarmoniaCoreProvider.makeNowPlayingService()`;
+lives the process lifetime so Bluetooth / media-key / Siri commands work
+at any moment regardless of current playback state.
+
+```swift
+import Foundation
+import AppKit
+import MediaPlayer
+
+final class MPNowPlayingAdapter: NowPlayingService {
+
+    var onPlay: (() -> Void)?
+    var onPause: (() -> Void)?
+    var onTogglePlayPause: (() -> Void)?
+    var onNext: (() -> Void)?
+    var onPrevious: (() -> Void)?
+    var onStop: (() -> Void)?
+    var onSeek: ((Double) -> Void)?
+
+    private let infoCenter = MPNowPlayingInfoCenter.default()
+    private let commandCenter = MPRemoteCommandCenter.shared()
+
+    init() {
+        registerSupportedCommands()
+        disableUnsupportedCommands()
+        observeAppTermination()
+    }
+
+    func updateCurrentTrack(_ track: Track?) { /* push metadata, artwork */ }
+    func updatePlaybackState(_ state: PlaybackState, rate: Double) { /* push state + rate */ }
+    func updateElapsedTime(_ seconds: Double) { /* re-anchor scrubber */ }
+    func clear() {
+        infoCenter.nowPlayingInfo = nil
+        infoCenter.playbackState = .unknown
+    }
+
+    // ... see api_reference.md §6.5 for the full list of pushed keys,
+    //     registered commands, disabled commands, artwork fallback rules,
+    //     and app-termination cleanup.
+}
+```
+
+**Why no `import HarmoniaCore`:** this adapter bridges to a system macOS
+surface, not the audio core. `MediaPlayer.framework` does not exist on
+Linux; the cross-platform abstraction is `NowPlayingService` (Application
+Layer protocol). See `module_boundary.md` §4.5 for the full rationale.
+
 ---
 
 ## 3. AppState Implementation
@@ -370,6 +436,13 @@ final class AppState: ObservableObject {
     // Owns observable EQ state; views read EQ via `appState.eqCoordinator.…`
     // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
     let eqCoordinator: EQCoordinator
+
+    // NowPlaying coordinator (Slice 9-L). Routes AppState publishers and
+    // action closures to the system Now Playing surface via NowPlayingService.
+    // Declared `private(set) var ...!` rather than `let` so the seven action
+    // closures can capture `[weak self]` after every other stored property
+    // is initialised.
+    private(set) var nowPlayingCoordinator: NowPlayingCoordinator!
 
     // Dependencies kept private
     private let iapManager: IAPManager
@@ -431,6 +504,27 @@ final class AppState: ObservableObject {
         self.userDefaults   = userDefaults
         // ... (remaining init: undoManager, languageBundle, restoreState(),
         //      Combine sinks for replayGainMode/selectedLanguage/lyricsResolution)
+
+        // NowPlayingCoordinator (Slice 9-L). Constructed last so all stored
+        // properties are initialised before the seven action closures capture
+        // `[weak self]`. The coordinator never holds an AppState reference.
+        self.nowPlayingCoordinator = NowPlayingCoordinator(
+            service: coreFactory.makeNowPlayingService(),
+            currentTrackPublisher: $currentTrack.eraseToAnyPublisher(),
+            playbackStatePublisher: $playbackState.eraseToAnyPublisher(),
+            currentTimeProvider: { [weak self] in self?.currentTime ?? 0 },
+            play: { [weak self] in await self?.play() },
+            pause: { [weak self] in await self?.pause() },
+            stop: { [weak self] in await self?.stop() },
+            seek: { [weak self] s in await self?.seek(to: s) },
+            next: { [weak self] in await self?.playNextTrack() },
+            previous: { [weak self] in await self?.playPreviousTrack() },
+            togglePlayPause: { [weak self] in
+                guard let self else { return }
+                if self.playbackState == .playing { await self.pause() }
+                else { await self.play() }
+            }
+        )
     }
 
     // Xcode 26 beta workaround — see development_guide.md §8.6.
@@ -831,12 +925,13 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 
 | Double | Replaces | Notable features |
 |--------|----------|------------------|
-| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, and `FakeEQService` stubs |
+| `FakeCoreProvider` | `CoreServiceProviding` | Injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, `FakeEQService`, and `FakeNowPlayingService` stubs |
 | `FakePlaybackService` | `PlaybackService` | Call counts, error stubs, `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs, per-URL error stubs, configurable schema version |
 | `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). Avoids `DefaultLyricsService`'s Xcode 26 beta runtime double-free when many short-lived instances coexist |
 | `StubLyricsService` | `LyricsService` | Configurable: `stubbedResolution` dictates `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Defined inline in `FakeCoreProvider.swift` (Slice 9-J) |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last-value capture; defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
+| `FakeNowPlayingService` | `NowPlayingService` | Push call counters, last-value captures, `updatedElapsedHistory` array, and pull-side callback properties tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
 | `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, call counts |
 
 ### 6.2 @MainActor Test Classes (Swift 6)
@@ -986,9 +1081,10 @@ AVAssetReaderDecoder, AVAudioEngine, AVMetadataTagReader (AVFoundation)
    - No singletons in services (app entry point creates the graph)
    - `CoreServiceProviding` protocol enables test swap-in
 
-4. **`import HarmoniaCore` restricted to 3 files**
-   - `HarmoniaCoreProvider`, `HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`
-   - Any other file importing HarmoniaCore is a boundary violation
+4. **`import HarmoniaCore` restricted to 3 files; `import MediaPlayer` restricted to 1 file**
+   - HarmoniaCore: `HarmoniaCoreProvider`, `HarmoniaPlaybackServiceAdapter`, `HarmoniaTagReaderAdapter`
+   - MediaPlayer: `MPNowPlayingAdapter` (Slice 9-L, system Now Playing surface)
+   - Any other file importing either is a boundary violation
 
 5. **Views use AppState only**
    - No ViewModels — AppState is the single observable state

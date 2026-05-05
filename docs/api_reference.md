@@ -422,6 +422,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `lyricsService` | `LyricsService` | Resolves USLT + sidecar `.lrc` content; encoding detection; LRC timestamp stripping (Slice 9-J) |
 | `lyricsPreferenceStore` | `LyricsPreferenceStore` | Per-track persistence of source / encoding / language preference (Slice 9-J) |
 | `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
+| `nowPlayingCoordinator` | `NowPlayingCoordinator` | Routes AppState publishers and action closures to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
 
 ### 3.3 Published Properties
 
@@ -702,7 +703,32 @@ Implementations: `DefaultLyricsPreferenceStore` (production).
 
 Slice 9-J. UserDefaults-backed, keyed by absolute file path with optional `#track=<n>` suffix for CUE virtual tracks (latent in 9-J, activated v0.15). Preferences are shared across playlists — the same file in playlist A and playlist B uses the same preference. See §8 for the full key format.
 
-### 4.7 CoreServiceProviding
+### 4.7 NowPlayingService
+
+```swift
+protocol NowPlayingService: AnyObject {
+    // Push (AppState → service)
+    func updateCurrentTrack(_ track: Track?)
+    func updatePlaybackState(_ state: PlaybackState, rate: Double)
+    func updateElapsedTime(_ seconds: Double)
+    func clear()
+
+    // Pull (service → AppState, set by NowPlayingCoordinator)
+    var onPlay: (() -> Void)? { get set }
+    var onPause: (() -> Void)? { get set }
+    var onTogglePlayPause: (() -> Void)? { get set }
+    var onNext: (() -> Void)? { get set }
+    var onPrevious: (() -> Void)? { get set }
+    var onStop: (() -> Void)? { get set }
+    var onSeek: ((Double) -> Void)? { get set }
+}
+```
+
+Implementations: `MPNowPlayingAdapter` (production, see §6.5), `FakeNowPlayingService` (test).
+
+Slice 9-L. Application Layer abstraction over the system Now Playing surface (Control Center widget, lock screen, AirPods, media keys, Siri). Push methods deliver metadata, state, and elapsed-time updates from `NowPlayingCoordinator` to whatever system implementation is bound. Pull-side closures are assigned by the coordinator at construction so user actions on the system widget reach AppState's action methods.
+
+### 4.8 CoreServiceProviding
 
 ```swift
 protocol CoreServiceProviding: AnyObject {
@@ -710,6 +736,7 @@ protocol CoreServiceProviding: AnyObject {
     func makeTagReaderService() -> TagReaderService
     func makeLyricsService() -> LyricsService
     func makeEQService() -> EQService
+    func makeNowPlayingService() -> NowPlayingService
 }
 ```
 
@@ -730,6 +757,7 @@ struct CoreFactory {
     func makeTagReaderService() -> TagReaderService
     func makeLyricsService() -> LyricsService
     func makeEQService() -> EQService
+    func makeNowPlayingService() -> NowPlayingService
 }
 ```
 
@@ -889,13 +917,45 @@ enum EQCoordinatorError: Error {
 
 **Xcode 26 beta workaround:** declared with `nonisolated deinit { }`. With module-level `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the synthesised deinit on an inferred-MainActor class routes deallocation through `swift_task_deinitOnExecutorImpl`, which crashes in Xcode 26 beta during TaskLocal teardown. Methods stay on MainActor; only deinit drops down to the synchronous ARC path. The same pattern is applied to `HarmoniaEQAdapter`, `AppState`, and the test-side `FakeEQService`.
 
+### 5.9 NowPlayingCoordinator
+
+**Location:** `Shared/Models/NowPlayingCoordinator.swift`
+
+**Purpose:** `@MainActor` class that owns all NowPlaying wiring for the UI / Application boundary with the system Now Playing surface. Slice 9-L. Subscribes to `AppState.$currentTrack` and `AppState.$playbackState`, routes the seven `NowPlayingService` pull-side callbacks to AppState action closures, and exposes `notifySeekCompleted(at:)` for direct AppState notification on successful seek (seek success is not derivable from `$playbackState`). Lives in `Shared/Models/` for the same reason `EQCoordinator` does — it is a lifecycle participant rather than a stateless service. Receives all dependencies via constructor closure injection and never holds an `AppState` reference.
+
+```swift
+@MainActor
+final class NowPlayingCoordinator {
+
+    init(
+        service: NowPlayingService,
+        currentTrackPublisher: AnyPublisher<Track?, Never>,
+        playbackStatePublisher: AnyPublisher<PlaybackState, Never>,
+        currentTimeProvider: @escaping @MainActor () -> TimeInterval,
+        play: @escaping @MainActor () async -> Void,
+        pause: @escaping @MainActor () async -> Void,
+        stop: @escaping @MainActor () async -> Void,
+        seek: @escaping @MainActor (TimeInterval) async -> Void,
+        next: @escaping @MainActor () async -> Void,
+        previous: @escaping @MainActor () async -> Void,
+        togglePlayPause: @escaping @MainActor () async -> Void
+    )
+
+    func notifySeekCompleted(at seconds: TimeInterval)
+}
+```
+
+**Push semantics:** on `currentTrack` non-nil push `updateCurrentTrack` then `updateElapsedTime(0)`; on nil call `clear()`. On every `playbackState` event push `updatePlaybackState(_:rate:)` (rate 1.0 playing / 0.0 otherwise) then `updateElapsedTime(currentTimeProvider())`; on `.stopped` also `clear()`.
+
+**Pull semantics:** the seven service callbacks (`onPlay`, `onPause`, `onTogglePlayPause`, `onNext`, `onPrevious`, `onStop`, `onSeek`) are assigned in the coordinator's `init`, each wrapped in `Task { @MainActor in await … }` so the synchronous service callback signature can drive async AppState action closures.
+
+**AppState ownership:** AppState declares `private(set) var nowPlayingCoordinator: NowPlayingCoordinator!` (rather than `let`) so the seven action closures can capture `[weak self]` after every other stored property is initialised. `EQCoordinator` uses `let` because it has no self-capture requirement; that contrast does not apply here.
+
 ---
 
 ## 6. Integration Layer
 
-These 3 files are the **only** production files allowed to `import HarmoniaCore`.
-A fourth file, `HarmoniaEQAdapter`, is also placed in the Integration Layer but
-**does not import HarmoniaCore by design** — see §6.4.
+These files form the Integration Layer. Three of them are the **only** production files allowed to `import HarmoniaCore` (§6.1, §6.2, §6.3). `HarmoniaEQAdapter` (§6.4) is also placed in the Integration Layer but **does not `import HarmoniaCore` by design** — see §6.4. `MPNowPlayingAdapter` (§6.5) is also Integration Layer but imports the `MediaPlayer` framework instead of `HarmoniaCore`, because it bridges to a system-level macOS surface (Control Center widget, lock screen, AirPods, media keys) rather than to the audio core.
 
 ### 6.1 HarmoniaCoreProvider
 
@@ -912,6 +972,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
     func makeTagReaderService() -> TagReaderService
     func makeLyricsService() -> LyricsService    // returns DefaultLyricsService
     func makeEQService() -> EQService            // closure-binds against sharedCore
+    func makeNowPlayingService() -> NowPlayingService    // returns MPNowPlayingAdapter
 }
 ```
 
@@ -978,6 +1039,29 @@ the synthesised deinit on an inferred-MainActor class releases captured
 closures. The same pattern is applied to `EQCoordinator`, `AppState`, and the
 test-side `FakeEQService` — see §5.8 for the full rationale.
 
+### 6.5 MPNowPlayingAdapter
+
+Bridges `NowPlayingService` to `MPNowPlayingInfoCenter.default()` and `MPRemoteCommandCenter.shared()`. Slice 9-L. Sole `import MediaPlayer` site in HarmoniaPlayer. Constructed once at app launch via `HarmoniaCoreProvider.makeNowPlayingService()`; lives the process lifetime so Bluetooth / media-key / Siri commands work at any moment regardless of current playback state.
+
+```swift
+final class MPNowPlayingAdapter: NowPlayingService {
+    init()
+    // NowPlayingService protocol methods drive nowPlayingInfo and playbackState.
+    // The seven supported MPRemoteCommand handlers are registered in init and
+    // never unregistered.
+}
+```
+
+**Pushed nowPlayingInfo keys:** `MPMediaItemPropertyTitle`, `MPMediaItemPropertyArtist`, `MPMediaItemPropertyAlbumTitle`, `MPMediaItemPropertyPlaybackDuration`, `MPMediaItemPropertyArtwork`, `MPNowPlayingInfoPropertyMediaType` (`.audio.rawValue`), `MPNowPlayingInfoPropertyPlaybackRate`, `MPNowPlayingInfoPropertyElapsedPlaybackTime`. `MPNowPlayingInfoCenter.playbackState` mirrors `PlaybackState` via a private mapping (`.playing` / `.paused` / `.stopped` / `.unknown` for `.idle` / `.loading` / `.error`).
+
+**Artwork fallback:** `track.artworkData` is decoded to `NSImage` and wrapped in `MPMediaItemArtwork` using `boundsSize` + `requestHandler`. On nil or decode failure, falls back to `NSImage(named: NSImage.applicationIconName)`. If even the application icon cannot be obtained, the artwork key is skipped silently and the system shows a generic icon.
+
+**Registered MPRemoteCommands:** `playCommand`, `pauseCommand`, `togglePlayPauseCommand`, `nextTrackCommand`, `previousTrackCommand`, `stopCommand`, `changePlaybackPositionCommand`. Each handler returns `.success` or `.commandFailed`.
+
+**Disabled MPRemoteCommands** (so the system widget renders only buttons HarmoniaPlayer responds to): `skipForwardCommand`, `skipBackwardCommand`, `seekForwardCommand`, `seekBackwardCommand`, `changePlaybackRateCommand`, `changeRepeatModeCommand`, `changeShuffleModeCommand`, `enableLanguageOptionCommand`, `disableLanguageOptionCommand`, `ratingCommand`, `likeCommand`, `dislikeCommand`, `bookmarkCommand`.
+
+**App-termination cleanup:** observes `NSApplication.willTerminateNotification` and calls `clear()` so the widget does not retain stale info after app close.
+
 ---
 
 ## 7. Notification Names
@@ -1033,6 +1117,8 @@ Integration Layer -> HarmoniaCore ports + adapters (import HarmoniaCore)
 ```
 
 `import HarmoniaCore` restricted to: `HarmoniaCoreProvider.swift`, `HarmoniaPlaybackServiceAdapter.swift`, `HarmoniaTagReaderAdapter.swift`.
+
+`import MediaPlayer` restricted to: `MPNowPlayingAdapter.swift` (Slice 9-L).
 
 See [Module Boundaries](module_boundary.md) for complete rules.
 
