@@ -155,7 +155,7 @@ HarmoniaPlayer/
 │       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
 │       │   │   │   ├── FreeTierIAPManager.swift              # Stub IAP (Free tier)
 │       │   │   │   ├── HarmoniaCoreProvider.swift            # ⚠ Integration Layer
-│       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import)
+│       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import) (Slice 9-K)
 │       │   │   │   ├── HarmoniaPlaybackServiceAdapter.swift  # ⚠ Integration Layer
 │       │   │   │   ├── HarmoniaTagReaderAdapter.swift        # ⚠ Integration Layer
 │       │   │   │   ├── IAPManager.swift                      # IAPManager protocol + IAPError
@@ -305,7 +305,8 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
-        undoManager: UndoManager? = nil
+        undoManager: UndoManager? = nil,
+        eqCoordinator: EQCoordinator? = nil
     ) {
         self.iapManager   = iapManager
         self.featureFlags = CoreFeatureFlags(iapManager: iapManager)

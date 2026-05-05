@@ -399,7 +399,7 @@ This separation ensures:
 5. **Testable and verifiable**
 
    * All services are injected via protocols and factory pattern.
-   * Test doubles: `FakeCoreProvider`, `FakePlaybackService`, `FakeTagReaderService`, `FakeNowPlayingService`, `MockIAPManager`.
+   * Test doubles: `FakeCoreProvider`, `FakePlaybackService`, `FakeTagReaderService`, `FakeEQService`, `FakeNowPlayingService`, `MockIAPManager`.
    * `@MainActor` on test classes using AppState; `nonisolated deinit {}` for Swift 6 compatibility.
 
 ---

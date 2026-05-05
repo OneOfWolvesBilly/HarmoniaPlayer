@@ -876,7 +876,7 @@ nonisolated enum EQSchemaMigrator {
 }
 ```
 
-9-K ships only schema version 1, so the migrator currently only handles `1 → 1` (identity) and falls through to `EQPersistedState.defaults` for any unsupported version. Future slices (e.g. v0.15 per-track EQ, v0.15/v0.2 user-adjustable Q) bump the version and add migration steps here.
+9-K ships only schema version 1, so the migrator currently only handles `fromVersion == toVersion` as identity; any non-matching `fromVersion` falls through to `EQPersistedState.defaults` rather than risking corruption. Future slices (e.g. v0.15 per-track EQ, v0.15/v0.2 user-adjustable Q) bump the version and add migration steps here.
 
 ### 5.8 EQCoordinator
 
@@ -914,6 +914,8 @@ enum EQCoordinatorError: Error {
 **Custom-state semantics:** `currentPresetName` is `nil` whenever the live state does not match any saved preset. Both `setBand(index:gain:)` and `setPreamp(_:)` clear it, because `EQPreset` defines a preset as bands + preamp together — any change to either makes the live state diverge from the saved preset.
 
 **Init side effect:** the constructor pushes the loaded state to the injected `EQService` (`setEnabled`, `setPreamp`, `setBandGains`) so the audio chain matches the coordinator's published state from t=0.
+
+**Mutators side effects:** every public mutator forwards the resulting state to the injected `EQService` (where applicable) and persists via the injected `EQPersistenceStore`. Boundary behaviours: `setBand` is a silent no-op on out-of-bounds indices; `selectPreset` is a silent no-op when no preset matches the given name and otherwise sets `currentPresetName` to that name; `saveAsCustomPreset` replaces any existing custom preset with the same name and sets `currentPresetName` to the saved name; `deleteCustomPreset` silently rejects built-in names and clears `currentPresetName` when it matches the deleted preset.
 
 **Xcode 26 beta workaround:** declared with `nonisolated deinit { }`. With module-level `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` the synthesised deinit on an inferred-MainActor class routes deallocation through `swift_task_deinitOnExecutorImpl`, which crashes in Xcode 26 beta during TaskLocal teardown. Methods stay on MainActor; only deinit drops down to the synchronous ARC path. The same pattern is applied to `HarmoniaEQAdapter`, `AppState`, and the test-side `FakeEQService`.
 

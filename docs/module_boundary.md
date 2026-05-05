@@ -143,6 +143,7 @@ TagReaderPort, etc.)]
    - Integration Layer abstractions (`CoreFactory` interface, `IAPManager` interface).
    - **PlaybackService interface only** (not concrete implementations).
    - **TagReaderService interface** for metadata reading.
+   - **EQService interface** for equaliser control (Slice 9-K).
 
    Application Layer **must not**:
    - Instantiate platform adapters directly.
@@ -288,9 +289,10 @@ If two distinct `EQPort` instances were created (one for audio splice, one
 for control), slider movements would mutate a node that is not in the audio
 chain and have no audible effect. `HarmoniaCoreProvider` further caches the
 constructed `HarmoniaCore.PlaybackService` in `sharedCore` so
-`makePlaybackService(isProUser:)` and `makeEQService()` both see the same
-service instance regardless of call order. See §6.3 for the full constructor
-pattern.
+`makeEQService()` reuses the same service instance created by
+`makePlaybackService(isProUser:)`. AppState init calls `makePlaybackService`
+first, so both factories operate on the same audio chain. See §6.3 for the
+full constructor pattern.
 
 ### 4.4 Lyrics State and Tag Mapping
 
@@ -629,6 +631,7 @@ When reviewing code, check these rules:
 **Application Layer:**
 - [ ] Uses `PlaybackService` interface only
 - [ ] Uses `TagReaderService` for metadata reading (not `TagReaderPort`)
+- [ ] Uses `EQService` for equaliser control (not direct EQ adapter / not `EQPort`)
 - [ ] No direct use of any HarmoniaCore Ports
 - [ ] No AVFoundation, StoreKit, or OSLog imports
 - [ ] Errors are mapped to `PlaybackError` (typed, no String payloads)
