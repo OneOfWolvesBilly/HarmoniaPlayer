@@ -60,4 +60,17 @@ protocol CoreServiceProviding: AnyObject {
     /// `makePlaybackService(isProUser:)` so EQ control acts on the live audio
     /// chain. `FakeCoreProvider` returns the injected `eqServiceStub`.
     func makeEQService() -> EQService
+
+    /// Create the Now Playing service that bridges AppState to the
+    /// system Now Playing surface (Control Center widget, lock screen,
+    /// AirPods, media keys, Siri).
+    ///
+    /// - Returns: NowPlayingService instance
+    ///
+    /// **Note:** Available in both Free and Pro tiers (Slice 9-L, v0.1).
+    /// In `HarmoniaCoreProvider` the returned service is a real
+    /// `MPNowPlayingAdapter` that owns the `MPNowPlayingInfoCenter` and
+    /// `MPRemoteCommandCenter` interactions. `FakeCoreProvider` returns
+    /// the injected `nowPlayingServiceStub`.
+    func makeNowPlayingService() -> NowPlayingService
 }

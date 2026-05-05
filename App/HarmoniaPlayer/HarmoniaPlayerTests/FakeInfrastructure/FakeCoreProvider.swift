@@ -66,6 +66,9 @@ final class FakeCoreProvider: CoreServiceProviding {
     /// Number of times makeEQService was called
     private(set) var makeEQServiceCallCount = 0
 
+    /// Number of times makeNowPlayingService was called
+    private(set) var makeNowPlayingServiceCallCount = 0
+
     // MARK: - Stubs
 
     /// The PlaybackService stub returned by makePlaybackService().
@@ -86,18 +89,25 @@ final class FakeCoreProvider: CoreServiceProviding {
     /// Defaults to FakeEQService (records calls, no closure storage).
     var eqServiceStub: EQService
 
+    /// The NowPlayingService instance returned by makeNowPlayingService().
+    /// Defaults to FakeNowPlayingService (records calls, no closure storage
+    /// outside the explicit pull-side callbacks).
+    var nowPlayingServiceStub: NowPlayingService
+
     // MARK: - Initialization
 
     init(
         playbackService: FakePlaybackService = FakePlaybackService(),
         tagReader: TagReaderService = FakeTagReaderService(),
         lyricsService: LyricsService = FakeLyricsService(),
-        eqService: EQService = FakeEQService()
+        eqService: EQService = FakeEQService(),
+        nowPlayingService: NowPlayingService = FakeNowPlayingService()
     ) {
         self.playbackServiceStub = playbackService
         self.tagReaderServiceStub = tagReader
         self.lyricsServiceStub = lyricsService
         self.eqServiceStub = eqService
+        self.nowPlayingServiceStub = nowPlayingService
     }
 
     // MARK: - CoreServiceProviding
@@ -121,6 +131,11 @@ final class FakeCoreProvider: CoreServiceProviding {
     func makeEQService() -> EQService {
         makeEQServiceCallCount += 1
         return eqServiceStub
+    }
+
+    func makeNowPlayingService() -> NowPlayingService {
+        makeNowPlayingServiceCallCount += 1
+        return nowPlayingServiceStub
     }
 }
 

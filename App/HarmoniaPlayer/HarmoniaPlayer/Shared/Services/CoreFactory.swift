@@ -96,4 +96,15 @@ struct CoreFactory {
     func makeEQService() -> EQService {
         return provider.makeEQService()
     }
+
+    /// Create Now Playing service
+    ///
+    /// Bridges AppState to the system Now Playing surface (Control
+    /// Center widget, lock screen, AirPods, media keys, Siri).
+    /// Available in both Free and Pro tiers (Slice 9-L, v0.1).
+    ///
+    /// - Returns: NowPlayingService instance
+    func makeNowPlayingService() -> NowPlayingService {
+        return provider.makeNowPlayingService()
+    }
 }

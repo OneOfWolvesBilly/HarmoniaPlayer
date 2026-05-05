@@ -90,6 +90,35 @@ final class AppState: ObservableObject {
     /// `@Published` properties or methods.
     let eqCoordinator: EQCoordinator
 
+    /// NowPlaying coordinator (Slice 9-L) — owns all wiring between
+    /// AppState publishers, AppState action methods, and the system
+    /// Now Playing surface (Control Center widget, lock screen,
+    /// AirPods, media keys, Siri).
+    ///
+    /// AppState holds only this reference and never has any
+    /// NowPlaying-specific @Published properties, observation logic,
+    /// or callback assignment of its own. The coordinator subscribes
+    /// to AppState's publishers via closures captured in `init` and
+    /// receives one direct notification —
+    /// `notifySeekCompleted(at:)` — from `AppState.seek(to:)`
+    /// after a successful seek.
+    ///
+    /// **Why `private(set) var ...!` instead of `let`:** the seven
+    /// action closures injected into the coordinator must capture
+    /// `[weak self]`, but Swift's two-phase init forbids capturing
+    /// `self` until every stored property is initialised. This is a
+    /// chicken-and-egg situation: a `let` coordinator would have to
+    /// be assigned before `self` is complete, but the closures need
+    /// `self` to already be complete. The implicitly-unwrapped
+    /// `private(set) var` keeps the coordinator effectively
+    /// immutable from outside the class while permitting assignment
+    /// at the end of `init` after every other stored property is
+    /// settled.
+    ///
+    /// EQCoordinator uses `let` because it has no self-capture
+    /// requirement; that contrast does not apply here.
+    private(set) var nowPlayingCoordinator: NowPlayingCoordinator!
+
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
@@ -498,6 +527,41 @@ final class AppState: ObservableObject {
                 self?.updateLyricsResolution(for: track)
             }
             .store(in: &cancellables)
+
+        // Step 14: Construct the NowPlayingCoordinator (Slice 9-L).
+        //
+        // Placed last so all stored properties are fully initialised
+        // before the seven action closures capture `[weak self]`.
+        // The coordinator never holds an AppState reference; it sees
+        // only the publishers, the currentTime getter, and the seven
+        // injected action closures. Production resolves the
+        // NowPlayingService factory to MPNowPlayingAdapter; tests
+        // resolve it to FakeNowPlayingService via FakeCoreProvider.
+        //
+        // Red phase: the coordinator init body intentionally does
+        // NOT subscribe to publishers, assign callbacks, or push to
+        // the service. Tests will fail until the Green phase wires
+        // these up.
+        self.nowPlayingCoordinator = NowPlayingCoordinator(
+            service: coreFactory.makeNowPlayingService(),
+            currentTrackPublisher: $currentTrack.eraseToAnyPublisher(),
+            playbackStatePublisher: $playbackState.eraseToAnyPublisher(),
+            currentTimeProvider: { [weak self] in self?.currentTime ?? 0 },
+            play: { [weak self] in await self?.play() },
+            pause: { [weak self] in await self?.pause() },
+            stop: { [weak self] in await self?.stop() },
+            seek: { [weak self] seconds in await self?.seek(to: seconds) },
+            next: { [weak self] in await self?.playNextTrack() },
+            previous: { [weak self] in await self?.playPreviousTrack() },
+            togglePlayPause: { [weak self] in
+                guard let self else { return }
+                if self.playbackState == .playing {
+                    await self.pause()
+                } else {
+                    await self.play()
+                }
+            }
+        )
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.

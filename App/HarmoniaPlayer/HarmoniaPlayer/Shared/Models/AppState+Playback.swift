@@ -99,7 +99,9 @@ extension AppState {
 
     /// Seek to an absolute position in the current track.
     ///
-    /// On success: updates `currentTime`.
+    /// On success: updates `currentTime` and notifies
+    /// `nowPlayingCoordinator` so the system Now Playing widget
+    /// re-anchors its scrubber position.
     /// On error: sets `lastError`. `playbackState` is not changed.
     ///
     /// - Parameter seconds: Target playback position in seconds.
@@ -107,6 +109,11 @@ extension AppState {
         do {
             try await playbackService.seek(to: seconds)
             currentTime = seconds
+            // Slice 9-L: notify NowPlayingCoordinator on successful
+            // seek so the system widget re-anchors its scrubber.
+            // Seek success is not derivable from `$playbackState`,
+            // so this direct notification is necessary.
+            nowPlayingCoordinator.notifySeekCompleted(at: seconds)
         } catch {
             let mapped = mapToPlaybackError(error)
             lastError = mapped
