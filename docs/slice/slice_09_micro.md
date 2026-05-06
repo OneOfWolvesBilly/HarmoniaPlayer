@@ -37,7 +37,7 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-I | Fix Xcode warnings (cosmetic) | Free | ✅ |
 | 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ✅ |
 | 9-K | Equalizer (10-band, global, custom presets) | Free | ✅ |
-| 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ⬜ |
+| 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ⬜ |
 
 ### Goals (v0.1)
@@ -1771,7 +1771,7 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 
 ---
 
-## Slice 9-L: macOS Now Playing Integration ⬜
+## Slice 9-L: macOS Now Playing Integration ✅
 
 ### Goal
 
@@ -1800,10 +1800,14 @@ headphones (AirPods), keyboard media keys, and Siri. All tiers (Free).
 
 To keep AppState lean (mirroring Slice 9-K's EQCoordinator
 extraction), all NowPlaying wiring lives in a dedicated
-`NowPlayingCoordinator`. AppState holds a single `let
-nowPlayingCoordinator: NowPlayingCoordinator` reference and has
-zero NowPlaying-specific observation logic, callback assignments,
-or methods.
+`NowPlayingCoordinator`. AppState holds a single
+`private(set) var nowPlayingCoordinator: NowPlayingCoordinator!`
+reference (IUO + var rather than `let` because the seven action
+closures capture `[weak self]` and therefore require all stored
+properties to be fully initialised before construction; the
+contrast with EQCoordinator's `let` declaration is documented in
+AppState's property comment). AppState has zero NowPlaying-specific
+observation logic, callback assignments, or methods.
 
 `NowPlayingCoordinator` receives all dependencies via constructor
 closure injection — it never holds an `AppState` reference and
@@ -1857,8 +1861,13 @@ without instantiating AppState at all.
 | `MPRemoteCommand.changePlaybackPositionCommand` | `AppState.seek(to:)` |
 | `MPRemoteCommand.stopCommand` | `AppState.stop()` |
 
-Commands explicitly NOT wired in 9-L: `skipForwardCommand`,
-`skipBackwardCommand`, `ratingCommand`, `likeCommand`, `dislikeCommand`.
+Commands explicitly NOT wired in 9-L (disabled via `.isEnabled = false`
+to keep the system widget UI clean): `skipForwardCommand`,
+`skipBackwardCommand`, `seekForwardCommand`, `seekBackwardCommand`,
+`changePlaybackRateCommand`, `changeRepeatModeCommand`,
+`changeShuffleModeCommand`, `enableLanguageOptionCommand`,
+`disableLanguageOptionCommand`, `ratingCommand`, `likeCommand`,
+`dislikeCommand`, `bookmarkCommand`.
 
 ### Now Playing info fields
 
@@ -1872,6 +1881,16 @@ Commands explicitly NOT wired in 9-L: `skipForwardCommand`,
 | `MPNowPlayingInfoPropertyElapsedPlaybackTime` | `currentTime` at last event (track change / playback state change / seek) |
 | `MPNowPlayingInfoPropertyPlaybackRate` | `1.0` (playing) / `0.0` (paused/stopped) |
 | `MPNowPlayingInfoPropertyMediaType` | `.audio` |
+
+In addition to the `nowPlayingInfo` dictionary above,
+`MPNowPlayingInfoCenter.playbackState` is a separate API surface
+mirrored from `PlaybackState` via a private mapping (`.playing` /
+`.paused` / `.stopped` / `.unknown` for `.idle` / `.loading` /
+`.error`). Apple's Control Center uses this property (not
+`MPNowPlayingInfoPropertyPlaybackRate`) to render the play / pause
+toggle state, so it must be updated alongside `playbackRate`
+whenever `PlaybackState` changes, and reset to `.unknown` on
+`clear()`.
 
 ### Update cadence
 
