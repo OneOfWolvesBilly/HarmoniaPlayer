@@ -2158,55 +2158,589 @@ changes warrant deeper automated testing).
   Linux repo.
 ---
 
-## Slice 9-M: Re-Enable App Sandbox + Directory Bookmark ⬜
-
-### Status
-
-Skeleton. Full spec to be written as a dedicated slice commit before
-implementation begins.
+## Slice 9-M: Re-Enable App Sandbox via Related Items ⬜
 
 ### Goal
 
-Restore `ENABLE_APP_SANDBOX = YES` for both Debug and Release while
-keeping sibling-file features (sidecar `.lrc`, future cover art lookup,
-future related-file features) functional. App Store distribution
-mandates sandbox; current `project.pbxproj` keeps sandbox = YES, but a
-local override toggled it off during 9-J to allow sibling reads. This
-slice removes that local override permanently.
+Restore `ENABLE_APP_SANDBOX = YES` for both Debug and Release while keeping
+sibling-file features (sidecar `.lrc` lyrics, future cover-art lookup,
+future related-file features) functional. App Store distribution mandates
+sandbox; current `project.pbxproj` keeps sandbox = YES, but a local Xcode-UI
+override toggled it off during 9-J to allow sibling reads. This slice
+removes that local override permanently and resolves the underlying
+sandbox / sibling-read incompatibility via Apple's first-class **Related
+Items** mechanism.
+
+This slice also fixes a latent persistence bug discovered during 9-M
+investigation: Track URLs persisted via
+`URL.bookmarkData(options: .minimalBookmark)` cannot be resolved across
+cold-launch under the App Sandbox, even for files the user themselves
+selected via `NSOpenPanel`. The slice migrates Track bookmark options to
+`[.withSecurityScope]` and adds the corresponding
+`startAccessingSecurityScopedResource()` lifecycle.
+
+All tiers (Free + Pro). Required for App Store submission, therefore the
+final v0.1 release blocker.
 
 ### Background
 
 - Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) fail under sandbox
   with `NSCocoaErrorDomain Code=257 (No permission)` because
-  `startAccessingSecurityScopedResource` does not extend access to
-  sibling files of the bookmarked URL.
-- Verified during 9-J: per-file security-scoped bookmarks do not solve
-  this. Only directory-level bookmarks do.
+  `startAccessingSecurityScopedResource` on the main file's bookmark does
+  not extend access to sibling files. Confirmed during 9-J implementation.
+- 9-J shipped `.lrc` static lyrics display by toggling
+  `ENABLE_APP_SANDBOX = NO` locally (Xcode UI per-user override, not
+  committed). The repo `project.pbxproj` always carried
+  `ENABLE_APP_SANDBOX = YES`. This slice removes the local override.
+- 9-J's `LyricsService` is the first sibling-read consumer in
+  HarmoniaPlayer. Future consumers (Slice 10-C multi-artwork, Pro CUE
+  sheet support) will reuse the mechanism this slice introduces.
 
-### Long-term solution (this slice)
+### Prerequisite Investigation
 
-- Imports use `NSOpenPanel(.canChooseDirectories = true)` so the user
-  grants directory access at import time.
-- Persist a directory-level security-scoped bookmark per imported
-  source on `Track` / `Playlist` (schema TBD).
-- `LyricsService` (and any future sibling-reading service) calls
-  `startAccessingSecurityScopedResource` on the directory bookmark
-  before reading sibling files.
+This slice was preceded by a STEP 2 / STEP 3 investigation per Engineering
+Workflow Rules. Findings recorded here in full so future slice authors who
+need sibling reads understand the constraints and so the rationale for
+overriding the original skeleton is auditable.
 
-### v0.1 release blocker
+**Apple official documentation and forum positions:**
 
-- App Store submission requires `ENABLE_APP_SANDBOX = YES`.
-- Therefore 9-M must complete before v0.1 ships.
+- `URL.bookmarkData(options: .minimalBookmark)` produces a bookmark
+  **without** security scope. Under the App Sandbox, such bookmarks
+  cannot be resolved across cold-launch — the system returns `Code=257`
+  permission denied even for files the user explicitly selected via
+  `NSOpenPanel`. Source: Apple DTS Quinn (Apple Developer Forum thread
+  71445), Apple Developer Documentation "Accessing files from the macOS
+  App Sandbox".
+- `URL.bookmarkData(options: [.withSecurityScope])` produces a
+  security-scoped bookmark that, when resolved with `[.withSecurityScope]`
+  and bracketed by `startAccessingSecurityScopedResource()` /
+  `stopAccessingSecurityScopedResource()`, restores access across
+  cold-launch. Caller is responsible for the start/stop pairing and for
+  handling `bookmarkDataIsStale` returning true.
+- The `com.apple.security.files.bookmarks.app-scope` entitlement is
+  **no longer required** as of macOS Catalina (per Jeff Johnson's
+  confirmation cited in Ben Scheirman's 2019 article). The
+  `com.apple.security.files.user-selected.read-write` entitlement is
+  sufficient and is already present in HarmoniaPlayer build settings via
+  `ENABLE_USER_SELECTED_FILES = readwrite`.
+- For sibling files specifically, Apple provides a first-class mechanism
+  called **Related Items**: declare the sibling extension in
+  `CFBundleDocumentTypes` with `NSIsRelatedItemType=YES`, and the App
+  Sandbox issues a related-item extension when reading via
+  `NSFileCoordinator` with an `NSFilePresenter` whose
+  `primaryPresentedItemURL` is the user-selected primary file. This is
+  what Apple's own documentation example uses for movie + subtitle pairs.
+  Source: Apple DTS Quinn (Apple Developer Forum thread 124895),
+  Christian Tietze's "Sandboxing and Declaring Related File Types"
+  (2020-05).
+- `CFBundleTypeRole` for Related Items entries **must be `Editor`**.
+  `None` and `Viewer` cause `addFilePresenter` to silently fail without
+  diagnostic output. Source: Apple Developer Forum thread 14718.
+- Standard stale-bookmark recovery pattern: on
+  `bookmarkDataIsStale = true`, attempt to re-create the bookmark from
+  the resolved URL and persist the new data; on failure, mark the entry
+  as inaccessible and request user re-grant. Multiple production apps
+  (RocketSim, Parrot, Cog) follow this pattern.
 
-### Dependencies
+**Empirical verification** (HarmoniaPlayer, macOS 15.6, Xcode 26 Debug
+build, sandbox = YES, test track `01 世界の約束.mp3` with sibling
+`01 世界の約束.lrc`, 1105-byte sidecar):
 
-- 9-J ✅ (LyricsService is the first concrete consumer of sibling reads)
-- Persistence schema additions on `Track` / `Playlist` may impact the
-  v0.2 SwiftData migration story; flag during full spec write.
+A three-stage probe was added to `LyricsService.resolveAvailability`
+under `#if DEBUG` for the duration of this investigation. The probe was
+removed before this spec was written.
 
-### Out of scope
+| Probe | Setup | Result |
+|---|---|---|
+| 2A: `Data(contentsOf: lrcURL)` direct read | always | **FAIL** `Code=257` "permission denied" |
+| 2B Step 1: `NSFileCoordinator.coordinate(readingItemAt:)` **without** Info.plist Document Types entry | run #1 | **FAIL** `Code=257`. System log: `NSFileSandboxingRequestRelatedItemExtension: Failed to issue extension` + `+[NSFileCoordinator addFilePresenter:] could not get a sandbox extension` |
+| 2B Step 2: `NSFileCoordinator.coordinate(readingItemAt:)` **with** Info.plist `<lrc>` declared `NSIsRelatedItemType=YES` + `CFBundleTypeRole=Editor` | run #2 | **OK** 1105 bytes. System log clean. |
 
-- Re-architecting `AppState.load(urls:)` beyond what is needed for
-  directory grant.
-- Migrating existing single-file persisted bookmarks (out-of-band tool
-  or first-launch repair flow may be considered separately).
+This confirms two design constraints that govern the Files /
+Implementation sections below:
+
+1. Plain `Data(contentsOf:)` is permanently blocked by the App Sandbox
+   for sibling reads regardless of bookmarks. **All sibling reads must
+   go through `NSFileCoordinator` with an `NSFilePresenter`.**
+2. `NSFileCoordinator` only succeeds when the sibling extension is
+   declared with `NSIsRelatedItemType=YES` in `CFBundleDocumentTypes`.
+   **Each new sibling extension introduced by future slices (e.g.
+   `.cue`, `.jpg` for cover art) must add its own Document Types
+   entry in its own slice.** 9-M does not pre-declare extensions for
+   future slices.
+
+**Implementation path comparison:**
+
+Two implementation paths were considered. Path B selected.
+
+| Path | Mechanism | Decision |
+|---|---|---|
+| A — Directory bookmark | `NSOpenPanel.canChooseDirectories=true` + persist directory-level `[.withSecurityScope]` bookmark on Track / Playlist | **Rejected.** Adds new persistent fields to Track / Playlist, increasing v0.15 SwiftData migration burden. UX shift: user must select a directory rather than files. Cold-launch recovery is more user-visible (directory bookmark stale handling exposes more edge cases). Required only when sibling does not share base name (e.g. `<artist> - <title>.lrc`), which is a v0.15-deferred non-goal. |
+| **B — Related Items** | `CFBundleDocumentTypes` declaration + `NSFileCoordinator` reads | **Selected.** Apple's first-class mechanism for the same-base-name + different-extension topology that 9-J introduces and v0.2 (CUE / cover art) will reuse. No persistent schema additions for sibling support. UX unchanged (user still picks files). v0.15 SwiftData migration burden minimal. |
+
+The skeleton in `slice_09_micro.md` line 2186-2194 originally proposed
+Path A. STEP 2 web_search and the empirical verification above identified
+Path B as a strictly better fit for HarmoniaPlayer's same-base-name
+sibling topology. **The skeleton's "Long-term solution" paragraph is
+superseded by this spec.**
+
+Track main file `.minimalBookmark` migration to `.withSecurityScope` is
+independent of Path A vs Path B — it is a latent persistence bug
+discovered during the same investigation and must be fixed regardless.
+This is Layer 2 below.
+
+**Adjacent observations during investigation** (NOT 9-M scope, recorded
+as future-work pointers):
+
+- `hp.playlists` NSUserDefaults entry was 6,405,857 bytes during testing,
+  exceeding the documented 4 MB CFPreferences threshold. The system
+  printed: `"Attempting to store >= 4194304 bytes of data in
+  CFPreferences/NSUserDefaults on this platform is invalid. This is a
+  bug in HarmoniaPlayer or a library it uses."`. This confirms the v0.15
+  storage refactor is no longer a theoretical risk. **9-M does not
+  modify storage** — bookmark data type changes from `.minimalBookmark`
+  to `.withSecurityScope` produce roughly equivalent byte counts, and
+  9-M adds no new persistent fields.
+- The current `LyricsPanel` displays `lyrics_decode_failed`
+  ("Could not decode lyrics. Try a different encoding.") for any error
+  thrown by `LyricsService.resolveContent`, including `Code=257`
+  permission errors that have nothing to do with text encoding. This is
+  the user-visible symptom that motivated 9-J's local sandbox override.
+  After 9-M re-enables sandbox correctly, real encoding errors must
+  still surface a useful message; the misleading error funnelling is
+  fixed in Layer 3.
+- `FileAccessPort` and `SandboxFileAccessAdapter` in HarmoniaCore remain
+  dead code at the wiring level. They are unrelated to 9-M (different
+  layer of file access — seekable random-access I/O, not user-grant
+  persistence). Cleanup deferred to a separate slice combined with
+  `ClockPort` rename.
+
+### Scope
+
+9-M is internally three layers. All three must ship in the same slice —
+Layer 1 alone leaves cold-launch broken for main files; Layer 2 alone
+leaves sibling reads broken; without Layer 3, users see misleading
+errors when sandbox-related failures do occur in edge cases.
+
+#### Layer 1 — Sibling read via Related Items
+
+**HarmoniaPlayer Application Layer:**
+
+- `LyricsService.resolveContent` `.lrc` source replaces
+  `try Data(contentsOf:)` with an
+  `NSFileCoordinator.coordinate(readingItemAt:)` call. The coordinator
+  is created with a fresh `SiblingFilePresenter` whose
+  `primaryPresentedItemURL` is the Track URL and `presentedItemURL` is
+  the candidate `.lrc` URL. `addFilePresenter` is called immediately
+  before `coordinate` (the race window is documented in
+  `NSFileCoordinator.h`); `removeFilePresenter` is called via `defer`
+  immediately after, in the same method.
+- `LyricsService.resolveAvailability` continues to use
+  `FileManager.default.fileExists(atPath:)` for the existence probe —
+  the existence check itself is not sandbox-blocked, only the actual
+  read is. No change required.
+- Reads happen on the call site's queue (typically AppState's main
+  actor). The presenter's `presentedItemOperationQueue` is set to
+  `.main`. This is acceptable for the small `.lrc` file sizes expected
+  (typical lyrics file < 16 KB; observed test file 1105 bytes).
+
+**HarmoniaPlayer SiblingFilePresenter (new):**
+
+- `SiblingFilePresenter` is a minimal `NSFilePresenter` conformance with
+  three properties (`primaryPresentedItemURL`, `presentedItemURL`,
+  `presentedItemOperationQueue`) and a constructor accepting both URLs.
+  No behavioural callbacks needed for read-only sibling access.
+- File is named `SiblingFilePresenter` rather than
+  `LyricsFilePresenter` because the same class will be reused by Pro
+  features (CUE sheet `.cue` reads, Slice 10-C cover-art `.jpg`/`.png`
+  reads, Slice 10-D lyrics write-back). The naming pre-commits to
+  multi-extension reuse and avoids a future rename.
+
+**HarmoniaPlayer Build configuration (Info.plist):**
+
+- New file `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` declares
+  `CFBundleDocumentTypes` containing one entry for `.lrc`:
+  - `CFBundleTypeName = "LRC Lyrics File"`
+  - `CFBundleTypeExtensions = [ "lrc" ]`
+  - `CFBundleTypeRole = "Editor"` (required; see Prerequisite
+    Investigation)
+  - `NSIsRelatedItemType = <true/>`
+- Build setting `INFOPLIST_FILE = HarmoniaPlayer/Info.plist` set on
+  Debug + Release configurations. `GENERATE_INFOPLIST_FILE = YES`
+  retained — Xcode merges `INFOPLIST_KEY_*` build settings on top of
+  the partial plist, so existing keys (privacy descriptions, bundle
+  name, supported orientations, etc.) continue to flow from build
+  settings without duplication in the partial Info.plist.
+- `Copy Bundle Resources` build phase entry for Info.plist (added by
+  Xcode if Info.plist was added with "Add to Target" enabled) removed
+  to silence the
+  `"The Copy Bundle Resources build phase contains this target's
+  Info.plist file"` warning.
+
+#### Layer 2 — Track main file persistence
+
+**HarmoniaPlayer Application Layer:**
+
+- `Track.swift` bookmark generation replaces
+  `URL.bookmarkData(options: .minimalBookmark)` with
+  `URL.bookmarkData(options: [.withSecurityScope])`. The corresponding
+  `URL(resolvingBookmarkData:options:...)` call adds `.withSecurityScope`
+  to its options.
+- Bookmark resolution gains a stale-handling path: when
+  `bookmarkDataIsStale` returns true, the resolved URL is used to
+  generate a fresh bookmark which replaces the stored data on the
+  Track. Stale handling lives in a single private helper on Track so
+  AppState callers do not see the recovery logic.
+- `Track` gains an `isAccessible: Bool` computed property (not stored)
+  derived from whether the bookmark resolves and
+  `startAccessingSecurityScopedResource()` returns true at the moment
+  of evaluation. UI uses this flag to render unavailable rows visually
+  distinct (greyed-out title, disabled context-menu items). The
+  property must not be cached — accessibility can change at runtime
+  (e.g. external disk unmounted).
+- Decode path for legacy `.minimalBookmark` data (in case any made it
+  to a TestFlight build during 9-A → 9-I development): on resolution
+  failure with the security-scope option, log via the existing logger
+  and treat the Track as inaccessible. **No data migration tool is
+  shipped** — v0.1 is HarmoniaPlayer's first public release per
+  current memory; production users have no shipped bookmark data to
+  migrate.
+
+**HarmoniaPlayer AppState integration:**
+
+- `AppState.load(urls:)` (in `AppState+Playlist.swift`) wraps each URL
+  with `startAccessingSecurityScopedResource()` paired with
+  `stopAccessingSecurityScopedResource()` via `defer`. This is the
+  bookmark-capture point — at this moment the system has issued a
+  sandbox extension for each user-selected URL, and creating the
+  security-scoped bookmark inside this scope captures that extension
+  into persistent form.
+- `PlaylistView.openFilePicker()` and `FileDropService` already feed
+  into `AppState.load(urls:)`; **no signature changes required**. The
+  capture happens at the load entry point, not at each drag/drop or
+  panel call site, so the discipline lives in one place.
+- AppState does not import `Security` or call sandbox APIs anywhere
+  outside of `load(urls:)`. The start/stop pairing is contained to
+  this one method.
+
+#### Layer 3 — UI error messaging
+
+**HarmoniaPlayer UI Layer:**
+
+- `LyricsPanel`'s error path (currently line 208 of `LyricsPanel.swift`,
+  `errorMessage = L("lyrics_decode_failed")`) replaces the catch-all
+  with category-aware messaging. Categories:
+  1. `LyricsServiceError.sidecarNotFound` — display
+     `lyrics_none_available` ("No lyrics available."). Already correct
+     in 9-J for the no-content branch; this case is normalised so all
+     "no content" paths use the same string.
+  2. `NSError` with `domain == NSCocoaErrorDomain && code == 257`
+     (permission denied) — display **new** localised string
+     `lyrics_file_inaccessible` ("Lyrics file is not accessible. Try
+     removing and re-adding the track.").
+  3. `LyricsServiceError.decodingFailed` and any other unrecognised
+     error — display existing `lyrics_decode_failed` ("Could not
+     decode lyrics. Try a different encoding."). Reserved for genuine
+     encoding failure now that permission errors no longer leak into
+     this branch.
+- The categorisation is extracted into a free function
+  `lyricsErrorMessageKey(for: Error) -> String` so it can be unit
+  tested without instantiating SwiftUI views. Lives in the same file
+  as `LyricsServiceError` (i.e. `LyricsService.swift`) but is a
+  view-layer-facing helper — flagged in api_reference.md accordingly.
+
+**Localisation:**
+
+- New Localizable.strings entry: `lyrics_file_inaccessible` in en /
+  ja / zh-Hant. Existing keys `lyrics_decode_failed` and
+  `lyrics_none_available` unchanged.
+
+### Files
+
+**HarmoniaPlayer — Application Layer**
+
+- `Shared/Models/Track.swift` (modify)
+  - `accessBookmark` field doc comment updated to note security-scope
+    semantics
+  - bookmark generation: `URL.bookmarkData(options: [.withSecurityScope])`
+  - bookmark resolution: `URL(resolvingBookmarkData:options:...)` with
+    `[.withSecurityScope]` + `bookmarkDataIsStale: &isStale` plus
+    refresh-on-stale helper
+  - new computed property `var isAccessible: Bool`
+
+- `Shared/Models/AppState+Playlist.swift` (modify)
+  - `load(urls:)` wraps per-URL bookmark capture in
+    `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`
+    pair via `defer`
+
+- `Shared/Services/LyricsService.swift` (modify)
+  - `.lrc` source path in `resolveContent(for:source:...)` uses
+    `NSFileCoordinator` + `SiblingFilePresenter` instead of
+    `Data(contentsOf:)`
+  - new free function `lyricsErrorMessageKey(for: Error) -> String`
+    declared in the same file (view-layer-facing helper)
+  - `#if DEBUG` throwaway block from the 9-M baseline experiment
+    removed in this slice
+
+**HarmoniaPlayer — Sibling file presenter (new file)**
+
+- `Shared/Services/SiblingFilePresenter.swift` (new)
+
+  ```swift
+  /// Minimal NSFilePresenter conformance for reading a sibling file
+  /// (same base name, different extension) of a user-selected primary
+  /// file under the App Sandbox.
+  ///
+  /// Used together with `NSFileCoordinator.coordinate(readingItemAt:)`
+  /// after registering with `NSFileCoordinator.addFilePresenter(_:)`.
+  /// The sibling extension MUST be declared in the bundle's
+  /// `CFBundleDocumentTypes` with `NSIsRelatedItemType=YES` and
+  /// `CFBundleTypeRole=Editor`, otherwise the App Sandbox refuses to
+  /// issue a related-item extension.
+  ///
+  /// Reused by 9-J `.lrc` sidecar reads, future Slice 10-C
+  /// multi-artwork sibling reads, future CUE-sheet slice `.cue` reads,
+  /// and future Slice 10-D lyrics write-back via the writingURL
+  /// coordinator overload.
+  final class SiblingFilePresenter: NSObject, NSFilePresenter {
+      var primaryPresentedItemURL: URL?
+      var presentedItemURL: URL?
+      var presentedItemOperationQueue: OperationQueue = .main
+
+      init(primaryItemURL: URL, presentedItemURL: URL) {
+          self.primaryPresentedItemURL = primaryItemURL
+          self.presentedItemURL = presentedItemURL
+          super.init()
+      }
+  }
+  ```
+
+**HarmoniaPlayer — UI**
+
+- `Shared/Views/LyricsPanel.swift` (modify)
+  - error catch path replaced with
+    `errorMessage = L(lyricsErrorMessageKey(for: error))`
+  - no other changes; the panel structure is unchanged
+
+**HarmoniaPlayer — Localisation**
+
+- `en.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
+- `ja.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
+- `zh-Hant.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
+
+**HarmoniaPlayer — Build configuration**
+
+- `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` (new) — partial
+  Info.plist declaring `CFBundleDocumentTypes` for `.lrc`. Hybrid mode
+  (does not list privacy descriptions etc. — those continue via
+  `INFOPLIST_KEY_*` build settings).
+- `HarmoniaPlayer.xcodeproj/project.pbxproj` (modify)
+  - `INFOPLIST_FILE = HarmoniaPlayer/Info.plist` added to both Debug
+    and Release build configurations
+  - `Info.plist` reference removed from `Copy Bundle Resources` build
+    phase if present (silences Xcode build warning)
+  - `ENABLE_APP_SANDBOX = YES` confirmed unchanged (already YES in
+    repo; this slice removes any per-user Xcode override and adds a
+    QA item to verify the override is gone before ship)
+
+**Tests** (`HarmoniaPlayerTests/SharedTests/`)
+
+- `TrackTests.swift` (extend) — security-scoped bookmark roundtrip,
+  stale-flag refresh path, `isAccessible` computed property
+- `LyricsServiceTests.swift` (extend) — `.lrc` read via
+  `NSFileCoordinator` (using a real on-disk fixture); test verifies
+  the read succeeds when files exist in a temp dir (test runner is
+  not under the same sandbox constraints, so the success path is
+  exercisable without Info.plist gymnastics; the Info.plist
+  requirement is verified manually per Done criteria)
+- `SiblingFilePresenterTests.swift` (new) — URL pair invariant after
+  init, queue equals `.main`, type conforms to `NSFilePresenter`
+- `AppStatePlayerlistTests.swift` (extend) — `load(urls:)` start/stop
+  pairing verified via a fake URL that records access calls
+- New tests for `lyricsErrorMessageKey(for:)` added to
+  `LyricsServiceTests.swift` (extend, not new file — the helper lives
+  in `LyricsService.swift`)
+
+**Test File Decisions** are summarised in the TDD matrix below.
+
+**Test Fakes** — none new. Existing `FakePlaybackService`,
+`FakeTagReaderService`, `MockIAPManager` etc. unaffected.
+
+**Docs (sync 同 commit, 9-L `2b5f4c4` style)**
+
+- `api_reference.md` (modify)
+  - Track section: bookmark options changed; new `isAccessible`
+    computed property; legacy `.minimalBookmark` decode fallback
+    documented
+  - LyricsService section: `.lrc` source path goes through
+    `NSFileCoordinator`; new `lyricsErrorMessageKey(for:)` helper
+    documented
+  - New SiblingFilePresenter section under Application Layer
+- `module_boundary.md` (no change)
+  - `SandboxFileAccessAdapter` remains dead code, deferred to
+    cleanup slice; not 9-M's concern
+- `development_guide.md` (modify)
+  - new section "Sandbox file access patterns" covering: when to use
+    security-scoped bookmarks, when to use Related Items, the
+    NSFileCoordinator + NSFilePresenter pattern, the
+    `CFBundleTypeRole = Editor` requirement, stale-bookmark recovery
+- `implementation_guide_swift.md` (modify)
+  - Track bookmark-roundtrip code example updated to security-scoped
+    options
+  - new sibling-read code example with `SiblingFilePresenter` +
+    `NSFileCoordinator`
+- `architecture.md` (audit per Cross-Boundary 5-area rule)
+  - HarmoniaCore Ports / Adapters / Services / Models / Errors
+    re-checked; expected outcome: no HC change required, but the
+    audit step is recorded as completed in the commit message
+
+### TDD matrix
+
+| Test | Given | When | Then | Test File Decision |
+|---|---|---|---|---|
+| `testTrack_BookmarkRoundtrip_PreservesURLViaSecurityScope` | a temp file URL | encode bookmark with `.withSecurityScope`, decode with `.withSecurityScope` | resolved URL equals original | Extend `TrackTests.swift` |
+| `testTrack_BookmarkResolution_StaleFlag_TriggersRefresh` | a Track with stale-flagged bookmark data | resolve | refreshed bookmark stored on the Track instance | Extend `TrackTests.swift` |
+| `testTrack_IsAccessible_TrueWhenBookmarkResolves` | a Track with valid bookmark for an existing temp file | read `isAccessible` | true | Extend `TrackTests.swift` |
+| `testTrack_IsAccessible_FalseWhenBookmarkFails` | a Track whose bookmark target was deleted | read `isAccessible` | false | Extend `TrackTests.swift` |
+| `testTrack_LegacyMinimalBookmark_DecodesAsInaccessible` | a Track encoded with legacy `.minimalBookmark` bytes | resolve under `.withSecurityScope` | error logged, `isAccessible` = false, no crash | Extend `TrackTests.swift` |
+| `testAppStatePlaylistLoad_StartAccessIsPairedWithStop` | a fake URL recording start/stop calls | `AppState.load(urls:[fakeURL])` | start count == stop count > 0 after method returns | Extend `AppStatePlayerlistTests.swift` |
+| `testLyricsService_LrcRead_UsesNSFileCoordinator` | a temp dir with `song.mp3` + `song.lrc` | `resolveContent(for:source:.lrc,...)` | returns expected sidecar text content | Extend `LyricsServiceTests.swift` |
+| `testLyricsService_LrcRead_RegistersThenRemovesPresenter` | a temp dir fixture | `resolveContent` runs to completion | `NSFileCoordinator.filePresenters` does not contain a `SiblingFilePresenter` after method returns | Extend `LyricsServiceTests.swift` |
+| `testSiblingFilePresenter_StoresURLPair` | two URLs `A`, `B` | construct `SiblingFilePresenter(primaryItemURL: A, presentedItemURL: B)` | properties `primaryPresentedItemURL == A`, `presentedItemURL == B` | New `SiblingFilePresenterTests.swift` |
+| `testSiblingFilePresenter_QueueIsMain` | a presenter | read `presentedItemOperationQueue` | equals `OperationQueue.main` | Extend `SiblingFilePresenterTests.swift` |
+| `testLyricsErrorMessageKey_SidecarNotFound_ReturnsNoneAvailable` | `LyricsServiceError.sidecarNotFound` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_none_available"` | Extend `LyricsServiceTests.swift` |
+| `testLyricsErrorMessageKey_PermissionDenied_ReturnsInaccessible` | `NSError(domain: NSCocoaErrorDomain, code: 257)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_file_inaccessible"` | Extend `LyricsServiceTests.swift` |
+| `testLyricsErrorMessageKey_DecodingFailed_ReturnsDecodeFailed` | `LyricsServiceError.decodingFailed` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` | Extend `LyricsServiceTests.swift` |
+| `testLyricsErrorMessageKey_UnknownError_ReturnsDecodeFailed` | `NSError(domain: "other", code: 99)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` (catch-all fallback) | Extend `LyricsServiceTests.swift` |
+
+### Done criteria
+
+**Unit test criteria (automated):**
+
+- ⬜ All Slice 1 – 9-L previous tests still green (no regression)
+- ⬜ All new tests in the TDD matrix above pass green
+- ⬜ Track bookmark roundtrip uses `.withSecurityScope` end-to-end
+- ⬜ Stale bookmark refresh path persists the new bookmark on the
+  Track instance
+- ⬜ `isAccessible` reflects bookmark resolvability + security-scope
+  start success in real time (not cached)
+- ⬜ `LyricsService` `.lrc` read goes through `NSFileCoordinator` +
+  `SiblingFilePresenter`, never raw `Data(contentsOf:)`
+- ⬜ `AppState.load(urls:)` start/stop pairing is symmetric for every
+  input URL (verified via fake URL call recorder)
+- ⬜ `lyricsErrorMessageKey(for:)` returns the correct localisation
+  key for all four documented error categories
+- ⬜ `architecture.md` Cross-Boundary 5-area audit completed with
+  outcome documented in commit message
+
+**Manual QA criteria (system integration), all must pass on macOS 15.6+
+release archive installed to `/Applications`:**
+
+- ⬜ `ENABLE_APP_SANDBOX = YES` in both Debug and Release build
+  configurations of `project.pbxproj`. No per-user Xcode UI override
+  active on the dev machine when archiving (`defaults read` of the
+  per-user xcuserdata project state, or simply: archive on a fresh
+  Xcode account / fresh project clone)
+- ⬜ Cold-launch baseline: archive Release build, install to
+  `/Applications`, launch from Finder:
+  - Tracks added in a previous session still show in the playlist
+  - Click Play on any imported track → audio plays without error
+  - Console.app shows no `Code=257` or `Code=260` for main file URLs
+- ⬜ Lyrics happy path: with sibling `.lrc` present at
+  `<basename>.lrc`, lyrics panel renders decoded lyrics
+- ⬜ Lyrics absent: with no sibling `.lrc`, lyrics panel shows
+  `lyrics_none_available` ("No lyrics available.")
+- ⬜ Lyrics permission edge case: with sibling `.lrc` on a network
+  volume that disconnects mid-session, lyrics panel shows the new
+  `lyrics_file_inaccessible` message (not `lyrics_decode_failed`)
+- ⬜ Lyrics encoding edge case: with sibling `.lrc` whose bytes are
+  intentionally invalid (e.g. random binary bytes), lyrics panel shows
+  `lyrics_decode_failed` (the "real" reason for that string now)
+- ⬜ Drag-and-drop import from Finder works under sandbox cold-launch
+  scenarios (newly imported tracks play, sibling lyrics resolve)
+- ⬜ NSOpenPanel import (`File → Add Files…`) works under sandbox
+  cold-launch (newly imported tracks play, sibling lyrics resolve)
+- ⬜ Stale-bookmark recovery: rename a tracked file in Finder while
+  HarmoniaPlayer is closed, relaunch, click the row — the row appears
+  inaccessible (greyed) rather than crashing or playing the wrong
+  file. Restoring the original filename restores accessibility on the
+  next interaction.
+- ⬜ EQ persistence (Slice 9-K), Now Playing widget integration
+  (Slice 9-L), playlist persistence and all earlier slice features
+  remain intact under sandbox
+
+### Non-goals (explicit)
+
+- **No `NSOpenPanel(.canChooseDirectories = true)`.** Path A
+  (directory bookmark) explicitly rejected per Prerequisite
+  Investigation. The UX maintains the file-selection model.
+- **No new persistent fields on Track or Playlist for directory
+  grants.** The only Track schema change is bookmark options type;
+  the field name and presence are unchanged.
+- **No support for `<artist> - <title>.lrc` or other
+  non-same-base-name sidecars.** Related Items only handles
+  `<basename>.<related-ext>` matching. Non-conforming sidecars
+  deferred to v0.15.
+- **No write-back to sibling files.** 9-M is read-only. Lyrics
+  write-back (USLT write + sidecar `.lrc` write) is Slice 10-D Pro,
+  which will reuse `SiblingFilePresenter` with
+  `NSFileCoordinator.coordinate(writingItemAt:)`.
+- **No new sibling extensions beyond `.lrc`.** `.cue` (CUE sheet
+  support, dedicated Pro slice) and cover-art `.jpg` / `.png`
+  (Slice 10-C, Pro multi-artwork) each declare their own
+  `CFBundleDocumentTypes` entries in their respective slices.
+  Pre-declaring extensions in 9-M would violate SDD slice-scope
+  discipline.
+- **No NSUserDefaults storage refactor.** The 6.4 MB system warning
+  observed during 9-M investigation is acknowledged but deferred to
+  v0.15 storage refactor. 9-M's own additions (bookmark data type
+  change) do not materially increase storage size.
+- **No `FileAccessPort` / `SandboxFileAccessAdapter` cleanup.** Dead
+  code in HarmoniaCore is unrelated to 9-M (different I/O layer);
+  deferred to combined cleanup slice with `ClockPort` rename.
+- **No legacy `.minimalBookmark` migration tooling.** v0.1 is
+  HarmoniaPlayer's first public release per current memory; no
+  shipped bookmark data exists in user containers. Decode path logs
+  and treats legacy bookmark bytes as inaccessible.
+- **No re-architecting of `AppState.load(urls:)` beyond the start /
+  stop pairing.** Existing AppState load entry-point structure
+  preserved. The capture point is one method.
+- **No CarPlay / Siri / cross-platform sandbox semantics.**
+  Sandbox is macOS-specific. Linux / C++ HarmoniaPlayer's file-access
+  model is separate; HarmoniaCore-Swift does not change.
+
+### Related future work
+
+- **v0.15:** NSUserDefaults storage refactor — bring playlist data,
+  lyrics prefs, EQ settings under SwiftData or another container that
+  doesn't trip the 4 MB CFPreferences threshold. Re-evaluate whether
+  `<artist> - <title>.lrc` / TXXX-frame lyrics from 9-J non-goals
+  warrant directory-level grants once the storage substrate can
+  absorb new persistent fields cleanly. Re-evaluate whether
+  stale-bookmark proactive validation (vs the current reactive
+  per-access check) becomes worthwhile.
+- **CUE sheet slice (Pro, dedicated slice after Slice 9):** `.cue`
+  is the canonical example of a sibling-read scenario for lossless
+  album distribution. Adds `CFBundleDocumentTypes` entry with
+  `NSIsRelatedItemType=YES` for `.cue`. Reuses `SiblingFilePresenter`
+  with `NSFileCoordinator.coordinate(readingItemAt:)`.
+- **Slice 10-C (Pro):** Multi-artwork sibling support adds
+  `CFBundleDocumentTypes` entries for `.jpg`, `.png`, `.bmp`, etc.
+  with `NSIsRelatedItemType=YES`. Reuses `SiblingFilePresenter`.
+- **Slice 10-D (Pro):** Lyrics write-back. Sibling write goes through
+  `NSFileCoordinator.coordinate(writingItemAt:)`. Reuses
+  `SiblingFilePresenter` with the same primary / presented URL pair
+  shape.
+- **HarmoniaCore cleanup slice:** removes `FileAccessPort` +
+  `SandboxFileAccessAdapter` (confirmed dead code at the wiring
+  level), combined with `ClockPort` rename and a possible
+  `HarmoniaCore` → `HarmoniaAudioCore` rename.
+- **HarmoniaCore-Swift cross-platform alignment:** sandbox is
+  Apple-only; no HarmoniaCore impact. The C++ HarmoniaCore
+  implementation provides its own platform-appropriate file access.
+  No spec impact on HarmoniaCore-Swift from 9-M.
+- **HarmoniaAlarm / HarmoniaVox (future apps):** if these adopt
+  sibling-file features, they reuse `SiblingFilePresenter` from
+  HarmoniaPlayer or migrate it to a shared module at that time. Not
+  9-M's concern.
