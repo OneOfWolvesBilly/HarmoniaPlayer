@@ -234,6 +234,8 @@ final class HarmoniaTagReaderAdapter: TagReaderService {
             channels:         bundle.channels,
             fileSize:         bundle.fileSize,
             fileFormat:       fileFormat,
+            codec:            bundle.codec    ?? "",
+            encoding:         bundle.encoding ?? "",
             metadataVersion:  TagBundle.currentSchemaVersion,
             lyrics:           bundle.lyrics.map { hcVariants in
                 hcVariants.map { LyricsLanguageVariant(languageCode: $0.languageCode, text: $0.text) }

@@ -50,6 +50,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var channels: Int?
     var fileSize: Int?          // bytes
     var fileFormat: String      // e.g. "MP3", "AAC"
+    var codec: String           // e.g. "MP3", "AAC", "ALAC" (Slice 9-C)
+    var encoding: String        // "lossy" / "lossless" (Slice 9-C)
 
     // Lyrics (Group F — Slice 9-J)
     // USLT embedded variants populated by HarmoniaTagReaderAdapter from
