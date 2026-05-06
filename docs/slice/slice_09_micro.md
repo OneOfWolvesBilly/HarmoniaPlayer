@@ -2176,8 +2176,8 @@ investigation: Track URLs persisted via
 `URL.bookmarkData(options: .minimalBookmark)` cannot be resolved across
 cold-launch under the App Sandbox, even for files the user themselves
 selected via `NSOpenPanel`. The slice migrates Track bookmark options to
-`[.withSecurityScope]` and adds the corresponding
-`startAccessingSecurityScopedResource()` lifecycle.
+`[.withSecurityScope]` and completes the existing half-implemented stale
+handling and `isAccessible` runtime checks.
 
 All tiers (Free + Pro). Required for App Store submission, therefore the
 final v0.1 release blocker.
@@ -2338,8 +2338,8 @@ errors when sandbox-related failures do occur in edge cases.
   immediately after, in the same method.
 - `LyricsService.resolveAvailability` continues to use
   `FileManager.default.fileExists(atPath:)` for the existence probe —
-  the existence check itself is not sandbox-blocked, only the actual
-  read is. No change required.
+  the existence check itself is not sandbox-blocked (only the read is),
+  so this layer of the implementation does not need to change.
 - Reads happen on the call site's queue (typically AppState's main
   actor). The presenter's `presentedItemOperationQueue` is set to
   `.main`. This is acceptable for the small `.lrc` file sizes expected
@@ -2368,10 +2368,18 @@ errors when sandbox-related failures do occur in edge cases.
   - `NSIsRelatedItemType = <true/>`
 - Build setting `INFOPLIST_FILE = HarmoniaPlayer/Info.plist` set on
   Debug + Release configurations. `GENERATE_INFOPLIST_FILE = YES`
-  retained — Xcode merges `INFOPLIST_KEY_*` build settings on top of
-  the partial plist, so existing keys (privacy descriptions, bundle
-  name, supported orientations, etc.) continue to flow from build
-  settings without duplication in the partial Info.plist.
+  retained. With both set, Xcode injects standard macOS bundle keys
+  (`CFBundleName`, `CFBundleShortVersionString`, `CFBundleVersion`,
+  `CFBundleExecutable`, `CFBundlePackageType`,
+  `LSMinimumSystemVersion`, etc.) onto the `INFOPLIST_FILE` partial
+  plist at build time. **The partial Info.plist must NOT declare any of
+  these auto-injected keys** to avoid override conflicts. The current
+  `project.pbxproj` does not declare any macOS-applicable
+  `INFOPLIST_KEY_*` build settings — all existing `INFOPLIST_KEY_*`
+  entries carry `[sdk=iphoneos*]` / `[sdk=iphonesimulator*]`
+  conditions and apply only to a hypothetical iOS target. macOS bundle
+  metadata flows entirely from Xcode's auto-injection, not from build
+  settings.
 - `Copy Bundle Resources` build phase entry for Info.plist (added by
   Xcode if Info.plist was added with "Add to Target" enabled) removed
   to silence the
@@ -2382,23 +2390,32 @@ errors when sandbox-related failures do occur in edge cases.
 
 **HarmoniaPlayer Application Layer:**
 
-- `Track.swift` bookmark generation replaces
+- `Track.swift` bookmark generation (line 215-220) replaces
   `URL.bookmarkData(options: .minimalBookmark)` with
   `URL.bookmarkData(options: [.withSecurityScope])`. The corresponding
-  `URL(resolvingBookmarkData:options:...)` call adds `.withSecurityScope`
-  to its options.
-- Bookmark resolution gains a stale-handling path: when
-  `bookmarkDataIsStale` returns true, the resolved URL is used to
-  generate a fresh bookmark which replaces the stored data on the
-  Track. Stale handling lives in a single private helper on Track so
-  AppState callers do not see the recovery logic.
-- `Track` gains an `isAccessible: Bool` computed property (not stored)
-  derived from whether the bookmark resolves and
-  `startAccessingSecurityScopedResource()` returns true at the moment
-  of evaluation. UI uses this flag to render unavailable rows visually
-  distinct (greyed-out title, disabled context-menu items). The
-  property must not be cached — accessibility can change at runtime
-  (e.g. external disk unmounted).
+  `URL(resolvingBookmarkData:options:...)` call (line 264-269) adds
+  `.withSecurityScope` to its options.
+- **Existing dangling stale flag completed.** The current decode path
+  (Track.swift line 263-268) declares `var stale = false` and passes
+  `bookmarkDataIsStale: &stale` to `URL(resolvingBookmarkData:...)`,
+  but **never reads the resulting flag**. This slice connects the
+  half-implemented stale handling: when `stale == true` after a
+  successful resolve, the resolved URL is used to generate a fresh
+  bookmark which replaces the stored data on the Track. Stale handling
+  lives in a single private helper on Track so AppState callers do not
+  see the recovery logic.
+- **Existing `isAccessible` stored property's update logic completed.**
+  `Track.isAccessible: Bool` is already a stored runtime-only field
+  (Track.swift line 99, comment "Runtime-only fields (not persisted)",
+  `CodingKeys` does not include it) initialised to `true`. Today's
+  decode path (Track.swift line 271) sets `isAccessible = true` purely
+  on bookmark resolution success — without verifying the resolved URL
+  is actually readable under the App Sandbox. This slice adds the
+  missing verification: `isAccessible = true` only when bookmark
+  resolves AND `startAccessingSecurityScopedResource()` returns `true`.
+  The flag is read-on-demand by UI for greying-out unavailable rows;
+  not cached because accessibility can change at runtime (e.g. external
+  disk unmounted mid-session).
 - Decode path for legacy `.minimalBookmark` data (in case any made it
   to a TestFlight build during 9-A → 9-I development): on resolution
   failure with the security-scope option, log via the existing logger
@@ -2409,13 +2426,17 @@ errors when sandbox-related failures do occur in edge cases.
 
 **HarmoniaPlayer AppState integration:**
 
-- `AppState.load(urls:)` (in `AppState+Playlist.swift`) wraps each URL
-  with `startAccessingSecurityScopedResource()` paired with
-  `stopAccessingSecurityScopedResource()` via `defer`. This is the
-  bookmark-capture point — at this moment the system has issued a
+- `AppState.load(urls:)` (in `AppState+Playlist.swift`, currently line
+  34-128) wraps each URL with `startAccessingSecurityScopedResource()`
+  paired with `stopAccessingSecurityScopedResource()` via `defer`
+  inside the existing `for url in urls` loop body. Swift `defer` binds
+  to the enclosing scope, so a `defer` inside the `for` body fires
+  per-iteration at the end of each loop pass — the start / stop pair
+  scopes one URL only and never accumulates across iterations. This is
+  the bookmark-capture point: at this moment the system has issued a
   sandbox extension for each user-selected URL, and creating the
-  security-scoped bookmark inside this scope captures that extension
-  into persistent form.
+  security-scoped bookmark inside `tagReaderService.readMetadata(...)`
+  call's enclosing scope captures that extension into persistent form.
 - `PlaylistView.openFilePicker()` and `FileDropService` already feed
   into `AppState.load(urls:)`; **no signature changes required**. The
   capture happens at the load entry point, not at each drag/drop or
@@ -2428,18 +2449,14 @@ errors when sandbox-related failures do occur in edge cases.
 
 **HarmoniaPlayer UI Layer:**
 
-- `LyricsPanel`'s error path (currently line 208 of `LyricsPanel.swift`,
+- `LyricsPanel`'s error path (currently `LyricsPanel.swift` line 208,
   `errorMessage = L("lyrics_decode_failed")`) replaces the catch-all
   with category-aware messaging. Categories:
-  1. `LyricsServiceError.sidecarNotFound` — display
-     `lyrics_none_available` ("No lyrics available."). Already correct
-     in 9-J for the no-content branch; this case is normalised so all
-     "no content" paths use the same string.
-  2. `NSError` with `domain == NSCocoaErrorDomain && code == 257`
+  1. `NSError` with `domain == NSCocoaErrorDomain && code == 257`
      (permission denied) — display **new** localised string
      `lyrics_file_inaccessible` ("Lyrics file is not accessible. Try
      removing and re-adding the track.").
-  3. `LyricsServiceError.decodingFailed` and any other unrecognised
+  2. `LyricsServiceError.decodingFailed` and any other unrecognised
      error — display existing `lyrics_decode_failed` ("Could not
      decode lyrics. Try a different encoding."). Reserved for genuine
      encoding failure now that permission errors no longer leak into
@@ -2449,6 +2466,25 @@ errors when sandbox-related failures do occur in edge cases.
   tested without instantiating SwiftUI views. Lives in the same file
   as `LyricsServiceError` (i.e. `LyricsService.swift`) but is a
   view-layer-facing helper — flagged in api_reference.md accordingly.
+
+**Note on unhandled `LyricsServiceError` cases:**
+`LyricsService.resolveContent` can throw `.noEmbeddedLyrics` (no USLT
+data for the requested language) and `.sidecarNotFound` (no `.lrc`
+next to the track) on its slow path, but neither error reaches
+`LyricsPanel.errorMessage` in practice. `LyricsPanel.reload()`
+(LyricsPanel.swift line 185-210) only calls `resolveContent` after
+`LyricsResolution.currentSource` has been determined non-nil — and
+`LyricsService.resolveAvailability` returns `.none` (with
+`hasAny: false`) when neither USLT nor `.lrc` is present, causing the
+`reload()` guard at line 188-192 to early-return before any
+`resolveContent` call. The "no lyrics" UI is rendered by the
+`hasAny == false` branch in `contentArea` (LyricsPanel.swift line
+158-176), not by the `errorMessage` branch. This slice does not add
+UI categories for `.noEmbeddedLyrics` or `.sidecarNotFound` because
+the surrounding flow already handles their cases via different code
+paths. The two surviving categories above (permission denied,
+decoding failure) are the only errors that can actually reach
+`errorMessage`.
 
 **Localisation:**
 
@@ -2463,25 +2499,34 @@ errors when sandbox-related failures do occur in edge cases.
 - `Shared/Models/Track.swift` (modify)
   - `accessBookmark` field doc comment updated to note security-scope
     semantics
-  - bookmark generation: `URL.bookmarkData(options: [.withSecurityScope])`
-  - bookmark resolution: `URL(resolvingBookmarkData:options:...)` with
-    `[.withSecurityScope]` + `bookmarkDataIsStale: &isStale` plus
-    refresh-on-stale helper
-  - new computed property `var isAccessible: Bool`
+  - bookmark generation (line 215-220):
+    `URL.bookmarkData(options: [.withSecurityScope])`
+  - bookmark resolution (line 264-269): `URL(resolvingBookmarkData:options:...)`
+    with `[.withSecurityScope]` option; existing `bookmarkDataIsStale: &stale`
+    flag connected to a refresh-on-stale private helper
+  - `isAccessible` update logic (line 271, 274, 278) modified:
+    `true` only when bookmark resolves AND
+    `startAccessingSecurityScopedResource()` returns `true`. Property
+    declaration at line 99 unchanged (still stored, not persisted).
 
 - `Shared/Models/AppState+Playlist.swift` (modify)
-  - `load(urls:)` wraps per-URL bookmark capture in
-    `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()`
-    pair via `defer`
+  - `load(urls:)` (line 34-128): inside the existing `for url in urls`
+    loop body, add `_ = url.startAccessingSecurityScopedResource()` at
+    loop start + `defer { url.stopAccessingSecurityScopedResource() }`
+    immediately after, so the security scope spans only the
+    `tagReaderService.readMetadata(for: url)` call and the
+    appended-bookmark capture. Swift's per-scope `defer` ensures
+    pairing fires per-iteration, not at method end.
 
 - `Shared/Services/LyricsService.swift` (modify)
-  - `.lrc` source path in `resolveContent(for:source:...)` uses
-    `NSFileCoordinator` + `SiblingFilePresenter` instead of
-    `Data(contentsOf:)`
+  - `.lrc` source path in `resolveContent(for:source:...)` (line
+    157-174) uses `NSFileCoordinator` + `SiblingFilePresenter` instead
+    of `Data(contentsOf:)`
   - new free function `lyricsErrorMessageKey(for: Error) -> String`
     declared in the same file (view-layer-facing helper)
   - `#if DEBUG` throwaway block from the 9-M baseline experiment
-    removed in this slice
+    removed in this slice (was added during STEP 3 verification, was
+    never committed to main)
 
 **HarmoniaPlayer — Sibling file presenter (new file)**
 
@@ -2519,22 +2564,24 @@ errors when sandbox-related failures do occur in edge cases.
 **HarmoniaPlayer — UI**
 
 - `Shared/Views/LyricsPanel.swift` (modify)
-  - error catch path replaced with
+  - error catch path (line 206-209) replaced with
     `errorMessage = L(lyricsErrorMessageKey(for: error))`
   - no other changes; the panel structure is unchanged
 
 **HarmoniaPlayer — Localisation**
 
 - `en.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
+  next to existing `lyrics_decode_failed` (line 211)
 - `ja.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
-- `zh-Hant.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
+- `zh-Hant.lproj/Localizable.strings` (modify) — add
+  `lyrics_file_inaccessible`
 
 **HarmoniaPlayer — Build configuration**
 
 - `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` (new) — partial
   Info.plist declaring `CFBundleDocumentTypes` for `.lrc`. Hybrid mode
-  (does not list privacy descriptions etc. — those continue via
-  `INFOPLIST_KEY_*` build settings).
+  (does not list bundle metadata or privacy descriptions — those
+  continue via Xcode auto-injection from `GENERATE_INFOPLIST_FILE = YES`).
 - `HarmoniaPlayer.xcodeproj/project.pbxproj` (modify)
   - `INFOPLIST_FILE = HarmoniaPlayer/Info.plist` added to both Debug
     and Release build configurations
@@ -2547,20 +2594,19 @@ errors when sandbox-related failures do occur in edge cases.
 **Tests** (`HarmoniaPlayerTests/SharedTests/`)
 
 - `TrackTests.swift` (extend) — security-scoped bookmark roundtrip,
-  stale-flag refresh path, `isAccessible` computed property
+  stale-flag refresh path, `isAccessible` reflects security-scope
+  start success
 - `LyricsServiceTests.swift` (extend) — `.lrc` read via
-  `NSFileCoordinator` (using a real on-disk fixture); test verifies
-  the read succeeds when files exist in a temp dir (test runner is
-  not under the same sandbox constraints, so the success path is
-  exercisable without Info.plist gymnastics; the Info.plist
-  requirement is verified manually per Done criteria)
+  `NSFileCoordinator` (using existing `tempDir` + `makeTrack` +
+  `writeSidecar` fixture, fully compatible with no fixture additions
+  required); `lyricsErrorMessageKey(for:)` categorisation
 - `SiblingFilePresenterTests.swift` (new) — URL pair invariant after
   init, queue equals `.main`, type conforms to `NSFilePresenter`
-- `AppStatePlayerlistTests.swift` (extend) — `load(urls:)` start/stop
-  pairing verified via a fake URL that records access calls
-- New tests for `lyricsErrorMessageKey(for:)` added to
-  `LyricsServiceTests.swift` (extend, not new file — the helper lives
-  in `LyricsService.swift`)
+- `AppStatePlayerlistTests.swift` (extend) — `load(urls:)` produces a
+  Track whose bookmark roundtrips and `isAccessible == true` (behaviour
+  evidence test, not a fake-recorder swizzle test, because `URL` is a
+  Swift value type and `startAccessingSecurityScopedResource` is an
+  ObjC method whose interception requires invasive runtime patches)
 
 **Test File Decisions** are summarised in the TDD matrix below.
 
@@ -2570,8 +2616,8 @@ errors when sandbox-related failures do occur in edge cases.
 **Docs (sync 同 commit, 9-L `2b5f4c4` style)**
 
 - `api_reference.md` (modify)
-  - Track section: bookmark options changed; new `isAccessible`
-    computed property; legacy `.minimalBookmark` decode fallback
+  - Track section: bookmark options changed; `isAccessible` update
+    contract documented; legacy `.minimalBookmark` decode fallback
     documented
   - LyricsService section: `.lrc` source path goes through
     `NSFileCoordinator`; new `lyricsErrorMessageKey(for:)` helper
@@ -2583,7 +2629,7 @@ errors when sandbox-related failures do occur in edge cases.
 - `development_guide.md` (modify)
   - new section "Sandbox file access patterns" covering: when to use
     security-scoped bookmarks, when to use Related Items, the
-    NSFileCoordinator + NSFilePresenter pattern, the
+    `NSFileCoordinator` + `NSFilePresenter` pattern, the
     `CFBundleTypeRole = Editor` requirement, stale-bookmark recovery
 - `implementation_guide_swift.md` (modify)
   - Track bookmark-roundtrip code example updated to security-scoped
@@ -2601,15 +2647,14 @@ errors when sandbox-related failures do occur in edge cases.
 |---|---|---|---|---|
 | `testTrack_BookmarkRoundtrip_PreservesURLViaSecurityScope` | a temp file URL | encode bookmark with `.withSecurityScope`, decode with `.withSecurityScope` | resolved URL equals original | Extend `TrackTests.swift` |
 | `testTrack_BookmarkResolution_StaleFlag_TriggersRefresh` | a Track with stale-flagged bookmark data | resolve | refreshed bookmark stored on the Track instance | Extend `TrackTests.swift` |
-| `testTrack_IsAccessible_TrueWhenBookmarkResolves` | a Track with valid bookmark for an existing temp file | read `isAccessible` | true | Extend `TrackTests.swift` |
-| `testTrack_IsAccessible_FalseWhenBookmarkFails` | a Track whose bookmark target was deleted | read `isAccessible` | false | Extend `TrackTests.swift` |
+| `testTrack_IsAccessible_TrueWhenBookmarkResolvesAndAccessStarts` | a Track with valid bookmark for an existing temp file | read `isAccessible` after decode | true | Extend `TrackTests.swift` |
+| `testTrack_IsAccessible_FalseWhenStartAccessFails` | a Track whose bookmark target was deleted | read `isAccessible` after decode | false | Extend `TrackTests.swift` |
 | `testTrack_LegacyMinimalBookmark_DecodesAsInaccessible` | a Track encoded with legacy `.minimalBookmark` bytes | resolve under `.withSecurityScope` | error logged, `isAccessible` = false, no crash | Extend `TrackTests.swift` |
-| `testAppStatePlaylistLoad_StartAccessIsPairedWithStop` | a fake URL recording start/stop calls | `AppState.load(urls:[fakeURL])` | start count == stop count > 0 after method returns | Extend `AppStatePlayerlistTests.swift` |
+| `testAppStatePlaylistLoad_BookmarkCapturedAfterLoad` | a tempDir-based real URL with on-disk audio file | `AppState.load(urls:[realURL])` | resulting Track has non-nil persisted accessBookmark, decoded URL equals input URL, `isAccessible == true` | Extend `AppStatePlayerlistTests.swift` |
 | `testLyricsService_LrcRead_UsesNSFileCoordinator` | a temp dir with `song.mp3` + `song.lrc` | `resolveContent(for:source:.lrc,...)` | returns expected sidecar text content | Extend `LyricsServiceTests.swift` |
-| `testLyricsService_LrcRead_RegistersThenRemovesPresenter` | a temp dir fixture | `resolveContent` runs to completion | `NSFileCoordinator.filePresenters` does not contain a `SiblingFilePresenter` after method returns | Extend `LyricsServiceTests.swift` |
+| `testLyricsService_LrcRead_RegistersThenRemovesPresenter` | a temp dir fixture | `resolveContent` runs to completion | no SiblingFilePresenter remains registered with `NSFileCoordinator` after method returns (verified via weak reference observation, since `NSFileCoordinator` does not expose a presenter list API) | Extend `LyricsServiceTests.swift` |
 | `testSiblingFilePresenter_StoresURLPair` | two URLs `A`, `B` | construct `SiblingFilePresenter(primaryItemURL: A, presentedItemURL: B)` | properties `primaryPresentedItemURL == A`, `presentedItemURL == B` | New `SiblingFilePresenterTests.swift` |
 | `testSiblingFilePresenter_QueueIsMain` | a presenter | read `presentedItemOperationQueue` | equals `OperationQueue.main` | Extend `SiblingFilePresenterTests.swift` |
-| `testLyricsErrorMessageKey_SidecarNotFound_ReturnsNoneAvailable` | `LyricsServiceError.sidecarNotFound` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_none_available"` | Extend `LyricsServiceTests.swift` |
 | `testLyricsErrorMessageKey_PermissionDenied_ReturnsInaccessible` | `NSError(domain: NSCocoaErrorDomain, code: 257)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_file_inaccessible"` | Extend `LyricsServiceTests.swift` |
 | `testLyricsErrorMessageKey_DecodingFailed_ReturnsDecodeFailed` | `LyricsServiceError.decodingFailed` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` | Extend `LyricsServiceTests.swift` |
 | `testLyricsErrorMessageKey_UnknownError_ReturnsDecodeFailed` | `NSError(domain: "other", code: 99)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` (catch-all fallback) | Extend `LyricsServiceTests.swift` |
@@ -2619,7 +2664,7 @@ errors when sandbox-related failures do occur in edge cases.
 **Unit test criteria (automated):**
 
 - ⬜ All Slice 1 – 9-L previous tests still green (no regression)
-- ⬜ All new tests in the TDD matrix above pass green
+- ⬜ All 13 new tests in the TDD matrix above pass green
 - ⬜ Track bookmark roundtrip uses `.withSecurityScope` end-to-end
 - ⬜ Stale bookmark refresh path persists the new bookmark on the
   Track instance
@@ -2627,10 +2672,14 @@ errors when sandbox-related failures do occur in edge cases.
   start success in real time (not cached)
 - ⬜ `LyricsService` `.lrc` read goes through `NSFileCoordinator` +
   `SiblingFilePresenter`, never raw `Data(contentsOf:)`
-- ⬜ `AppState.load(urls:)` start/stop pairing is symmetric for every
-  input URL (verified via fake URL call recorder)
+- ⬜ `AppState.load(urls:)` per-URL `startAccessingSecurityScopedResource`
+  / `stopAccessingSecurityScopedResource` pair fires per-iteration
+  (verified indirectly via Track bookmark-captured behaviour evidence;
+  direct call counting on URL not feasible per design rationale in
+  Files / Tests above)
 - ⬜ `lyricsErrorMessageKey(for:)` returns the correct localisation
-  key for all four documented error categories
+  key for the two documented error categories (permission-denied,
+  decoding-failure) plus the catch-all fallback
 - ⬜ `architecture.md` Cross-Boundary 5-area audit completed with
   outcome documented in commit message
 
@@ -2650,7 +2699,8 @@ release archive installed to `/Applications`:**
 - ⬜ Lyrics happy path: with sibling `.lrc` present at
   `<basename>.lrc`, lyrics panel renders decoded lyrics
 - ⬜ Lyrics absent: with no sibling `.lrc`, lyrics panel shows
-  `lyrics_none_available` ("No lyrics available.")
+  `lyrics_none_available` ("No lyrics available.") via the
+  `hasAny == false` UI branch — not via the errorMessage branch
 - ⬜ Lyrics permission edge case: with sibling `.lrc` on a network
   volume that disconnects mid-session, lyrics panel shows the new
   `lyrics_file_inaccessible` message (not `lyrics_decode_failed`)
@@ -2692,6 +2742,12 @@ release archive installed to `/Applications`:**
   `CFBundleDocumentTypes` entries in their respective slices.
   Pre-declaring extensions in 9-M would violate SDD slice-scope
   discipline.
+- **No new `LyricsServiceError` UI categories beyond permission
+  denied and decoding failure.** `.noEmbeddedLyrics` and
+  `.sidecarNotFound` are handled by the surrounding flow's
+  `hasAny == false` branch and `LyricsResolution.currentSource == nil`
+  guard, never reaching `LyricsPanel.errorMessage`. Adding categories
+  for them would be dead code per current LyricsPanel routing.
 - **No NSUserDefaults storage refactor.** The 6.4 MB system warning
   observed during 9-M investigation is acknowledged but deferred to
   v0.15 storage refactor. 9-M's own additions (bookmark data type
@@ -2703,9 +2759,9 @@ release archive installed to `/Applications`:**
   HarmoniaPlayer's first public release per current memory; no
   shipped bookmark data exists in user containers. Decode path logs
   and treats legacy bookmark bytes as inaccessible.
-- **No re-architecting of `AppState.load(urls:)` beyond the start /
-  stop pairing.** Existing AppState load entry-point structure
-  preserved. The capture point is one method.
+- **No re-architecting of `AppState.load(urls:)` beyond the per-URL
+  `startAccessingSecurityScopedResource` / `stopAccessingSecurityScopedResource`
+  pairing.** Existing AppState load entry-point structure preserved.
 - **No CarPlay / Siri / cross-platform sandbox semantics.**
   Sandbox is macOS-specific. Linux / C++ HarmoniaPlayer's file-access
   model is separate; HarmoniaCore-Swift does not change.
