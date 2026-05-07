@@ -2316,6 +2316,25 @@ as future-work pointers):
   persistence). Cleanup deferred to a separate slice combined with
   `ClockPort` rename.
 
+**Test phase classification — TDD discipline alignment:**
+
+`harmonia-dev-workflow` SKILL.md states: "Red phase: tests exist, tests
+fail, no implementation yet." Each row in the TDD matrix below is
+classified into one of two phases:
+
+- **`red`** — driving test that fails on current code, passes after the
+  green-phase implementation. Committed in the red commit.
+- **`green`** — behaviour contract / regression guard that is already
+  green on current code (or trivially green after stub addition) but
+  defines an invariant that the green-phase implementation must
+  preserve. Committed in the green commit alongside the implementation.
+
+The split is a SKILL-driven discipline, not a value judgement on either
+test category. Tests that genuinely cannot be implemented at all in a
+unit-test environment (e.g. observing `NSFileCoordinator`'s registered
+presenters list, which has no public API) are excluded from this matrix
+and covered by manual code review only.
+
 ### Scope
 
 9-M is internally three layers. All three must ship in the same slice —
@@ -2335,7 +2354,10 @@ errors when sandbox-related failures do occur in edge cases.
   the candidate `.lrc` URL. `addFilePresenter` is called immediately
   before `coordinate` (the race window is documented in
   `NSFileCoordinator.h`); `removeFilePresenter` is called via `defer`
-  immediately after, in the same method.
+  immediately after, in the same method. The add/remove pairing is
+  enforced by manual code review — `NSFileCoordinator` does not expose
+  a public API to list registered presenters, so unit testing the
+  symmetry is not possible.
 - `LyricsService.resolveAvailability` continues to use
   `FileManager.default.fileExists(atPath:)` for the existence probe —
   the existence check itself is not sandbox-blocked (only the read is),
@@ -2466,6 +2488,9 @@ errors when sandbox-related failures do occur in edge cases.
   tested without instantiating SwiftUI views. Lives in the same file
   as `LyricsServiceError` (i.e. `LyricsService.swift`) but is a
   view-layer-facing helper — flagged in api_reference.md accordingly.
+  In the red commit, this function exists as a stub returning `""`
+  (so all three driving tests for it fail); the real categorisation
+  logic is added in the green commit.
 
 **Note on unhandled `LyricsServiceError` cases:**
 `LyricsService.resolveContent` can throw `.noEmbeddedLyrics` (no USLT
@@ -2523,14 +2548,13 @@ decoding failure) are the only errors that can actually reach
     157-174) uses `NSFileCoordinator` + `SiblingFilePresenter` instead
     of `Data(contentsOf:)`
   - new free function `lyricsErrorMessageKey(for: Error) -> String`
-    declared in the same file (view-layer-facing helper)
-  - `#if DEBUG` throwaway block from the 9-M baseline experiment
-    removed in this slice (was added during STEP 3 verification, was
-    never committed to main)
+    declared in the same file (view-layer-facing helper). Red commit
+    adds this as a stub returning `""`; green commit replaces with
+    real categorisation.
 
 **HarmoniaPlayer — Sibling file presenter (new file)**
 
-- `Shared/Services/SiblingFilePresenter.swift` (new)
+- `Shared/Services/SiblingFilePresenter.swift` (new — green commit)
 
   ```swift
   /// Minimal NSFilePresenter conformance for reading a sibling file
@@ -2563,26 +2587,29 @@ decoding failure) are the only errors that can actually reach
 
 **HarmoniaPlayer — UI**
 
-- `Shared/Views/LyricsPanel.swift` (modify)
+- `Shared/Views/LyricsPanel.swift` (modify — green commit)
   - error catch path (line 206-209) replaced with
     `errorMessage = L(lyricsErrorMessageKey(for: error))`
   - no other changes; the panel structure is unchanged
 
 **HarmoniaPlayer — Localisation**
 
-- `en.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
-  next to existing `lyrics_decode_failed` (line 211)
-- `ja.lproj/Localizable.strings` (modify) — add `lyrics_file_inaccessible`
-- `zh-Hant.lproj/Localizable.strings` (modify) — add
+- `en.lproj/Localizable.strings` (modify — green commit) — add
+  `lyrics_file_inaccessible` next to existing `lyrics_decode_failed`
+  (line 211)
+- `ja.lproj/Localizable.strings` (modify — green commit) — add
+  `lyrics_file_inaccessible`
+- `zh-Hant.lproj/Localizable.strings` (modify — green commit) — add
   `lyrics_file_inaccessible`
 
 **HarmoniaPlayer — Build configuration**
 
-- `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` (new) — partial
-  Info.plist declaring `CFBundleDocumentTypes` for `.lrc`. Hybrid mode
-  (does not list bundle metadata or privacy descriptions — those
-  continue via Xcode auto-injection from `GENERATE_INFOPLIST_FILE = YES`).
-- `HarmoniaPlayer.xcodeproj/project.pbxproj` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` (new — green commit)
+  — partial Info.plist declaring `CFBundleDocumentTypes` for `.lrc`.
+  Hybrid mode (does not list bundle metadata or privacy descriptions
+  — those continue via Xcode auto-injection from
+  `GENERATE_INFOPLIST_FILE = YES`).
+- `HarmoniaPlayer.xcodeproj/project.pbxproj` (modify — green commit)
   - `INFOPLIST_FILE = HarmoniaPlayer/Info.plist` added to both Debug
     and Release build configurations
   - `Info.plist` reference removed from `Copy Bundle Resources` build
@@ -2593,27 +2620,30 @@ decoding failure) are the only errors that can actually reach
 
 **Tests** (`HarmoniaPlayerTests/SharedTests/`)
 
-- `TrackTests.swift` (extend) — security-scoped bookmark roundtrip,
-  stale-flag refresh path, `isAccessible` reflects security-scope
-  start success
+- `TrackTests.swift` (extend) — security-scoped bookmark roundtrip
+  (3 red + 2 green)
 - `LyricsServiceTests.swift` (extend) — `.lrc` read via
   `NSFileCoordinator` (using existing `tempDir` + `makeTrack` +
   `writeSidecar` fixture, fully compatible with no fixture additions
   required); `lyricsErrorMessageKey(for:)` categorisation
-- `SiblingFilePresenterTests.swift` (new) — URL pair invariant after
-  init, queue equals `.main`, type conforms to `NSFilePresenter`
-- `AppStatePlayerlistTests.swift` (extend) — `load(urls:)` produces a
-  Track whose bookmark roundtrips and `isAccessible == true` (behaviour
-  evidence test, not a fake-recorder swizzle test, because `URL` is a
-  Swift value type and `startAccessingSecurityScopedResource` is an
-  ObjC method whose interception requires invasive runtime patches)
+  (3 red + 1 green)
+- `SiblingFilePresenterTests.swift` (new — green commit) — URL pair
+  invariant after init, queue equals `.main`, type conforms to
+  `NSFilePresenter` (0 red + 2 green)
+- `AppStatePlayerlistTests.swift` (extend — green commit) —
+  `load(urls:)` produces a Track whose bookmark roundtrips and
+  `isAccessible == true` (behaviour evidence test, not a
+  fake-recorder swizzle test, because `URL` is a Swift value type and
+  `startAccessingSecurityScopedResource` is an ObjC method whose
+  interception requires invasive runtime patches not warranted for
+  this slice) (0 red + 1 green)
 
 **Test File Decisions** are summarised in the TDD matrix below.
 
 **Test Fakes** — none new. Existing `FakePlaybackService`,
 `FakeTagReaderService`, `MockIAPManager` etc. unaffected.
 
-**Docs (sync 同 commit, 9-L `2b5f4c4` style)**
+**Docs (sync 同 commit, 9-L `2b5f4c4` style — green commit)**
 
 - `api_reference.md` (modify)
   - Track section: bookmark options changed; `isAccessible` update
@@ -2643,40 +2673,59 @@ decoding failure) are the only errors that can actually reach
 
 ### TDD matrix
 
-| Test | Given | When | Then | Test File Decision |
-|---|---|---|---|---|
-| `testTrack_BookmarkRoundtrip_PreservesURLViaSecurityScope` | a temp file URL | encode bookmark with `.withSecurityScope`, decode with `.withSecurityScope` | resolved URL equals original | Extend `TrackTests.swift` |
-| `testTrack_BookmarkResolution_StaleFlag_TriggersRefresh` | a Track with stale-flagged bookmark data | resolve | refreshed bookmark stored on the Track instance | Extend `TrackTests.swift` |
-| `testTrack_IsAccessible_TrueWhenBookmarkResolvesAndAccessStarts` | a Track with valid bookmark for an existing temp file | read `isAccessible` after decode | true | Extend `TrackTests.swift` |
-| `testTrack_IsAccessible_FalseWhenStartAccessFails` | a Track whose bookmark target was deleted | read `isAccessible` after decode | false | Extend `TrackTests.swift` |
-| `testTrack_LegacyMinimalBookmark_DecodesAsInaccessible` | a Track encoded with legacy `.minimalBookmark` bytes | resolve under `.withSecurityScope` | error logged, `isAccessible` = false, no crash | Extend `TrackTests.swift` |
-| `testAppStatePlaylistLoad_BookmarkCapturedAfterLoad` | a tempDir-based real URL with on-disk audio file | `AppState.load(urls:[realURL])` | resulting Track has non-nil persisted accessBookmark, decoded URL equals input URL, `isAccessible == true` | Extend `AppStatePlayerlistTests.swift` |
-| `testLyricsService_LrcRead_UsesNSFileCoordinator` | a temp dir with `song.mp3` + `song.lrc` | `resolveContent(for:source:.lrc,...)` | returns expected sidecar text content | Extend `LyricsServiceTests.swift` |
-| `testLyricsService_LrcRead_RegistersThenRemovesPresenter` | a temp dir fixture | `resolveContent` runs to completion | no SiblingFilePresenter remains registered with `NSFileCoordinator` after method returns (verified via weak reference observation, since `NSFileCoordinator` does not expose a presenter list API) | Extend `LyricsServiceTests.swift` |
-| `testSiblingFilePresenter_StoresURLPair` | two URLs `A`, `B` | construct `SiblingFilePresenter(primaryItemURL: A, presentedItemURL: B)` | properties `primaryPresentedItemURL == A`, `presentedItemURL == B` | New `SiblingFilePresenterTests.swift` |
-| `testSiblingFilePresenter_QueueIsMain` | a presenter | read `presentedItemOperationQueue` | equals `OperationQueue.main` | Extend `SiblingFilePresenterTests.swift` |
-| `testLyricsErrorMessageKey_PermissionDenied_ReturnsInaccessible` | `NSError(domain: NSCocoaErrorDomain, code: 257)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_file_inaccessible"` | Extend `LyricsServiceTests.swift` |
-| `testLyricsErrorMessageKey_DecodingFailed_ReturnsDecodeFailed` | `LyricsServiceError.decodingFailed` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` | Extend `LyricsServiceTests.swift` |
-| `testLyricsErrorMessageKey_UnknownError_ReturnsDecodeFailed` | `NSError(domain: "other", code: 99)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` (catch-all fallback) | Extend `LyricsServiceTests.swift` |
+| Phase | Test | Given | When | Then | Test File Decision |
+|---|---|---|---|---|---|
+| **red** | `testTrack_BookmarkRoundtrip_PreservesURLViaSecurityScope` | a real temp file URL | encode Track → decode Track → `startAccessingSecurityScopedResource()` on decoded URL | returns `true` (security scope preserved through encode/decode cycle) | Extend `TrackTests.swift` |
+| **red** | `testTrack_BookmarkResolution_StaleFlag_TriggersRefresh` | a Track encoded with valid bookmark, then file atomically replaced via `FileManager.replaceItemAt` | decode Track → re-encode | re-encoded data ≠ original encoded data (bookmark refreshed on stale flag) | Extend `TrackTests.swift` |
+| **red** | `testTrack_LegacyMinimalBookmark_DecodesAsInaccessible` | hand-crafted JSON with `.minimalBookmark` bytes (legacy format) | decode Track | `isAccessible` = false, no crash | Extend `TrackTests.swift` |
+| green | `testTrack_IsAccessible_TrueWhenBookmarkResolvesAndAccessStarts` | a Track with valid bookmark for an existing temp file | decode Track | `isAccessible` = true (contract: green code preserves default-true on valid path) | Extend `TrackTests.swift` |
+| green | `testTrack_IsAccessible_FalseWhenStartAccessFails` | a Track whose bookmark target was deleted | decode Track | `isAccessible` = false (contract: green code sets false on resolution failure) | Extend `TrackTests.swift` |
+| green | `testAppStatePlaylistLoad_BookmarkCapturedAfterLoad` | a tempDir-based real audio file | `AppState.load(urls:[realURL])` | resulting Track has non-nil persisted accessBookmark, decoded URL equals input URL, `isAccessible == true` (regression: load + saveState path stays intact) | Extend `AppStatePlayerlistTests.swift` |
+| green | `testLyricsService_LrcRead_UsesNSFileCoordinator` | a temp dir with `song.mp3` + `song.lrc` | `resolveContent(for:source:.lrc,...)` | returns expected sidecar text content (regression: NSFileCoordinator path reads sidecar correctly; cannot distinguish from `Data(contentsOf:)` in unit-test environment) | Extend `LyricsServiceTests.swift` |
+| green | `testSiblingFilePresenter_StoresURLPair` | two URLs `A`, `B` | construct `SiblingFilePresenter(primaryItemURL: A, presentedItemURL: B)` | properties `primaryPresentedItemURL == A`, `presentedItemURL == B` | New `SiblingFilePresenterTests.swift` |
+| green | `testSiblingFilePresenter_QueueIsMain` | a presenter | read `presentedItemOperationQueue` | equals `OperationQueue.main` | Extend `SiblingFilePresenterTests.swift` |
+| **red** | `testLyricsErrorMessageKey_PermissionDenied_ReturnsInaccessible` | `NSError(domain: NSCocoaErrorDomain, code: 257)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_file_inaccessible"` (red stub returns `""`) | Extend `LyricsServiceTests.swift` |
+| **red** | `testLyricsErrorMessageKey_DecodingFailed_ReturnsDecodeFailed` | `LyricsServiceError.decodingFailed` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` (red stub returns `""`) | Extend `LyricsServiceTests.swift` |
+| **red** | `testLyricsErrorMessageKey_UnknownError_ReturnsDecodeFailed` | `NSError(domain: "other", code: 99)` | `lyricsErrorMessageKey(for:)` | returns `"lyrics_decode_failed"` (red stub returns `""`, fallback path) | Extend `LyricsServiceTests.swift` |
+
+**Removed during pre-red audit:** `testLyricsService_LrcRead_RegistersThenRemovesPresenter` —
+`NSFileCoordinator` does not expose a public API to enumerate registered
+`NSFilePresenter` instances. The presenter is also a method-local variable
+inside `resolveContent`, so external test code cannot capture a weak
+reference to observe deallocation. Add/remove pairing for this method is
+covered by manual code review only. Removed from matrix per SDD discipline
+that requires every test row be implementable.
+
+**Total: 12 tests** (6 red + 6 green). Red commit ships the 6 red rows;
+green commit ships the implementation, the remaining 6 green rows, the
+new SiblingFilePresenter class, build configuration changes, UI
+categorisation, and the 5 living-doc updates.
 
 ### Done criteria
 
-**Unit test criteria (automated):**
+**Red commit done criteria:**
 
 - ⬜ All Slice 1 – 9-L previous tests still green (no regression)
-- ⬜ All 13 new tests in the TDD matrix above pass green
+- ⬜ All 6 red-phase driving tests are added and **fail**
+- ⬜ `lyricsErrorMessageKey(for:)` stub function exists in
+  `LyricsService.swift` returning `""`
+- ⬜ No code outside the stub function and the test files is modified
+  in this commit
+
+**Green commit done criteria (unit test, automated):**
+
+- ⬜ All 6 red-phase driving tests now pass
+- ⬜ All 6 green-phase contract tests added and pass
 - ⬜ Track bookmark roundtrip uses `.withSecurityScope` end-to-end
 - ⬜ Stale bookmark refresh path persists the new bookmark on the
   Track instance
 - ⬜ `isAccessible` reflects bookmark resolvability + security-scope
   start success in real time (not cached)
 - ⬜ `LyricsService` `.lrc` read goes through `NSFileCoordinator` +
-  `SiblingFilePresenter`, never raw `Data(contentsOf:)`
+  `SiblingFilePresenter`, never raw `Data(contentsOf:)` (verified by
+  manual code review; not unit-testable in non-sandboxed test runner)
 - ⬜ `AppState.load(urls:)` per-URL `startAccessingSecurityScopedResource`
   / `stopAccessingSecurityScopedResource` pair fires per-iteration
-  (verified indirectly via Track bookmark-captured behaviour evidence;
-  direct call counting on URL not feasible per design rationale in
-  Files / Tests above)
 - ⬜ `lyricsErrorMessageKey(for:)` returns the correct localisation
   key for the two documented error categories (permission-denied,
   decoding-failure) plus the catch-all fallback
@@ -2765,6 +2814,11 @@ release archive installed to `/Applications`:**
 - **No CarPlay / Siri / cross-platform sandbox semantics.**
   Sandbox is macOS-specific. Linux / C++ HarmoniaPlayer's file-access
   model is separate; HarmoniaCore-Swift does not change.
+- **No unit test for `NSFileCoordinator` add/remove presenter
+  pairing.** Originally listed as a TDD row but removed during pre-red
+  audit because `NSFileCoordinator` exposes no public API to enumerate
+  registered presenters and the presenter is a method-local variable.
+  The pairing is covered by manual code review only.
 
 ### Related future work
 
@@ -2788,6 +2842,11 @@ release archive installed to `/Applications`:**
   `NSFileCoordinator.coordinate(writingItemAt:)`. Reuses
   `SiblingFilePresenter` with the same primary / presented URL pair
   shape.
+- **`harmonia-dev-workflow` SKILL update:** add Phase classification
+  (`red` / `green`) requirement to the TDD matrix template, and add a
+  pre-spec full-SUT-read step before any draft. Both gaps were exposed
+  during 9-M spec drafting (one driving test was undeliverable, six
+  rows were behaviour contracts misclassified as red-phase).
 - **HarmoniaCore cleanup slice:** removes `FileAccessPort` +
   `SandboxFileAccessAdapter` (confirmed dead code at the wiring
   level), combined with `ClockPort` rename and a possible
