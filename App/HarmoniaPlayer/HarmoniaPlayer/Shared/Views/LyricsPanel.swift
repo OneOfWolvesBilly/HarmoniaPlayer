@@ -204,8 +204,11 @@ struct LyricsPanel: View {
             content = text
             errorMessage = nil
         } catch {
+            // Slice 9-M Layer 3: categorise error so sandbox permission
+            // failures (Code=257) surface as a useful user message rather
+            // than the misleading "Try a different encoding" string.
             content = nil
-            errorMessage = L("lyrics_decode_failed")
+            errorMessage = L(lyricsErrorMessageKey(for: error))
         }
     }
 

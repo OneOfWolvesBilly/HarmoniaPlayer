@@ -209,6 +209,7 @@
 "lyrics_encoding_big5" = "Big5";
 "lyrics_encoding_shift_jis" = "Shift-JIS";
 "lyrics_decode_failed" = "無法解碼歌詞,請嘗試其他編碼。";
+"lyrics_file_inaccessible" = "無法存取歌詞檔案。請嘗試將曲目移除後重新加入。";
 "lyrics_none_available" = "此曲目沒有可用的歌詞。";
 "lyrics_recheck" = "重新檢查";
 

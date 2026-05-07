@@ -89,7 +89,15 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
 }
 ```
 
-Persistence: encoded with URL bookmark (`minimalBookmark`) for file access across launches. Decoding resolves bookmark, then urlPath, then legacy URL key.
+Persistence: encoded with security-scoped URL bookmark (`[.withSecurityScope]`) for file access across cold-launch under the App Sandbox (Slice 9-M). Decoding resolves the bookmark under `[.withSecurityScope]`, then urlPath, then legacy URL key.
+
+`isAccessible` (runtime-only, not persisted via Codable, defaults `true`) is set during decode according to:
+
+- Bookmark resolves successfully AND `startAccessingSecurityScopedResource()` returns `true` → `isAccessible = true`. The security scope is started solely to verify access and is stopped immediately; the flag is read-on-demand by UI for greying-out unavailable rows, not cached.
+- Bookmark resolution fails (e.g. legacy `.minimalBookmark` bytes from any pre-9-M development build, or the bookmark target was deleted) → fall through to `urlPath` with `isAccessible = false`.
+- `bookmarkDataIsStale: &stale` is captured during resolve. The resolved URL is propagated to `Track.url`, so the next encode pass regenerates a fresh bookmark from the (potentially relocated) URL — no explicit refresh helper is needed on `Track` itself.
+
+`AppState.load(urls:)` wraps each input URL with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` via `defer` inside the `for url in urls` loop body so that the security-scoped bookmark is captured against an active sandbox extension at encode time.
 
 ### 1.2 Playlist
 
@@ -351,6 +359,28 @@ struct LyricsResolution {
 
 ---
 
+### 1.19 SiblingFilePresenter
+
+Slice 9-M. Minimal `NSFilePresenter` conformance for reading a sibling file (same base name, different extension) of a user-selected primary file under the App Sandbox.
+
+```swift
+final class SiblingFilePresenter: NSObject, NSFilePresenter {
+    var primaryPresentedItemURL: URL?
+    var presentedItemURL: URL?
+    var presentedItemOperationQueue: OperationQueue   // .main
+
+    init(primaryItemURL: URL, presentedItemURL: URL)
+}
+```
+
+Used together with `NSFileCoordinator.coordinate(readingItemAt:)` after registering with `NSFileCoordinator.addFilePresenter(_:)`. The register / deregister pair must be tightly scoped (typically via `defer`) around the coordinated read.
+
+The sibling extension MUST be declared in the app bundle's `CFBundleDocumentTypes` with `NSIsRelatedItemType=YES` and `CFBundleTypeRole=Editor` — without this, the App Sandbox refuses to issue a related-item extension and the coordinated read fails with `NSCocoaErrorDomain Code=257`.
+
+Used by `LyricsService` `.lrc` sidecar reads.
+
+---
+
 ## 2. Error Types
 
 ### 2.1 PlaybackError
@@ -390,6 +420,23 @@ enum LyricsServiceError: Error {
     case decodingFailed    // sidecar bytes could not be decoded with any encoding candidate
 }
 ```
+
+#### lyricsErrorMessageKey(for:)
+
+Slice 9-M. View-layer-facing helper that maps any error from `LyricsService` to a `Localizable.strings` key for `LyricsPanel` to display.
+
+```swift
+func lyricsErrorMessageKey(for error: Error) -> String
+```
+
+Categories:
+
+- `NSError` with `domain == NSCocoaErrorDomain && code == 257` (sandbox permission denied) → `"lyrics_file_inaccessible"`.
+- `LyricsServiceError.decodingFailed` and any other unrecognised error → `"lyrics_decode_failed"` (catch-all fallback).
+
+`.noEmbeddedLyrics` and `.sidecarNotFound` are handled by the surrounding `LyricsPanel.reload()` flow's `LyricsResolution.hasAny == false` branch and do not reach `LyricsPanel.errorMessage` — they are not categorised here.
+
+Lives in `LyricsService.swift` (free function, not a method on the service) so it can be unit tested without instantiating SwiftUI views.
 
 ---
 

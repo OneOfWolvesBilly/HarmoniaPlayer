@@ -155,10 +155,58 @@ final class DefaultLyricsService: LyricsService {
             return variant.text
 
         case .lrc:
-            guard let url = findSidecarURL(for: track) else {
+            guard let lrcURL = findSidecarURL(for: track) else {
                 throw LyricsServiceError.sidecarNotFound
             }
-            let data = try Data(contentsOf: url)
+
+            // Slice 9-M Layer 1: sibling read via Related Items.
+            //
+            // Plain `Data(contentsOf: lrcURL)` fails under the App Sandbox
+            // with NSCocoaErrorDomain Code=257 because the security-scoped
+            // bookmark on `track.url` does not extend to the sibling file.
+            // Apple's Related Items mechanism: declare `.lrc` as
+            // NSIsRelatedItemType=YES + CFBundleTypeRole=Editor in
+            // CFBundleDocumentTypes (see Info.plist), register an
+            // NSFilePresenter whose primaryPresentedItemURL is the user-
+            // selected primary file, then issue an NSFileCoordinator
+            // coordinated read. The sandbox issues a related-item extension
+            // for the duration of the coordinated block.
+            //
+            // add/remove pairing is enforced by manual code review:
+            // NSFileCoordinator does not expose a public API to enumerate
+            // registered presenters, so unit testing the symmetry is not
+            // possible (see spec v1.2 §Layer 1).
+            let presenter = SiblingFilePresenter(
+                primaryItemURL: track.url,
+                presentedItemURL: lrcURL
+            )
+            NSFileCoordinator.addFilePresenter(presenter)
+            defer { NSFileCoordinator.removeFilePresenter(presenter) }
+
+            let coordinator = NSFileCoordinator(filePresenter: presenter)
+            var coordError: NSError?
+            var readData: Data?
+            var readError: Error?
+            coordinator.coordinate(
+                readingItemAt: lrcURL,
+                options: [],
+                error: &coordError
+            ) { effectiveURL in
+                do {
+                    readData = try Data(contentsOf: effectiveURL)
+                } catch {
+                    readError = error
+                }
+            }
+            if let coordError {
+                throw coordError
+            }
+            if let readError {
+                throw readError
+            }
+            guard let data = readData else {
+                throw LyricsServiceError.decodingFailed
+            }
             let enc: String.Encoding
             if let name = encodingName,
                name != "auto",
@@ -351,18 +399,30 @@ final class DefaultLyricsService: LyricsService {
 // MARK: - Slice 9-M Layer 3 helper
 
 /// View-layer-facing helper that maps any error from `LyricsService` to a
-/// localisation key for `LyricsPanel` to display.
+/// `Localizable.strings` key for `LyricsPanel` to display.
 ///
-/// **Slice 9-M red-phase stub** — returns an empty string so all
-/// `testLyricsErrorMessageKey_*` driving tests fail in the red commit.
-/// Real categorisation (NSCocoaErrorDomain Code=257 → permission key,
-/// LyricsServiceError.decodingFailed + fallback → decode-failed key)
-/// is added in the green-phase commit per spec §Layer 3.
+/// Categories (green-phase impl per spec §Layer 3):
 ///
-/// - Parameter error: Any error thrown by `LyricsService.resolveContent`,
-///   typically `LyricsServiceError` or `NSError` with
-///   `NSCocoaErrorDomain Code=257`.
-/// - Returns: Localizable.strings key.
+/// 1. `NSError` with `domain == NSCocoaErrorDomain && code == 257`
+///    (sandbox permission denied — sibling reads without a related-item
+///    extension hit this) → `"lyrics_file_inaccessible"`.
+/// 2. `LyricsServiceError.decodingFailed` and any other unrecognised error
+///    → `"lyrics_decode_failed"` (catch-all fallback; the genuine "encoding
+///    is wrong" reason for that string now that permission errors no
+///    longer leak into this branch).
+///
+/// `LyricsServiceError.noEmbeddedLyrics` and `.sidecarNotFound` are not
+/// categorised here because the surrounding `LyricsPanel.reload()` flow
+/// short-circuits via `LyricsResolution.hasAny == false` before any
+/// `resolveContent` call can throw them — they never reach
+/// `LyricsPanel.errorMessage` in practice.
+///
+/// - Parameter error: Any error thrown by `LyricsService.resolveContent`.
+/// - Returns: `Localizable.strings` key for the user-facing error message.
 func lyricsErrorMessageKey(for error: Error) -> String {
-    return ""
+    let nsError = error as NSError
+    if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
+        return "lyrics_file_inaccessible"
+    }
+    return "lyrics_decode_failed"
 }

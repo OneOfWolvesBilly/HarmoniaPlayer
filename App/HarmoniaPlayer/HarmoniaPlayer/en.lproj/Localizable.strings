@@ -209,6 +209,7 @@
 "lyrics_encoding_big5" = "Big5";
 "lyrics_encoding_shift_jis" = "Shift-JIS";
 "lyrics_decode_failed" = "Could not decode lyrics. Try a different encoding.";
+"lyrics_file_inaccessible" = "Lyrics file is not accessible. Try removing and re-adding the track.";
 "lyrics_none_available" = "No lyrics available for this track.";
 "lyrics_recheck" = "Recheck";
 

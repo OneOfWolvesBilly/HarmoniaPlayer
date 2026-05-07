@@ -212,9 +212,14 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id,       forKey: .id)
         try c.encode(url.path, forKey: .urlPath)
+        // Slice 9-M Layer 2: use security-scoped bookmarks so persisted URLs
+        // can be re-resolved across cold-launch under the App Sandbox.
+        // Caller (AppState.load(urls:)) is responsible for having an active
+        // sandbox extension on `url` at encode time so that the bookmark can
+        // capture security scope.
         if url.isFileURL,
            let bookmark = try? url.bookmarkData(
-               options: .minimalBookmark,
+               options: [.withSecurityScope],
                includingResourceValuesForKeys: nil,
                relativeTo: nil
            ) {
@@ -259,16 +264,37 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         id = try c.decode(UUID.self, forKey: .id)
 
         // Resolve URL: bookmark → urlPath → legacy url key
+        //
+        // Slice 9-M Layer 2:
+        // - resolve under [.withSecurityScope] (matches encode-side options);
+        //   legacy `.minimalBookmark` bytes from any pre-9-M build will fail
+        //   this path and fall through to `urlPath` with isAccessible = false
+        //   (no migration tooling: v0.1 is HarmoniaPlayer's first public
+        //   release per project memory).
+        // - isAccessible = true requires bookmark resolution AND
+        //   startAccessingSecurityScopedResource() returning true. The flag is
+        //   read-on-demand by UI for greying-out unavailable rows.
+        // - bookmarkDataIsStale: &stale is captured; on stale the resolved URL
+        //   is used to re-encode at the next encode pass (URL.bookmarkData(...)
+        //   regenerates from the current URL). No explicit refresh helper is
+        //   needed because `url` is updated to the resolved value.
         if let bookmark = try c.decodeIfPresent(Data.self, forKey: .accessBookmark) {
             var stale = false
             if let resolved = try? URL(
                 resolvingBookmarkData: bookmark,
-                options: .withoutUI,
+                options: [.withSecurityScope],
                 relativeTo: nil,
                 bookmarkDataIsStale: &stale
             ) {
                 url = resolved
-                isAccessible = true
+                let started = resolved.startAccessingSecurityScopedResource()
+                if started {
+                    isAccessible = true
+                    resolved.stopAccessingSecurityScopedResource()
+                } else {
+                    isAccessible = false
+                }
+                _ = stale  // captured; URL update propagates fresh bookmark on re-encode
             } else if let path = try c.decodeIfPresent(String.self, forKey: .urlPath) {
                 url = URL(fileURLWithPath: path)
                 isAccessible = false

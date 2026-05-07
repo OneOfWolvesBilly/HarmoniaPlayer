@@ -57,6 +57,22 @@ extension AppState {
                 continue
             }
 
+            // Slice 9-M Layer 2: per-iteration security-scoped access.
+            //
+            // The user-selected URL holds an in-process sandbox extension issued
+            // by NSOpenPanel / drag-drop. start/stop scope here ensures Track
+            // encode (which calls URL.bookmarkData(.withSecurityScope) inside
+            // tagReaderService.readMetadata or, on failure, the Track(url:)
+            // fallback) captures that extension into the persisted bookmark.
+            //
+            // Swift's defer is bound to the enclosing for-body scope, so stop
+            // fires at the end of each iteration — the start/stop pair scopes
+            // exactly one URL and never accumulates across iterations.
+            let didStart = url.startAccessingSecurityScopedResource()
+            defer {
+                if didStart { url.stopAccessingSecurityScopedResource() }
+            }
+
             do {
                 let track = try await tagReaderService.readMetadata(for: url)
                 playlists[activePlaylistIndex].tracks.append(track)

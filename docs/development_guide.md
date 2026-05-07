@@ -397,9 +397,73 @@ refactor(services): rename PlaybackState.buffering to .loading
 
 ---
 
-## 7. Testing
+## 7. Sandbox File Access Patterns
 
-### 7.1 Test doubles
+Slice 9-M. HarmoniaPlayer ships with `ENABLE_APP_SANDBOX = YES` for App Store distribution. Two file-access scenarios occur and use different mechanisms:
+
+### 7.1 User-selected primary files: security-scoped bookmarks
+
+The user grants access by selecting an audio file via `NSOpenPanel` or drag-drop. The system issues an in-process sandbox extension on that URL. To persist this access across cold-launch:
+
+1. Encode the URL with `URL.bookmarkData(options: [.withSecurityScope])`. This must happen while the in-process extension is active — `AppState.load(urls:)` wraps the body of its `for url in urls` loop with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` (paired via `defer` inside the loop body, which is per-iteration scope, not method scope) so the bookmark capture succeeds.
+2. On decode, resolve with `URL(resolvingBookmarkData:options:)` using `[.withSecurityScope]` and capture `bookmarkDataIsStale: &stale`.
+3. Verify accessibility by calling `startAccessingSecurityScopedResource()` on the resolved URL — only when this returns `true` is `Track.isAccessible` set to `true`. Stop the scope immediately; the flag is checked again when actual playback begins.
+4. The resolved URL replaces the in-memory `Track.url`. On the next `JSONEncoder().encode(track)` pass, `URL.bookmarkData(.withSecurityScope)` regenerates the bookmark from the now-current URL — this implicitly handles `bookmarkDataIsStale = true` without an explicit refresh helper.
+
+Legacy `.minimalBookmark` data (in case any made it to a development build) fails to resolve under `[.withSecurityScope]`; the decode path falls through to `urlPath` with `isAccessible = false`. No migration tool is shipped — v0.1 is HarmoniaPlayer's first public release.
+
+### 8.2 Sibling files: Related Items + NSFileCoordinator
+
+Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) cannot use the primary file's bookmark — `startAccessingSecurityScopedResource` does not extend access to siblings. Apple's first-class mechanism for this topology is **Related Items**:
+
+1. Declare the sibling extension in `Info.plist` `CFBundleDocumentTypes`:
+   ```xml
+   <key>CFBundleTypeName</key>      <string>LRC Lyrics File</string>
+   <key>CFBundleTypeExtensions</key> <array><string>lrc</string></array>
+   <key>CFBundleTypeRole</key>      <string>Editor</string>
+   <key>NSIsRelatedItemType</key>   <true/>
+   ```
+   `CFBundleTypeRole = Editor` is mandatory; `None` and `Viewer` cause the sandbox to silently refuse the related-item extension (Apple Developer Forum thread 14718).
+
+2. At read site, register an `NSFilePresenter` whose `primaryPresentedItemURL` is the user-selected primary file and `presentedItemURL` is the candidate sibling:
+   ```swift
+   let presenter = SiblingFilePresenter(
+       primaryItemURL: track.url,
+       presentedItemURL: lrcURL
+   )
+   NSFileCoordinator.addFilePresenter(presenter)
+   defer { NSFileCoordinator.removeFilePresenter(presenter) }
+   ```
+
+3. Issue a coordinated read:
+   ```swift
+   let coordinator = NSFileCoordinator(filePresenter: presenter)
+   var coordError: NSError?
+   var data: Data?
+   coordinator.coordinate(readingItemAt: lrcURL, options: [], error: &coordError) { url in
+       data = try? Data(contentsOf: url)
+   }
+   ```
+   The sandbox issues a related-item extension for the duration of the coordinated block.
+
+`SiblingFilePresenter` (`Shared/Services/SiblingFilePresenter.swift`) is a minimal `NSFilePresenter` conformance with three properties and a constructor — no behavioural callbacks. Each sibling extension that needs Related Items access requires its own `CFBundleDocumentTypes` entry with `NSIsRelatedItemType=YES` and `CFBundleTypeRole=Editor`.
+
+### 8.3 What does NOT work
+
+- **`Data(contentsOf: lrcURL)`** without coordinated read — fails with `NSCocoaErrorDomain Code=257` regardless of bookmarks.
+- **Calling `startAccessingSecurityScopedResource` on the sibling URL** — this only works for security-scoped URLs (i.e. those resolved from a bookmark). Sibling URLs are not security-scoped; the call returns `false` and the read still fails.
+- **`NSFileCoordinator` without an `NSFilePresenter` registered** — the sandbox refuses to issue a related-item extension; the system log prints `NSFileSandboxingRequestRelatedItemExtension: Failed to issue extension`.
+- **`NSFileCoordinator` with `CFBundleTypeRole = None` or `Viewer`** — `addFilePresenter` silently fails; subsequent reads still error with Code=257 and no diagnostic output.
+
+### 8.4 Error categorisation
+
+`LyricsPanel`'s error UI uses the free function `lyricsErrorMessageKey(for: Error)` to map errors to user-facing messages. `Code=257` surfaces as `lyrics_file_inaccessible` ("Lyrics file is not accessible. Try removing and re-adding the track."); `LyricsServiceError.decodingFailed` and any other unrecognised error fall back to `lyrics_decode_failed`.
+
+---
+
+## 8. Testing
+
+### 8.1 Test doubles
 
 All test infrastructure lives in
 `HarmoniaPlayerTests/FakeInfrastructure/`:
@@ -415,7 +479,7 @@ All test infrastructure lives in
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
 
-### 7.2 Test class conventions (Swift 6)
+### 8.2 Test class conventions (Swift 6)
 
 AppState is `@MainActor`, so test classes that use it must also be
 `@MainActor` — XCTest runs `@MainActor`-isolated classes on the main actor
@@ -486,7 +550,7 @@ Rules:
   `seek`, `load`, `play(trackID:)`, `playNextTrack`, `playPreviousTrack`
 - `final class` and unique `suiteName` per test
 
-### 7.3 Running tests
+### 8.3 Running tests
 
 ```
 Xcode: Product → Test (⌘U)
