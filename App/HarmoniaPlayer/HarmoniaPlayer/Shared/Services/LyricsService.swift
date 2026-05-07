@@ -347,3 +347,22 @@ final class DefaultLyricsService: LyricsService {
         return result
     }
 }
+
+// MARK: - Slice 9-M Layer 3 helper
+
+/// View-layer-facing helper that maps any error from `LyricsService` to a
+/// localisation key for `LyricsPanel` to display.
+///
+/// **Slice 9-M red-phase stub** — returns an empty string so all
+/// `testLyricsErrorMessageKey_*` driving tests fail in the red commit.
+/// Real categorisation (NSCocoaErrorDomain Code=257 → permission key,
+/// LyricsServiceError.decodingFailed + fallback → decode-failed key)
+/// is added in the green-phase commit per spec §Layer 3.
+///
+/// - Parameter error: Any error thrown by `LyricsService.resolveContent`,
+///   typically `LyricsServiceError` or `NSError` with
+///   `NSCocoaErrorDomain Code=257`.
+/// - Returns: Localizable.strings key.
+func lyricsErrorMessageKey(for error: Error) -> String {
+    return ""
+}

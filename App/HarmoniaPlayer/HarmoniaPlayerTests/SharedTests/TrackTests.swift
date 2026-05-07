@@ -362,4 +362,129 @@ final class TrackTests: XCTestCase {
         // Then: lyrics is nil by default (no USLT embedded, no .lrc sidecar loaded yet)
         XCTAssertNil(track.lyrics)
     }
+
+    // MARK: - Slice 9-M temp directory helper
+
+    /// Create an isolated temporary directory for tests that need real on-disk
+    /// files (bookmark roundtrip, security-scope verification). Cleaned up by
+    /// the test method itself; class-level setUp/tearDown are not used because
+    /// most existing tests above operate on synthetic /Music/sample.mp3 URLs.
+    private func makeTempDir() throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TrackTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private func makeRealFile(in dir: URL, name: String = "song.mp3",
+                              contents: Data = Data("v1".utf8)) throws -> URL {
+        let url = dir.appendingPathComponent(name)
+        try contents.write(to: url)
+        return url
+    }
+
+    // MARK: - Slice 9-M Layer 2: security-scoped bookmark roundtrip
+
+    /// 9-M red driving test #1.
+    /// Verifies that a Track encoded → decoded preserves the URL via a
+    /// security-scoped bookmark such that the decoded URL accepts
+    /// `startAccessingSecurityScopedResource()`. Fails on current code that
+    /// uses `.minimalBookmark` (no security scope), passes on green code that
+    /// uses `[.withSecurityScope]`.
+    func testTrack_BookmarkRoundtrip_PreservesURLViaSecurityScope() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        let original = Track(url: url, title: "RoundTrip")
+        let encoded = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(Track.self, from: encoded)
+
+        XCTAssertEqual(restored.url, url, "URL must roundtrip")
+
+        let started = restored.url.startAccessingSecurityScopedResource()
+        defer {
+            if started { restored.url.stopAccessingSecurityScopedResource() }
+        }
+        XCTAssertTrue(started,
+            "Decoded URL must allow startAccessingSecurityScopedResource() — "
+            + "required so sandbox cold-launch can access the file. "
+            + ".minimalBookmark fails this; .withSecurityScope passes.")
+    }
+
+    // MARK: - Slice 9-M Layer 2: stale bookmark refresh
+
+    /// 9-M red driving test #2.
+    /// Verifies that decoding a Track whose underlying file has been atomically
+    /// replaced refreshes the persisted bookmark. Fails on current code which
+    /// captures the stale flag but never acts on it, passes on green code that
+    /// regenerates the bookmark when stale=true.
+    ///
+    /// macOS filesystem caveat: `replaceItemAt` triggers stale-flag detection
+    /// in most observed configurations. If this test passes-on-red on a
+    /// particular host, it falls back to manual QA (rename file across
+    /// directories during a real run) — see spec Done criteria.
+    func testTrack_BookmarkResolution_StaleFlag_TriggersRefresh() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir, contents: Data("v1".utf8))
+
+        let original = Track(url: url, title: "Stale")
+        let encoded1 = try JSONEncoder().encode(original)
+
+        // Atomically replace the file to mark the bookmark stale on next resolve.
+        let replacement = dir.appendingPathComponent("replacement.tmp")
+        try Data("v2".utf8).write(to: replacement)
+        _ = try FileManager.default.replaceItemAt(url, withItemAt: replacement)
+
+        let restored = try JSONDecoder().decode(Track.self, from: encoded1)
+        let encoded2 = try JSONEncoder().encode(restored)
+
+        XCTAssertNotEqual(encoded1, encoded2,
+            "Track must refresh its accessBookmark when stale flag is set "
+            + "during decode. Current code captures &stale but ignores it; "
+            + "green code regenerates the bookmark from the resolved URL.")
+    }
+
+    // MARK: - Slice 9-M Layer 2: legacy minimalBookmark decode
+
+    /// 9-M red driving test #3.
+    /// Verifies that legacy `.minimalBookmark` data (in case any made it to a
+    /// TestFlight build during 9-A → 9-I) decodes as inaccessible rather than
+    /// crashing. Fails on current code which still uses `.minimalBookmark` for
+    /// resolve and so accepts the legacy bytes (isAccessible=true), passes on
+    /// green code that resolves with `[.withSecurityScope]` and treats
+    /// scope-less bytes as inaccessible.
+    func testTrack_LegacyMinimalBookmark_DecodesAsInaccessible() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        // Build legacy bookmark data (no security scope).
+        let legacyBookmark = try url.bookmarkData(options: .minimalBookmark,
+                                                   includingResourceValuesForKeys: nil,
+                                                   relativeTo: nil)
+
+        // Hand-craft a Track-shape JSON that mirrors what 9-A → 9-I encoded.
+        // Track's CodingKeys uses urlPath + accessBookmark (Data → base64 in JSON).
+        let id = UUID().uuidString
+        let json = """
+        {
+            "id": "\(id)",
+            "urlPath": "\(url.path)",
+            "title": "Legacy",
+            "artist": "",
+            "album": "",
+            "duration": 0,
+            "accessBookmark": "\(legacyBookmark.base64EncodedString())"
+        }
+        """.data(using: .utf8)!
+
+        // Decoding must not throw; must produce isAccessible == false.
+        let restored = try JSONDecoder().decode(Track.self, from: json)
+        XCTAssertFalse(restored.isAccessible,
+            "Legacy .minimalBookmark bytes lack security scope; resolving "
+            + "them under [.withSecurityScope] must fail safely, marking "
+            + "the Track inaccessible without crashing.")
+    }
 }

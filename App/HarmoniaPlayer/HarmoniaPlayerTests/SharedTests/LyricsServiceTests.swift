@@ -253,4 +253,51 @@ final class LyricsServiceTests: XCTestCase {
             for: track, source: .lrc, languageCode: nil, encodingName: "big5")
         XCTAssertEqual(content, "測試歌詞")
     }
+
+    // MARK: - Slice 9-M Layer 3: lyricsErrorMessageKey categorisation
+
+    /// 9-M red driving test #11.
+    /// Verifies that NSCocoaErrorDomain Code=257 (sandbox permission denied
+    /// when reading sibling `.lrc` without related-item entitlement) maps to
+    /// the `lyrics_file_inaccessible` localisation key. Fails on red-phase
+    /// stub which returns "" for any error; passes on green-phase
+    /// implementation that pattern-matches the NSError domain and code.
+    func testLyricsErrorMessageKey_PermissionDenied_ReturnsInaccessible() {
+        let permissionError = NSError(
+            domain: NSCocoaErrorDomain,
+            code: 257,
+            userInfo: [NSLocalizedDescriptionKey: "permission denied"])
+        let key = lyricsErrorMessageKey(for: permissionError)
+        XCTAssertEqual(key, "lyrics_file_inaccessible",
+            "Code=257 from sibling read failure under sandbox must surface "
+            + "as the user-facing accessibility message, not the encoding "
+            + "fallback.")
+    }
+
+    /// 9-M red driving test #12.
+    /// Verifies that explicit `LyricsServiceError.decodingFailed` (genuine
+    /// text-encoding failure) maps to the `lyrics_decode_failed` key. Fails
+    /// on red stub returning ""; passes on green code returning the correct
+    /// fallback key for genuine decoding failure.
+    func testLyricsErrorMessageKey_DecodingFailed_ReturnsDecodeFailed() {
+        let key = lyricsErrorMessageKey(for: LyricsServiceError.decodingFailed)
+        XCTAssertEqual(key, "lyrics_decode_failed",
+            "LyricsServiceError.decodingFailed must surface as the encoding "
+            + "fallback message, the genuine reason for that string now that "
+            + "9-M has separated permission errors out.")
+    }
+
+    /// 9-M red driving test #13.
+    /// Verifies that any unrecognised error falls back to
+    /// `lyrics_decode_failed`. Fails on red stub returning ""; passes on
+    /// green code that uses decode-failed as the catch-all default for
+    /// unrecognised error categories.
+    func testLyricsErrorMessageKey_UnknownError_ReturnsDecodeFailed() {
+        let unknown = NSError(domain: "io.example.test", code: 99,
+                              userInfo: nil)
+        let key = lyricsErrorMessageKey(for: unknown)
+        XCTAssertEqual(key, "lyrics_decode_failed",
+            "Unrecognised error must fall back to the decode-failed key "
+            + "rather than empty string or a missing localisation lookup.")
+    }
 }
