@@ -264,4 +264,47 @@ extension AppStatePlaylistTests {
         XCTAssertFalse(sut.isPerformingBlockingOperation,
                        "Flag must be reset after importPlaylist completes (even on error path)")
     }
+
+    // MARK: - Slice 9-M Layer 2: bookmark capture during load (green-phase)
+
+    /// 9-M green-phase regression test.
+    /// Verifies that `AppState.load(urls:)` produces a Track whose URL
+    /// roundtrips through encode/decode and remains accessible. Indirectly
+    /// confirms that per-iteration `startAccessingSecurityScopedResource`
+    /// fires correctly during load — fake-recorder swizzling is not used
+    /// because URL is a Swift value type and the start/stop methods are
+    /// ObjC instance methods on NSURL whose interception requires
+    /// invasive runtime patches not warranted for this slice.
+    func testAppStatePlaylistLoad_BookmarkCapturedAfterLoad() async throws {
+        // Build a real on-disk file in a temp dir so the bookmark can be
+        // generated. FakeTagReaderService default returns Track(url: url),
+        // so the Track gets a real-ish url. saveState() inside load(urls:)
+        // encodes the playlist, exercising the encode path under [.withSecurityScope].
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AppStateLoadTest-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let realFile = tempDir.appendingPathComponent("track.mp3")
+        try Data("audio-bytes".utf8).write(to: realFile)
+
+        await sut.load(urls: [realFile])
+
+        XCTAssertEqual(sut.playlists[0].tracks.count, 1,
+            "load(urls:) must add exactly one track for a single valid URL.")
+        XCTAssertEqual(sut.playlists[0].tracks[0].url, realFile,
+            "Track URL must match the input URL exactly.")
+        XCTAssertTrue(sut.playlists[0].tracks[0].isAccessible,
+            "Newly loaded track with real on-disk file must be accessible.")
+
+        // Roundtrip encode/decode the track to confirm the security-scoped
+        // bookmark was captured during load and survives serialisation.
+        let encoded = try JSONEncoder().encode(sut.playlists[0].tracks[0])
+        let restored = try JSONDecoder().decode(Track.self, from: encoded)
+        XCTAssertEqual(restored.url, realFile,
+            "URL must roundtrip through encode/decode under .withSecurityScope.")
+        XCTAssertTrue(restored.isAccessible,
+            "Restored track must remain accessible (bookmark resolves AND "
+            + "startAccessingSecurityScopedResource succeeds).")
+    }
 }

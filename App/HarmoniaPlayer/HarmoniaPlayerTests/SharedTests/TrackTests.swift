@@ -487,4 +487,51 @@ final class TrackTests: XCTestCase {
             + "them under [.withSecurityScope] must fail safely, marking "
             + "the Track inaccessible without crashing.")
     }
+
+    // MARK: - Slice 9-M Layer 2: isAccessible behaviour contract (green-phase)
+
+    /// 9-M green-phase contract test.
+    /// Verifies that decoding a Track whose underlying file exists yields
+    /// `isAccessible == true` after the security-scoped resource start
+    /// succeeds. Behaviour-contract: green-phase implementation must
+    /// preserve default-true on the valid path.
+    func testTrack_IsAccessible_TrueWhenBookmarkResolvesAndAccessStarts() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        let original = Track(url: url, title: "Accessible")
+        let encoded = try JSONEncoder().encode(original)
+        let restored = try JSONDecoder().decode(Track.self, from: encoded)
+
+        XCTAssertTrue(restored.isAccessible,
+            "Real on-disk file with valid security-scoped bookmark must "
+            + "yield isAccessible = true after decode.")
+    }
+
+    /// 9-M green-phase contract test.
+    /// Verifies that a Track whose bookmark target was deleted between
+    /// encode and decode yields `isAccessible == false`. Behaviour-
+    /// contract: green-phase implementation must set false when the
+    /// security-scoped resource start fails.
+    func testTrack_IsAccessible_FalseWhenStartAccessFails() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        let original = Track(url: url, title: "Vanishing")
+        let encoded = try JSONEncoder().encode(original)
+
+        // Delete the file to simulate external removal.
+        try FileManager.default.removeItem(at: url)
+        // Also delete the parent dir so bookmark resolution truly fails.
+        try FileManager.default.removeItem(at: dir)
+
+        let restored = try JSONDecoder().decode(Track.self, from: encoded)
+
+        XCTAssertFalse(restored.isAccessible,
+            "Track whose bookmark target was deleted must yield "
+            + "isAccessible = false (bookmark resolution failure → "
+            + "fall through to urlPath path with isAccessible = false).")
+    }
 }

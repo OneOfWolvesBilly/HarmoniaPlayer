@@ -300,4 +300,36 @@ final class LyricsServiceTests: XCTestCase {
             "Unrecognised error must fall back to the decode-failed key "
             + "rather than empty string or a missing localisation lookup.")
     }
+
+    // MARK: - Slice 9-M Layer 1: NSFileCoordinator sibling-read (green-phase)
+
+    /// 9-M green-phase regression test.
+    /// Verifies that the `.lrc` source path of `resolveContent` returns the
+    /// expected sidecar text content after the green-phase implementation
+    /// switches from `Data(contentsOf:)` to `NSFileCoordinator` +
+    /// `SiblingFilePresenter`. Cannot distinguish the two implementations
+    /// from a non-sandboxed test runner — both succeed on real on-disk
+    /// fixtures — so this is a regression guard that the new path still
+    /// reads sibling files correctly. Manual QA covers the actual sandbox
+    /// behaviour per spec Done criteria.
+    func testLyricsService_LrcRead_UsesNSFileCoordinator() throws {
+        let track = makeTrack(filename: "song.mp3")
+        let sidecarText = "[00:01.50]Coordinated read line\n[00:02.00]Second line"
+        writeSidecar(name: "song.lrc", content: sidecarText)
+
+        let result = try sut.resolveContent(
+            for: track,
+            source: .lrc,
+            languageCode: nil,
+            encodingName: "auto"
+        )
+
+        // Strip-LRC-timestamps: result should contain the bare lyrics
+        // without the timestamp prefixes.
+        XCTAssertTrue(result.contains("Coordinated read line"),
+            "NSFileCoordinator path must read sibling .lrc content; "
+            + "got: \(result)")
+        XCTAssertTrue(result.contains("Second line"),
+            "All lines from the .lrc sidecar must be present; got: \(result)")
+    }
 }
