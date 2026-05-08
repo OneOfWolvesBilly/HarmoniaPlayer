@@ -38,7 +38,7 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-J | Lyrics display (USLT + sidecar .lrc, full text) | Free | ✅ |
 | 9-K | Equalizer (10-band, global, custom presets) | Free | ✅ |
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
-| 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ⬜ |
+| 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ✅ |
 
 ### Goals (v0.1)
 
@@ -2653,7 +2653,16 @@ decoding failure) are the only errors that can actually reach
     `NSFileCoordinator`; new `lyricsErrorMessageKey(for:)` helper
     documented
   - New SiblingFilePresenter section under Application Layer
-- `module_boundary.md` (no change)
+- `module_boundary.md` (modify)
+  - add `SiblingFilePresenter` to Application services enumeration
+    (originally written as "no change" — `SiblingFilePresenter` was
+    missed during initial spec drafting; corrected during 9-M doc
+    backfill)
+  - add a "Sandbox & sibling-file boundary" clarification:
+    Application Layer uses Foundation `NSFileCoordinator` /
+    `NSFilePresenter` directly for sibling reads; this does not
+    violate the `import HarmoniaCore` restriction because sandbox is
+    a platform I/O concern, not an audio-core concern
   - `SandboxFileAccessAdapter` remains dead code, deferred to
     cleanup slice; not 9-M's concern
 - `development_guide.md` (modify)
@@ -2705,31 +2714,31 @@ categorisation, and the 5 living-doc updates.
 
 **Red commit done criteria:**
 
-- ⬜ All Slice 1 – 9-L previous tests still green (no regression)
-- ⬜ All 6 red-phase driving tests are added and **fail**
-- ⬜ `lyricsErrorMessageKey(for:)` stub function exists in
+- ✅ All Slice 1 – 9-L previous tests still green (no regression)
+- ✅ All 6 red-phase driving tests are added and **fail**
+- ✅ `lyricsErrorMessageKey(for:)` stub function exists in
   `LyricsService.swift` returning `""`
-- ⬜ No code outside the stub function and the test files is modified
+- ✅ No code outside the stub function and the test files is modified
   in this commit
 
 **Green commit done criteria (unit test, automated):**
 
-- ⬜ All 6 red-phase driving tests now pass
-- ⬜ All 6 green-phase contract tests added and pass
-- ⬜ Track bookmark roundtrip uses `.withSecurityScope` end-to-end
-- ⬜ Stale bookmark refresh path persists the new bookmark on the
+- ✅ All 6 red-phase driving tests now pass
+- ✅ All 6 green-phase contract tests added and pass
+- ✅ Track bookmark roundtrip uses `.withSecurityScope` end-to-end
+- ✅ Stale bookmark refresh path persists the new bookmark on the
   Track instance
-- ⬜ `isAccessible` reflects bookmark resolvability + security-scope
+- ✅ `isAccessible` reflects bookmark resolvability + security-scope
   start success in real time (not cached)
-- ⬜ `LyricsService` `.lrc` read goes through `NSFileCoordinator` +
+- ✅ `LyricsService` `.lrc` read goes through `NSFileCoordinator` +
   `SiblingFilePresenter`, never raw `Data(contentsOf:)` (verified by
   manual code review; not unit-testable in non-sandboxed test runner)
-- ⬜ `AppState.load(urls:)` per-URL `startAccessingSecurityScopedResource`
+- ✅ `AppState.load(urls:)` per-URL `startAccessingSecurityScopedResource`
   / `stopAccessingSecurityScopedResource` pair fires per-iteration
-- ⬜ `lyricsErrorMessageKey(for:)` returns the correct localisation
+- ✅ `lyricsErrorMessageKey(for:)` returns the correct localisation
   key for the two documented error categories (permission-denied,
   decoding-failure) plus the catch-all fallback
-- ⬜ `architecture.md` Cross-Boundary 5-area audit completed with
+- ✅ `architecture.md` Cross-Boundary 5-area audit completed with
   outcome documented in commit message
 
 **Manual QA criteria (system integration), all must pass on macOS 15.6+

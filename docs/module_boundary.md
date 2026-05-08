@@ -52,8 +52,9 @@ At a high level, the codebase is divided into the following logical modules.
      coordinators can depend on them without importing platform
      frameworks.
    - Application services: `FileDropService`, `ExtendedAttributeService`, `M3U8Service`,
-     `ErrorReportService`, `EQPersistenceStore`, `EQSchemaMigrator` (pure Swift utilities
-     with no HarmoniaCore dependency).
+     `ErrorReportService`, `EQPersistenceStore`, `EQSchemaMigrator`,
+     `SiblingFilePresenter` (pure Swift / Foundation utilities with no
+     HarmoniaCore dependency).
    - Factory abstractions: `CoreFactory`, `CoreServiceProviding` protocol.
 3. **Integration Layer** (only place where `import HarmoniaCore` or other system-bridge frameworks are allowed)
    - `HarmoniaCoreProvider` — constructs HarmoniaCore services, wires ports to adapters.
@@ -381,6 +382,59 @@ common abstraction over two unrelated APIs (defeating HarmoniaCore's
 "Apple audio engine alignment" purpose). The application-layer
 `NowPlayingService` protocol is the cross-platform abstraction; each
 platform target supplies its own adapter conforming to it.
+
+---
+
+### 4.6 Sandbox and Sibling-File Access Boundary
+
+The macOS App Sandbox blocks reads of files that are siblings of the
+user-selected primary file (e.g. `Foo.lrc` next to `Foo.flac`) even when
+the primary file's security-scoped bookmark is active —
+`startAccessingSecurityScopedResource` does not extend access to siblings.
+Apple's first-class mechanism for this topology is **Related Items**:
+declare the sibling extension in `CFBundleDocumentTypes` with
+`NSIsRelatedItemType=YES`, then read via `NSFileCoordinator` registered
+with an `NSFilePresenter` whose `primaryPresentedItemURL` is the
+user-selected primary file (Slice 9-M).
+
+**Boundary placement.** The implementation lives entirely in the
+Application Layer:
+
+- `SiblingFilePresenter` (`Shared/Services/SiblingFilePresenter.swift`)
+  is a minimal `NSFilePresenter` conformance — three properties and a
+  constructor, no behavioural callbacks. Pure Foundation, no
+  HarmoniaCore dependency.
+- `LyricsService` calls `NSFileCoordinator.coordinate(readingItemAt:)`
+  with a `SiblingFilePresenter` instance directly, on its own
+  Foundation surface. It does **not** forward this call through any
+  HarmoniaCore port.
+
+**Why this does not violate the `import HarmoniaCore` restriction.**
+Sandbox and Related Items are macOS platform I/O concerns, not audio
+core concerns. HarmoniaCore is an Apple/Linux cross-platform audio
+abstraction; pushing sandbox-specific file coordination into a Core
+port would either restrict the port to Apple (defeating the cross-
+platform contract) or force a degenerate abstraction over Linux's
+unrelated file-access model. Foundation's `NSFileCoordinator` and
+`NSFilePresenter` are platform APIs the Application Layer is allowed
+to use directly, exactly the same way it uses `FileManager`,
+`URLSession`, or `JSONDecoder`.
+
+**Reuse plan.** `SiblingFilePresenter` is the single reuse point for
+all future sibling-file features:
+
+- Slice 10-C (Pro): cover-art `.jpg` / `.png` / `.bmp` siblings —
+  each extension adds its own `CFBundleDocumentTypes` entry in its
+  own slice; the presenter class is shared.
+- Slice 10-D (Pro): lyrics write-back — same presenter, but uses
+  `NSFileCoordinator.coordinate(writingItemAt:)`.
+- CUE sheet slice (Pro): `.cue` siblings — same pattern.
+
+**Note on `FileAccessPort` / `SandboxFileAccessAdapter`.** These exist
+in HarmoniaCore but are unrelated to sibling-file Related Items. They
+target a different I/O layer (seekable random-access decoder I/O, not
+user-grant persistence) and are currently unwired. Cleanup deferred
+to a dedicated HC slice.
 
 ---
 
