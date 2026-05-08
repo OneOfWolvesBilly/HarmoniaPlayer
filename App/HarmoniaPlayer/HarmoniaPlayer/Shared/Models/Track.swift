@@ -287,13 +287,17 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
                 bookmarkDataIsStale: &stale
             ) {
                 url = resolved
+                // Slice 9-M Layer 2: hold security-scoped extension for the URL's
+                // lifetime instead of stopping after verification. macOS sandbox
+                // requires an active extension at every read; calling
+                // stopAccessingSecurityScopedResource immediately releases the
+                // extension and breaks all subsequent access (PlaybackService
+                // open returns FigFile err=-12203 / File Not Found, observed in
+                // cold-launch after release archive QA). When this Track value
+                // is dropped from the playlist (NSURL ref count → 0), the
+                // extension is released as a side effect.
                 let started = resolved.startAccessingSecurityScopedResource()
-                if started {
-                    isAccessible = true
-                    resolved.stopAccessingSecurityScopedResource()
-                } else {
-                    isAccessible = false
-                }
+                isAccessible = started
                 _ = stale  // captured; URL update propagates fresh bookmark on re-encode
             } else if let path = try c.decodeIfPresent(String.self, forKey: .urlPath) {
                 url = URL(fileURLWithPath: path)

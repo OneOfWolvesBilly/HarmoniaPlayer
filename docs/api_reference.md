@@ -93,7 +93,7 @@ Persistence: encoded with security-scoped URL bookmark (`[.withSecurityScope]`) 
 
 `isAccessible` (runtime-only, not persisted via Codable, defaults `true`) is set during decode according to:
 
-- Bookmark resolves successfully AND `startAccessingSecurityScopedResource()` returns `true` → `isAccessible = true`. The security scope is started solely to verify access and is stopped immediately; the flag is read-on-demand by UI for greying-out unavailable rows, not cached.
+- Bookmark resolves successfully AND `startAccessingSecurityScopedResource()` returns `true` → `isAccessible = true`. The security-scoped extension is held for the URL's lifetime; the macOS sandbox requires an active extension at every read, so calling `stopAccessingSecurityScopedResource()` after verification releases the extension and breaks all subsequent access (PlaybackService open returns FigFile err=-12203 / "File Not Found"). The extension is released as a side effect when the Track value is dropped from the playlist (NSURL ref count → 0).
 - Bookmark resolution fails (e.g. legacy `.minimalBookmark` bytes from any pre-9-M development build, or the bookmark target was deleted) → fall through to `urlPath` with `isAccessible = false`.
 - `bookmarkDataIsStale: &stale` is captured during resolve. The resolved URL is propagated to `Track.url`, so the next encode pass regenerates a fresh bookmark from the (potentially relocated) URL — no explicit refresh helper is needed on `Track` itself.
 
