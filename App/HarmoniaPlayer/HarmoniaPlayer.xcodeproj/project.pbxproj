@@ -84,11 +84,11 @@
 		C0FCFCED2EF669DA006DE114 = {
 			isa = PBXGroup;
 			children = (
+				C0819FFC2F1D56F5005ABA46 /* HarmoniaPlayer */,
 				C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */,
 				C07D74D82F3DA2B5007782C0 /* HarmoniaPlayerTests */,
 				C0A47A2D2F6981E400022CC3 /* HarmoniaPlayerUITests */,
 				C0FCFCF72EF669DA006DE114 /* Products */,
-				C0819FFC2F1D56F5005ABA46 /* HarmoniaPlayer */,
 			);
 			sourceTree = "<group>";
 		};
@@ -680,7 +680,7 @@
 			repositoryURL = "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git";
 			requirement = {
 				kind = revision;
-				revision = 56c4163c88adeb57ca49ce39c97f29f615f3aa7c;
+				revision = 213cf20b5e788aa660ca42a90c2e723240e2e0e5;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

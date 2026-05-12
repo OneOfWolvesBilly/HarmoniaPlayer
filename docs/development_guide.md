@@ -101,7 +101,7 @@ import HarmoniaCore
 
 // These types should resolve:
 let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-let clock   = MonotonicClockAdapter()
+let time    = MonotonicTimeAdapter()
 let decoder = AVAssetReaderDecoderAdapter(logger: logger)
 ```
 

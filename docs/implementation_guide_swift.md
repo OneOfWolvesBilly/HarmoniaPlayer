@@ -106,7 +106,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 
     private func buildCore() -> HarmoniaCore.PlaybackService {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-        let clock   = MonotonicClockAdapter()
+        let time    = MonotonicTimeAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
         // The same `eq` instance is handed to BOTH the audio output adapter
@@ -118,7 +118,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         return DefaultPlaybackService(
             decoder: decoder,
             audio:   audio,
-            clock:   clock,
+            time:    time,
             logger:  logger,
             eq:      eq
         )

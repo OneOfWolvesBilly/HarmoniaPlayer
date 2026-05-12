@@ -76,17 +76,16 @@ At a high level, the codebase is divided into the following logical modules.
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
 5. **Ports (HarmoniaCore-Swift)**
-   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `ClockPort`, `LoggerPort`, `FileAccessPort`, `TagWriterPort`, `EQPort`
+   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `MonotonicTimePort`, `LoggerPort`, `TagWriterPort`, `EQPort`
 6. **Platform Adapters (HarmoniaCore-Swift)**
    - `AVAssetReaderDecoderAdapter`
    - `AVAudioEngineOutputAdapter`
    - `AVAudioUnitEQAdapter`
    - `AVMetadataTagReaderAdapter`
    - `AVMutableTagWriterAdapter`
-   - `MonotonicClockAdapter`
+   - `MonotonicTimeAdapter`
    - `OSLogAdapter`
    - `NoopLogger`
-   - `SandboxFileAccessAdapter`
 
 HarmoniaCore-Swift and its adapters live in a **separate package**. From the
 HarmoniaPlayer perspective, they are external dependencies.
@@ -430,12 +429,6 @@ all future sibling-file features:
   `NSFileCoordinator.coordinate(writingItemAt:)`.
 - CUE sheet slice (Pro): `.cue` siblings — same pattern.
 
-**Note on `FileAccessPort` / `SandboxFileAccessAdapter`.** These exist
-in HarmoniaCore but are unrelated to sibling-file Related Items. They
-target a different I/O layer (seekable random-access decoder I/O, not
-user-grant persistence) and are currently unwired. Cleanup deferred
-to a dedicated HC slice.
-
 ---
 
 ## 5. Forbidden Dependencies (Examples)
@@ -465,7 +458,7 @@ architecture clean.
    - ✅ It only logs messages passed by services.
 
 6. **AppState directly using audio Ports**
-   - ❌ `AppState` must not use `DecoderPort`, `AudioOutputPort`, `ClockPort`, `LoggerPort`, or `TagReaderPort`.
+   - ❌ `AppState` must not use `DecoderPort`, `AudioOutputPort`, `MonotonicTimePort`, `LoggerPort`, or `TagReaderPort`.
    - ✅ `AppState` uses `TagReaderService` (application-level abstraction) for metadata reading.
      `HarmoniaTagReaderAdapter` (Integration Layer) wraps `TagReaderPort`.
 
@@ -625,7 +618,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
 
     private func buildCore() -> HarmoniaCore.PlaybackService {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-        let clock   = MonotonicClockAdapter()
+        let time    = MonotonicTimeAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
         // The same `eq` instance is handed to both the audio output adapter
@@ -635,7 +628,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         // setEQEnabled / setEQPreamp / setEQBandGains audible — see §4.3(c).
         let audio   = AVAudioEngineOutputAdapter(logger: logger, eq: eq)
         return DefaultPlaybackService(
-            decoder: decoder, audio: audio, clock: clock, logger: logger, eq: eq
+            decoder: decoder, audio: audio, time: time, logger: logger, eq: eq
         )
     }
 }

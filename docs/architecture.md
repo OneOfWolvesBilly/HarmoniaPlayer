@@ -34,7 +34,7 @@ HarmoniaPlayer is designed to work together with the following repositories:
   * Contains both the Swift (`apple-swift/`) and C++ (`linux-cpp/`, deferred) implementations side by side.
   * Provides the cross-platform architecture and contracts for:
 
-    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, ClockPort, LoggerPort, FileAccessPort, EQPort)
+    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, MonotonicTimePort, LoggerPort, EQPort)
     * Services (PlaybackService)
     * Models (TagBundle, CoreError, StreamInfo, LyricsLanguageVariant)
 
@@ -158,7 +158,7 @@ not HarmoniaCore]
       ports[Ports
 DecoderPort, AudioOutputPort,
 TagReaderPort, TagWriterPort,
-ClockPort, LoggerPort, FileAccessPort,
+MonotonicTimePort, LoggerPort,
 EQPort]
       adapters[Apple Adapters
 AVAssetReaderDecoderAdapter,
@@ -166,9 +166,8 @@ AVAudioEngineOutputAdapter,
 AVAudioUnitEQAdapter,
 AVMetadataTagReaderAdapter,
 AVMutableTagWriterAdapter,
-MonotonicClockAdapter,
-OSLogAdapter, NoopLogger,
-SandboxFileAccessAdapter]
+MonotonicTimeAdapter,
+OSLogAdapter, NoopLogger]
     end
 
     fs[(File System)]

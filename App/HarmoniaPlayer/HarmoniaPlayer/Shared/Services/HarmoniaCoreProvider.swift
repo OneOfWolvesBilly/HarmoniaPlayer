@@ -64,12 +64,12 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
     /// The service graph assembled here:
     /// ```
     /// OSLogAdapter          → LoggerPort
-    /// MonotonicClockAdapter → ClockPort
+    /// MonotonicTimeAdapter → MonotonicTimePort
     /// AVAssetReaderDecoderAdapter (logger:) → DecoderPort
     /// AVAudioEngineOutputAdapter  (logger:) → AudioOutputPort
     /// AVAudioUnitEQAdapter                  → EQPort
     ///         ↓
-    /// DefaultPlaybackService(decoder:audio:clock:logger:eq:)   ← cached as sharedCore
+    /// DefaultPlaybackService(decoder:audio:time:logger:eq:)   ← cached as sharedCore
     ///         ↓
     /// HarmoniaPlaybackServiceAdapter     ← returned as PlaybackService
     /// ```
@@ -160,7 +160,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
     /// first invocation, then `sharedCore` short-circuits subsequent calls.
     private func buildCore() -> HarmoniaCore.PlaybackService {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
-        let clock   = MonotonicClockAdapter()
+        let time    = MonotonicTimeAdapter()
         let decoder = AVAssetReaderDecoderAdapter(logger: logger)
         let eq      = AVAudioUnitEQAdapter()
         // The same EQ instance is handed to BOTH the audio output
@@ -172,7 +172,7 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         return DefaultPlaybackService(
             decoder: decoder,
             audio:   audio,
-            clock:   clock,
+            time:    time,
             logger:  logger,
             eq:      eq
         )
