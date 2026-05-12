@@ -39,6 +39,7 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-K | Equalizer (10-band, global, custom presets) | Free | ✅ |
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ✅ |
+| 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ⬜ |
 
 ### Goals (v0.1)
 
@@ -2868,3 +2869,263 @@ release archive installed to `/Applications`:**
   sibling-file features, they reuse `SiblingFilePresenter` from
   HarmoniaPlayer or migrate it to a shared module at that time. Not
   9-M's concern.
+
+---
+
+## Slice 9-N: HarmoniaCore Cleanup — ClockPort Rename + FileAccessPort Deletion ⬜
+
+**Tier:** All (HC SDK surface cleanup; HP consumer alignment)
+**Repo scope:** HarmoniaCore-Swift (primary) + HarmoniaPlayer (consumer)
+**Release blocker:** Yes — must land before HC v0.1.0 SPM tag is cut
+
+### 1. Goal
+
+Two SDK-surface cleanup actions on HarmoniaCore-Swift before its first
+public SPM tag:
+
+1. Rename `ClockPort` → `MonotonicTimePort` so the protocol name reflects
+   actual usage (monotonic forward-only time source; absolute value is
+   undefined, only differences are meaningful).
+2. Delete `FileAccessPort` + `SandboxFileAccessAdapter` +
+   `MockFileAccessPort` — confirmed dead code with a misleading doc claim
+   ("supports sandbox restrictions" — implementation is a bare
+   `FileHandle` wrapper with no sandbox logic).
+
+### 2. Why this is a release blocker
+
+Both `ClockPort` and `FileAccessPort` are `public` symbols on the
+HarmoniaCore-Swift SPM API surface. Once HC v0.1.0 is tagged and HP
+moves from commit-SHA pin to tag pin, renaming or removing these symbols
+requires a deprecation cycle and a major-version bump. The window to act
+is between v0.1 HP code freeze and the HC v0.1.0 tag cut.
+
+The actual `v0.1.0` tag cut and HP commit-SHA-to-tag pin migration are
+**out of scope for 9-N** — see §9.
+
+### 3. Change A — `ClockPort` rename
+
+#### 3.1 Rationale
+
+`clock.now()` is used solely to compute elapsed time
+(`elapsed = clock.now() - startTime`). The absolute value returned has
+no defined meaning — epoch is unspecified, no wall-clock correspondence.
+The contract is "monotonic forward-only time source", not a "clock" in
+the wall-clock sense. Naming as `ClockPort` misleads consumers into
+expecting timestamps, scheduling, or wall-clock alarms — none of which
+the protocol supports.
+
+#### 3.2 Naming
+
+- **Port:** `MonotonicTimePort` — "Monotonic" preserves forward-only
+  contract in the name itself; "Time" names the domain without
+  overclaiming wall-clock correspondence
+- **Adapter:** `MonotonicTimeAdapter` — drops redundant
+  "Monotonic" + "Clock" pairing in current `MonotonicClockAdapter`
+- **Mock:** `MockMonotonicTimePort`
+
+#### 3.3 HC rename targets
+
+| Status | Path | Change |
+| --- | --- | --- |
+| Rename | `Sources/HarmoniaCore/Ports/ClockPort.swift` | → `MonotonicTimePort.swift`; `protocol ClockPort` → `protocol MonotonicTimePort` |
+| Rename | `Sources/HarmoniaCore/Adapters/MonotonicClockAdapter.swift` | → `MonotonicTimeAdapter.swift`; `final class MonotonicClockAdapter` → `final class MonotonicTimeAdapter` |
+| Rename | `Tests/HarmoniaCoreTests/.../MockClockPort.swift` | → `MockMonotonicTimePort.swift`; `final class MockClockPort` → `final class MockMonotonicTimePort` |
+| Modify | `Sources/HarmoniaCore/Services/DefaultPlaybackService.swift` | constructor param `clock: ClockPort` → `time: MonotonicTimePort`; stored property `let clock` → `let time`; all `clock.now()` → `time.now()` |
+| Modify | every `Tests/HarmoniaCoreTests/...` referencing renamed types or the `clock:` argument label | identifier rename only |
+
+#### 3.4 HP rename targets
+
+| Status | Path | Change |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Integration/HarmoniaCoreProvider.swift` | `let clock = MonotonicClockAdapter()` → `let time = MonotonicTimeAdapter()`; argument label at `DefaultPlaybackService(...)` site updated |
+| Modify | any HP test referencing `MonotonicClockAdapter` directly (likely zero — HP uses fakes) | identifier rename only |
+
+#### 3.5 Behaviour invariants
+
+Pure identifier rename. No protocol body change, no semantic change, no
+test logic change. Build artefacts before and after must produce
+identical playback / EQ / NowPlaying behaviour.
+
+### 4. Change B — `FileAccessPort` deletion
+
+#### 4.1 Evidence of dead code
+
+- HC `Sources/`: zero references to `FileAccessPort` outside its own file
+  (no service constructs or accepts it; no adapter registered against it
+  in either provider)
+- HC `Tests/`: `MockFileAccessPort` exists but no test instantiates it
+  against any consumer
+- HP `App/`: zero references
+- 9-M's actual sandbox solution uses Foundation `NSFileCoordinator` +
+  `NSFilePresenter` from the Application Layer (`LyricsService` +
+  `SiblingFilePresenter`), independent of any HC port — see
+  `module_boundary.md §4.6 Sandbox and Sibling-File Access Boundary`
+- Current `SandboxFileAccessAdapter` implementation: bare `FileHandle`
+  wrapper with no sandbox logic. Doc claim "supports sandbox
+  restrictions" is misleading.
+
+#### 4.2 Files to delete
+
+| Status | Path |
+| --- | --- |
+| Delete | `Sources/HarmoniaCore/Ports/FileAccessPort.swift` |
+| Delete | `Sources/HarmoniaCore/Adapters/SandboxFileAccessAdapter.swift` |
+| Delete | `Tests/HarmoniaCoreTests/.../MockFileAccessPort.swift` |
+| Delete (if exists) | any `Tests/HarmoniaCoreTests/...FileAccessPort*Tests*.swift` solely targeting the deleted port |
+
+#### 4.3 Future restoration policy
+
+If a future C++ port or Apple feature needs a file-access abstraction,
+restoration path:
+
+1. Recover from git history: `git log --diff-filter=D -- '**/FileAccessPort.swift'`
+2. Rename to a clearer identifier matching actual purpose at that time
+3. Write doc that matches actual implementation
+4. Add real consumers in the same slice that reintroduces the port
+
+Keeping unused public API on the SPM surface forever is worse than
+deleting now.
+
+### 5. Pre-Red Test Audit
+
+Per `harmonia-dev-workflow` Test Audit checkpoint (this slice's first
+application of the new rule):
+
+| Test SUT | Existing test file? | Decision |
+| --- | --- | --- |
+| `MonotonicTimePort` (protocol contract) | yes — existing `MonotonicClockAdapterTests.swift` | **Extend** (rename file + identifiers; no contract change) |
+| `MonotonicTimeAdapter` | same as above | **Extend** |
+| `DefaultPlaybackService` time dependency | yes — existing `DefaultPlaybackServiceTests.swift` | **Extend** (rename `clock:` → `time:` argument labels in every test; otherwise unchanged) |
+| `FileAccessPort` related tests | depends on existence | **Delete** along with the production file |
+
+No new test contracts. Pure rename + deletion slice. The "red" phase is
+degenerate: red = build does not compile (old identifiers no longer
+exist); green = build compiles + all previously passing tests still pass.
+
+### 6. Living docs to update (5-doc sync, scoped option (a))
+
+Updates only the lines/sections directly affected by rename or deletion.
+Broader HC docs structural restructuring (specs/ ↔ impl/ duplication
+concern) is **out of scope** and remains a separate post-v0.1 slice.
+
+#### 6.1 HP-side (this repo)
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `docs/architecture.md` | line 37 Ports list: `ClockPort` → `MonotonicTimePort`; remove `FileAccessPort` |
+| Modify | `docs/module_boundary.md` | Ports list (line 78): same updates |
+| Modify | `docs/module_boundary.md` | Adapters list (line 80–88): `MonotonicClockAdapter` → `MonotonicTimeAdapter`; remove `SandboxFileAccessAdapter` |
+| Modify | `docs/module_boundary.md` §4.6 | trailing paragraph mentioning `FileAccessPort` / `SandboxFileAccessAdapter` cleanup → remove (the cleanup IS this slice) |
+| Verify | `docs/api_reference.md` | grep `ClockPort\|FileAccessPort\|MonotonicClockAdapter` and apply rename/removal where matched |
+| Verify | `docs/development_guide.md` | same grep + apply |
+| Verify | `docs/implementation_guide_swift.md` | same grep + apply |
+
+#### 6.2 HC-side (separate commit, separate repo)
+
+Update only directly affected pages: Ports listing, Adapters listing,
+any code samples using `ClockPort` or `FileAccessPort`. Do not refactor
+specs/ ↔ impl/ structural duplication — separate slice.
+
+### 7. Commit plan (two repos, two commits)
+
+HC and HP have separate commit flows and separate output directories.
+SPM tag cut and `Package.resolved` tag-pin migration are deferred to a
+separate "release HC v0.1.0" slice.
+
+#### 7.1 HC commit (lands first)
+
+Scope tag: `core`.
+
+```text
+refactor(slice 9-n): rename ClockPort → MonotonicTimePort; delete FileAccessPort
+
+Rename
+- Ports/ClockPort.swift → Ports/MonotonicTimePort.swift
+  (protocol ClockPort → MonotonicTimePort)
+- Adapters/MonotonicClockAdapter.swift → Adapters/MonotonicTimeAdapter.swift
+  (final class MonotonicClockAdapter → MonotonicTimeAdapter)
+- Tests/HarmoniaCoreTests/Mocks/MockClockPort.swift → MockMonotonicTimePort.swift
+  (final class MockClockPort → MockMonotonicTimePort)
+
+Modify
+- Services/DefaultPlaybackService.swift: ctor param clock: → time:,
+  stored property let clock → let time, all clock.now() → time.now()
+- Tests: every reference to renamed types and clock: argument label
+  updated to new names
+
+Delete (zero-reference dead code; restore from git history if future need)
+- Ports/FileAccessPort.swift
+- Adapters/SandboxFileAccessAdapter.swift
+- Tests/HarmoniaCoreTests/Mocks/MockFileAccessPort.swift
+
+HC docs (specs/, impl/) updated for renamed and removed entries.
+```
+
+#### 7.2 HP commit (follows HC commit on `main`)
+
+Scope tag: `player`.
+
+```text
+refactor(slice 9-n): align with HC MonotonicTimePort rename and FileAccessPort deletion
+
+Code
+- HarmoniaCoreProvider: let clock = MonotonicClockAdapter() →
+  let time = MonotonicTimeAdapter(); argument label
+  DefaultPlaybackService(clock:) → DefaultPlaybackService(time:)
+
+Living docs
+- architecture.md: Ports list ClockPort → MonotonicTimePort;
+  remove FileAccessPort
+- module_boundary.md: Ports list parallel update; Adapters list
+  MonotonicClockAdapter → MonotonicTimeAdapter, remove
+  SandboxFileAccessAdapter; §4.6 trailing FileAccessPort cleanup
+  paragraph removed
+
+Package.resolved: HC SPM revision bumped from old commit SHA to new
+post-rename commit SHA on HC main (commit-pinned; tag migration
+deferred to release HC v0.1.0 slice)
+```
+
+### 8. Acceptance criteria
+
+| Status | Criterion |
+| --- | --- |
+| ⬜ | HC `swift test` passes with all renamed identifiers (zero new failures) |
+| ⬜ | HC `grep -rn "ClockPort\|MonotonicClockAdapter\|MockClockPort"` returns zero matches outside git history |
+| ⬜ | HC `grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort"` returns zero matches outside git history |
+| ⬜ | HP `swift test` passes after Package.resolved bump to new HC commit SHA |
+| ⬜ | HP `grep -rn "ClockPort\|MonotonicClockAdapter\|FileAccessPort"` returns zero matches outside git history |
+| ⬜ | All affected HP living docs reflect new naming and removed port |
+| ⬜ | macOS app Release build runs against new HC commit SHA (manual smoke: Play / Pause / Stop, EQ persistence, Now Playing — all 9-K and 9-L behaviours intact) |
+
+### 9. Out of scope (explicit non-goals)
+
+- HC v0.1.0 SPM tag cut — separate "release HC v0.1.0" slice
+- HP `Package.resolved` migration from commit-SHA pin to tag pin — same release slice
+- HC docs structural restructuring (specs/ ↔ impl/ duplication concern) — separate post-v0.1 slice
+- AppState refactor ("AppState as Locator" pattern propagation) — v0.2 work
+- Adding any replacement for `FileAccessPort` — sandbox file coordination remains application-layer concern (`SiblingFilePresenter` from 9-M)
+- `HarmoniaCore` → `HarmoniaAudioCore` rename — separate slice if pursued
+
+### 10. Pre-Implementation Verification Checklist
+
+Before red phase begins, run these and ensure every match maps to a row
+in §3.3 / §3.4 / §4.2 / §6.1. If any match has no corresponding row,
+update the spec **before** spec-commit (per sdd-core: spec must precede
+red).
+
+```bash
+# In HarmoniaCore-Swift repo root
+grep -rn "ClockPort\|MonotonicClockAdapter\|MockClockPort" \
+     Sources Tests --include='*.swift'
+
+grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort" \
+     Sources Tests --include='*.swift'
+
+# In HarmoniaPlayer repo root
+grep -rn "ClockPort\|MonotonicClockAdapter\|MockClockPort" \
+     App docs --include='*.swift' --include='*.md'
+
+grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort" \
+     App docs --include='*.swift' --include='*.md'
+```
