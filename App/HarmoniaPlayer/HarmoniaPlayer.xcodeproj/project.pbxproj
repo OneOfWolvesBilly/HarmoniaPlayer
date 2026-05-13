@@ -36,6 +36,16 @@
 		C0FCFCF62EF669DA006DE114 /* HarmoniaPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HarmoniaPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C09D3C492FB4792D00E4526D /* Exceptions for "HarmoniaPlayer" folder in "HarmoniaPlayer" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C0FCFCF52EF669DA006DE114 /* HarmoniaPlayer */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C07D74D82F3DA2B5007782C0 /* HarmoniaPlayerTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -44,6 +54,9 @@
 		};
 		C0819FFC2F1D56F5005ABA46 /* HarmoniaPlayer */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C09D3C492FB4792D00E4526D /* Exceptions for "HarmoniaPlayer" folder in "HarmoniaPlayer" target */,
+			);
 			path = HarmoniaPlayer;
 			sourceTree = "<group>";
 		};
