@@ -249,17 +249,9 @@ struct MiniPlayerView: View {
 
     private var playlistPickerRow: some View {
         HStack(spacing: 0) {
-            // Expand button — closes Mini Player and returns to Full Player
-            Button {
-                closeMiniPlayer()
-            } label: {
-                Image(systemName: "rectangle.expand.vertical")
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 10)
-            .help(L("mini_player_expand"))
+            // Balance spacer mirroring right side so playlist menu stays centred
+            Color.clear
+                .frame(width: 30, height: 1)
 
             Spacer()
 
