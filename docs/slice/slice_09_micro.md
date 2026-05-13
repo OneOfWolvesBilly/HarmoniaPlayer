@@ -39,7 +39,8 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-K | Equalizer (10-band, global, custom presets) | Free | ✅ |
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ✅ |
-| 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ⬜ |
+| 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ✅ |
+| 9-O | v0.1 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ⬜ |
 
 ### Goals (v0.1)
 
@@ -3129,3 +3130,152 @@ grep -rn "ClockPort\|MonotonicClockAdapter\|MockClockPort" \
 grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort" \
      App docs --include='*.swift' --include='*.md'
 ```
+
+---
+
+## Slice 9-O: v0.1 Ship Close-Out — PrivacyInfo + Build Phase Cleanup + Tab Bar Context Menu ⬜
+
+**Tier:** Free (all v0.1 builds)
+**Repo scope:** HarmoniaPlayer only
+**Release blocker:** Yes — final pre-ship slice before App Store submission
+
+### 1. Goal
+
+Three independent close-out items required before v0.1 Free is uploaded to
+App Store Connect. None are user-facing features in the strict sense; they
+are submission-blocking compliance items plus one long-pending UX gap.
+
+1. Add `PrivacyInfo.xcprivacy` declaring the two Required Reason API
+   categories the app actually uses (`UserDefaults` / `FileTimestamp`),
+   leaving everything else unset to avoid `ITMS-91055` rejection.
+2. Remove `Info.plist` from the main target's Copy Bundle Resources build
+   phase to silence the long-standing Xcode build warning.
+3. Add right-click context menu on the playlist tab bar empty area to
+   create a new playlist, mirroring the existing `menu_new_playlist`
+   Commands entry (auto-rename on creation).
+
+### 2. Why this is a release blocker
+
+- Apple rejects App Store submissions that use Required Reason APIs
+  without a corresponding `PrivacyInfo.xcprivacy` declaration
+  (`ITMS-91055`).
+- The Copy Bundle Resources warning for `Info.plist` has persisted across
+  multiple Slice 9 sub-slices; close-out is the right time to clear it.
+- The context menu gap is the only known v0.1 UX regression not tracked
+  under a prior sub-slice; addressing it now avoids a v0.1.1 patch
+  release.
+
+### 3. Item 1 — `PrivacyInfo.xcprivacy`
+
+#### 3.1 Declared API categories
+
+| Status | Category | Reason | Justification |
+| --- | --- | --- | --- |
+| Add | `NSPrivacyAccessedAPICategoryUserDefaults` | `CA92.1` | App persists its own state (playlists, view preferences, IAP receipts) via `UserDefaults`; ~10 files in HP use the API. |
+| Add | `NSPrivacyAccessedAPICategoryFileTimestamp` | `C617.1` | `FileInfoView` displays `creationDate` / `contentModificationDate` of audio files to the user. |
+
+#### 3.2 Non-declared fields
+
+- `NSPrivacyTracking` → `false` (app does not track users).
+- `NSPrivacyTrackingDomains` → empty array.
+- `NSPrivacyCollectedDataTypes` → empty array.
+- All other API categories deliberately omitted. Over-declaring also
+  risks `ITMS-91055` at review time; declare only what the app uses.
+
+#### 3.3 File location & Xcode integration
+
+| Status | Path | Action |
+| --- | --- | --- |
+| Add | `App/HarmoniaPlayer/HarmoniaPlayer/PrivacyInfo.xcprivacy` | New file at app source root, alongside `Info.plist`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Drag the new file into the `HarmoniaPlayer` group in Project Navigator with main target membership ticked; Xcode auto-adds it to the target's Copy Bundle Resources phase. |
+
+### 4. Item 2 — `Info.plist` out of Copy Bundle Resources
+
+#### 4.1 Current state
+
+`INFOPLIST_FILE[sdk=*] = HarmoniaPlayer/Info.plist;` is set under both
+Debug and Release build configurations (project.pbxproj lines 546, 604).
+Xcode auto-processes the file via this setting. Listing the same
+`Info.plist` in the main target's Copy Bundle Resources phase causes the
+build to emit the recurring warning that the file is processed twice.
+
+#### 4.2 Action
+
+| Status | Path | Action |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | In Xcode: select the main `HarmoniaPlayer` target → Build Phases → Copy Bundle Resources → delete the `Info.plist` entry. Leave `INFOPLIST_FILE` build setting untouched. |
+
+#### 4.3 Done criterion
+
+Clean build emits no warning referring to `Info.plist` being processed
+twice by Copy Bundle Resources.
+
+### 5. Item 3 — Playlist tab bar empty-area context menu
+
+#### 5.1 Behaviour
+
+| Trigger | Result |
+| --- | --- |
+| Right-click on `playlistTabBar` empty area (beyond the last tab) | Show context menu with a single item "New Playlist". |
+| Click "New Playlist" | Call `appState.newPlaylist(name: "")` (auto-generates "Playlist N" name and switches to it), then post `.renameActivePlaylist` notification to enter rename mode with the TextField focused. |
+| Right-click on an existing tab | Existing per-tab context menu still shows (Rename / Delete). Tab-level `.contextMenu` wins SwiftUI hit testing over the outer `.background` `.contextMenu`. |
+
+Behaviour is identical to the existing `Button(L("menu_new_playlist"))`
+entry in `HarmoniaPlayerCommands.swift`. Keeping the auto-rename behaviour
+in both entry-points ensures consistency.
+
+#### 5.2 UI structure change
+
+| Status | Path | Action |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlaylistView.swift` | In `playlistTabBar`, change the `.background` modifier from plain `Color(nsColor: .windowBackgroundColor)` to a wrapped view that adds `.contentShape(Rectangle())` plus `.contextMenu { Button(L("ctx_new_playlist")) { … } }`. Net change ≈ +12 lines, one modifier site. |
+| Add | `App/HarmoniaPlayer/HarmoniaPlayer/en.lproj/Localizable.strings` | `"ctx_new_playlist" = "New Playlist";` |
+| Add | `App/HarmoniaPlayer/HarmoniaPlayer/zh-Hant.lproj/Localizable.strings` | `"ctx_new_playlist" = "新增播放清單";` |
+| Add | `App/HarmoniaPlayer/HarmoniaPlayer/ja.lproj/Localizable.strings` | `"ctx_new_playlist" = "新規プレイリスト";` |
+
+#### 5.3 Implementation note — deviation from initial sketch
+
+Initial spec sketch called for "HStack 末尾加 Color.clear + .contentShape,
+ScrollView 整體加 .contextMenu". This was changed to "`.background` carries
+the `.contextMenu`" because:
+
+- `Color.clear .frame(maxWidth: .infinity)` inside a `ScrollView(.horizontal)`
+  HStack does not fill to the ScrollView's visible width — the HStack
+  width is determined by its children, so `maxWidth: .infinity` either
+  collapses to zero or attempts unbounded width depending on layout
+  pass.
+- Attaching `.contextMenu` directly to the `ScrollView` and nesting it
+  against per-tab `.contextMenu` introduces hit-testing ambiguity.
+- The `.background` approach is a single-site modifier change. SwiftUI
+  child-priority hit testing keeps per-tab Rename / Delete menus
+  unaffected on tab bounds, and the background catches right-clicks
+  anywhere outside tab bounds inside the 36pt tab bar frame.
+
+If Manual QA finds that ScrollView intercepts right-click before it
+reaches the `.background` layer (potential macOS hit-testing edge case),
+fall back to a `ZStack(alignment: .leading)` structure with the
+`Color + contentShape + contextMenu` as the back layer and the
+`ScrollView { HStack { tabs } }` as the front layer.
+
+#### 5.4 Acceptance criteria
+
+- Right-clicking on the unused horizontal space of `playlistTabBar` shows a "New Playlist" item.
+- Selecting it creates a new "Playlist N" tab (auto-numbered, lowest unused) and immediately puts the new tab into rename mode with the TextField focused.
+- Pressing Enter accepts the default name; pressing Esc cancels and falls back to the default name (existing rename behaviour).
+- Right-clicking on an existing tab still shows the Rename / Delete menu, not the new "New Playlist" menu.
+
+### 6. Commit plan
+
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 1 | `docs(slice 9-o)` | add v0.1 ship close-out spec and mark 9-N as shipped |
+| 2 | `chore(slice 9-o)` | add PrivacyInfo.xcprivacy declaring UserDefaults and FileTimestamp reasons |
+| 3 | `chore(slice 9-o)` | remove Info.plist from main target Copy Bundle Resources phase |
+| 4 | `feat(slice 9-o)` | add right-click new-playlist context menu on tab bar empty area |
+
+### 7. Out of scope
+
+- AppIcon assets (user-painted, separate manual handoff).
+- Manual QA on Release archive (separate pre-submission step).
+- App Store Connect metadata (separate pre-submission step).
+- MiniPlayer audio underrun investigation (post-ship debug backlog).
