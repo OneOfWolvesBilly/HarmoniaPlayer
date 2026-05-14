@@ -57,6 +57,7 @@
 "ctx_rename" = "名前を変更";
 "ctx_delete" = "削除";
 "ctx_new_playlist" = "新規プレイリスト";
+"ctx_export_playlist" = "プレイリストを書き出す…";
 
 /* MARK: - PlaylistView: Toolbar Help */
 "help_restore_order" = "追加順に戻す";

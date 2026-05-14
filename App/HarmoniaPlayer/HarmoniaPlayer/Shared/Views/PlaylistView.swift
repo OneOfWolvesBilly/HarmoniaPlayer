@@ -211,6 +211,7 @@ struct PlaylistView: View {
         .accessibilityIdentifier("playlist-tab-\(index)")
         .contextMenu {
             Button(L("ctx_rename")) { beginRename(at: index) }
+            Button(L("ctx_export_playlist")) { exportPlaylist(at: index) }
             Divider()
             Button(L("ctx_delete"), role: .destructive) {
                 appState.deletePlaylist(at: index)
@@ -747,6 +748,54 @@ struct PlaylistView: View {
         ]
         if panel.runModal() == .OK {
             Task { await appState.handleFileDrop(urls: panel.urls) }
+        }
+    }
+
+    // MARK: - Export Playlist (per-tab context menu)
+
+    /// Presents an NSSavePanel and writes the playlist at the given index as M3U8.
+    ///
+    /// Used by the per-tab right-click "Export Playlist" context menu item.
+    /// Behaviour mirrors `HarmoniaPlayerCommands.exportPlaylist(appState:)` —
+    /// same NSSavePanel layout, same relative-path accessory checkbox, same
+    /// error alert — but targets `playlists[index]` instead of the active
+    /// playlist, so right-clicking a non-active tab exports that tab's contents
+    /// without changing the current selection.
+    private func exportPlaylist(at index: Int) {
+        guard appState.playlists.indices.contains(index) else { return }
+
+        let panel = NSSavePanel()
+        panel.title = L("panel_export_title")
+        if let m3u8Type = UTType(filenameExtension: "m3u8") {
+            panel.allowedContentTypes = [m3u8Type]
+        }
+        panel.nameFieldStringValue = "\(appState.playlists[index].name).m3u8"
+        panel.canCreateDirectories = true
+
+        let useRelative = NSButton(
+            checkboxWithTitle: L("panel_export_relative"),
+            target: nil,
+            action: nil
+        )
+        useRelative.state = .off
+        panel.accessoryView = useRelative
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let pathStyle: M3U8PathStyle = useRelative.state == .on
+            ? .relative(to: url)
+            : .absolute
+
+        Task {
+            do {
+                try appState.writeExport(playlistAt: index, to: url, pathStyle: pathStyle)
+            } catch {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = L("alert_export_failed")
+                    alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
         }
     }
 
