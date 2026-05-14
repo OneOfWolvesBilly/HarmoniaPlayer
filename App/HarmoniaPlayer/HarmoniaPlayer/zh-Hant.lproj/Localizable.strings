@@ -56,6 +56,7 @@
 "ctx_remove" = "從播放清單移除";
 "ctx_rename" = "重新命名";
 "ctx_delete" = "刪除";
+"ctx_new_playlist" = "新增播放清單";
 
 /* MARK: - PlaylistView: Toolbar Help */
 "help_restore_order" = "還原加入順序";

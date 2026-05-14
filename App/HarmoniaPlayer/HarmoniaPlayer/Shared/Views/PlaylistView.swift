@@ -155,6 +155,16 @@ struct PlaylistView: View {
         }
         .frame(height: 36)
         .background(Color(nsColor: .windowBackgroundColor))
+        .contextMenu {
+            // Right-click anywhere on the tab bar shows "New Playlist".
+            // Per-tab .contextMenu (Rename / Delete) on each Button takes priority
+            // over this one because child views win SwiftUI hit testing on their own
+            // bounds; this contextMenu fires only when no tab is under the cursor.
+            Button(L("ctx_new_playlist")) {
+                appState.newPlaylist(name: "")
+                NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
+            }
+        }
     }
 
     @ViewBuilder

@@ -56,6 +56,7 @@
 "ctx_remove" = "Remove from Playlist";
 "ctx_rename" = "Rename";
 "ctx_delete" = "Delete";
+"ctx_new_playlist" = "New Playlist";
 
 /* MARK: - PlaylistView: Toolbar Help */
 "help_restore_order" = "Restore added order";
