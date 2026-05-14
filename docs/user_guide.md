@@ -167,7 +167,7 @@ on next launch.
 
 ### Create, rename, delete
 
-- **New playlist:** click `+` in the tab bar, or **File → New Playlist**
+- **New playlist:** **File → New Playlist**, or right-click the tab bar's empty area → New Playlist
 - **Rename:** double-click the tab name, or **File → Rename Playlist**
 - **Delete:** right-click the tab → Delete, or **File → Delete Playlist**
 
@@ -182,6 +182,13 @@ Right-click a playlist tab for:
 
 Right-clicking a non-active tab still targets that tab — for example,
 Export Playlist… exports the tab you clicked, not the currently active one.
+
+### Tab bar empty-area context menu
+
+Right-click the empty area of the tab bar (beyond the last tab) for:
+
+- **New Playlist** — create a new playlist and immediately start renaming it
+- **Import Playlist…** — open an M3U8 file as a new playlist tab
 
 ### Track operations
 
