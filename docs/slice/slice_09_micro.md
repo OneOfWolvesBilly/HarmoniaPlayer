@@ -40,7 +40,8 @@ for v0.1 Free release, and prepares infrastructure for the v0.2 Tag Editor.
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ✅ |
 | 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ✅ |
-| 9-O | v0.1 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ⬜ |
+| 9-O | v0.1 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
+| 9-P | v0.1 ship close-out: version number alignment (MARKETING_VERSION + label normalisation + development plan facts) | All | ⬜ |
 
 ### Goals (v0.1)
 
@@ -3133,7 +3134,7 @@ grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort" \
 
 ---
 
-## Slice 9-O: v0.1 Ship Close-Out — PrivacyInfo + Build Phase Cleanup + Tab Bar Context Menu ⬜
+## Slice 9-O: v0.1 Ship Close-Out — PrivacyInfo + Build Phase Cleanup + Tab Bar Context Menu ✅
 
 **Tier:** Free (all v0.1 builds)
 **Repo scope:** HarmoniaPlayer only
@@ -3279,3 +3280,153 @@ fall back to a `ZStack(alignment: .leading)` structure with the
 - Manual QA on Release archive (separate pre-submission step).
 - App Store Connect metadata (separate pre-submission step).
 - MiniPlayer audio underrun investigation (post-ship debug backlog).
+---
+
+## Slice 9-P: v0.1 Ship Close-Out — Version Number Alignment ⬜
+
+**Tier:** All (affects every v0.1 build; HarmoniaCore side included)
+**Repo scope:** HarmoniaPlayer + HarmoniaCore (separate commits, never mixed)
+**Release blocker:** Yes (Scope A only) — `MARKETING_VERSION` must read `0.1.0` before App Store submission
+
+### 1. Goal
+
+Three version-numbering corrections, handled together because they are one
+topic. None changes runtime behaviour, public API, or test logic.
+
+1. **Scope A** — Set the App Store release version. `MARKETING_VERSION` is
+   still the Xcode project default `1.0`; the product ships as v0.1, so it
+   must read `0.1.0`.
+2. **Scope B** — Normalise version labels to three-component form across
+   the live document and source surface: `v0.1` → `v0.1.0`,
+   `v0.15` → `v0.1.5`, `v0.2` → `v0.2.0`.
+3. **Layer 3** — Correct factual drift in
+   `HarmoniaPlayer_development_plan.md`: it still describes Slice 9 as the
+   v0.2 Pro / Tag Editor slice, when `slice_09_micro.md` defines Slice 9 as
+   the v0.1 close-out slice.
+
+This section also marks Slice 9-O as shipped — its summary-table row and
+section header still carried ⬜ after 9-O shipped.
+
+### 2. Why this is a release blocker
+
+- `MARKETING_VERSION = 1.0` would publish the Free tier to the App Store
+  as version 1.0, decoupling the public version string from the committed
+  v0.1 / v0.2 roadmap. The first shipped version string must be `0.1.0`.
+- Scope B and Layer 3 are not submission-blocking, but are folded in
+  because they are the same topic, and the close-out window is the right
+  time to make the version vocabulary consistent and the planning doc
+  factually correct.
+
+### 3. Scope A — `MARKETING_VERSION` → `0.1.0`
+
+#### 3.1 Current state
+
+`MARKETING_VERSION = 1.0` appears six times in `project.pbxproj` — three
+targets (`HarmoniaPlayer`, `HarmoniaPlayerTests`, `HarmoniaPlayerUITests`)
+× Debug/Release. `CURRENT_PROJECT_VERSION = 1` is correct for a first
+submission and is left unchanged.
+
+#### 3.2 Action
+
+| Status | Path | Action |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Set `MARKETING_VERSION` to `0.1.0` in all six configurations (3 targets × Debug/Release). In Xcode: select each target → Build Settings → Marketing Version → `0.1.0`. Leave `CURRENT_PROJECT_VERSION` untouched. |
+
+#### 3.3 HarmoniaCore SPM pin — verification only
+
+The HP project pins HarmoniaCore-Swift by `kind = revision` at
+`213cf20b…`, which corresponds to HarmoniaCore's current `swift-release`
+HEAD. The pin is already current; no change is made. Cutting a
+HarmoniaCore `v0.1.0` SPM tag and migrating the pin from revision to tag
+remains a separate "release HarmoniaCore v0.1.0" slice (unchanged from the
+prior decision recorded under Slice 9-N's deferred items).
+
+#### 3.4 Done criterion
+
+`MARKETING_VERSION` reads `0.1.0` for all three targets. A Release
+archive's `CFBundleShortVersionString` is `0.1.0`.
+
+### 4. Scope B — Version label normalisation
+
+#### 4.1 Normalisation rules
+
+| From | To |
+| --- | --- |
+| `v0.1` | `v0.1.0` |
+| `v0.15` | `v0.1.5` |
+| `v0.2` | `v0.2.0` |
+| `v0.2+` | `v0.2.0+` |
+| `post-v0.2` | `post-v0.2.0` |
+| `post-v1.0` (HarmoniaCore only) | `post-v1.0.0` |
+
+Not changed: floating-point literals (`1.0`, `0.1`, `0.15` used as numeric
+values); the `vNN` placeholder token in `SLICE_TEMPLATE.md`; and the
+`"version": "1.0"` field inside HarmoniaCore `docs/specs/07_api-parity.md`
+test-vector JSON — that is a test-vector schema version, not the product
+version.
+
+#### 4.2 Scope boundary — live surface only
+
+Normalisation applies to current / active documents and source, not to
+settled historical records.
+
+| Status | Scope | Files |
+| --- | --- | --- |
+| Normalise | HP living docs | `README.md`, `docs/api_reference.md`, `docs/development_guide.md`, `docs/documentation_strategy.md`, `docs/user_guide.md` |
+| Normalise | HP draft / template specs | `docs/slice/SLICE_TEMPLATE.md`, `docs/slice/slice_10_micro_draft.md` |
+| Normalise | HP source + test comments | 15 source `.swift` + 3 test `.swift` — comments and assertion-message strings only; no test logic change |
+| Normalise | HP active slice spec | `docs/slice/slice_09_micro.md` — its existing `v0.x` references. This is the active v0.1 spec, edited by this slice, therefore a live document, not a settled record. |
+| Untouched | HP settled slice specs | `slice_01_micro.md` – `slice_08_micro.md` — settled historical records (7 `v0.x` references total, all historical-plan snapshots). |
+| Normalise | HC living docs + source | `README.md`, `docs/specs/04_services.md`, `docs/specs/06_test_strategy.md`, `docs/testing.md`, `docs/specs/01_architecture.md`, `apple-swift/Sources/HarmoniaCore/Adapters/AVMetadataTagReaderAdapter.swift` |
+
+HarmoniaCore changes ship in a separate HarmoniaCore commit; HarmoniaCore
+and HarmoniaPlayer are never combined in one delivery.
+
+### 5. Layer 3 — `HarmoniaPlayer_development_plan.md` factual correction
+
+#### 5.1 Drift
+
+`HarmoniaPlayer_development_plan.md` §11.4 / §11.5 describe Slice 9 as
+"Pro Tier — IAP and Tag Editor" with sub-slices 9-A…9-E, and state
+"v0.2 gate: Slice 9 complete". The actual `slice_09_micro.md` defines
+Slice 9 as "StoreKit 2 IAP + v0.1 Free Preparation" with sub-slices
+9-A…9-P; Slice 9 is the v0.1 close-out, not the v0.2 gate.
+
+#### 5.2 Action
+
+| Status | Path | Action |
+| --- | --- | --- |
+| Modify | `docs/slice/HarmoniaPlayer_development_plan.md` | (a) Correct the §11.4 Slice 9 description and sub-slice list to match `slice_09_micro.md`, and correct the §11.5 version-target table so Slice 9 maps to the v0.1 close-out. (b) Apply the §4.1 version-label normalisation to this file. |
+
+### 6. Commit plan
+
+| Order | Repo | Type / Scope | Subject |
+| --- | --- | --- | --- |
+| 1 | HP | `docs(slice 9-p)` | add version-number-alignment spec and mark 9-O as shipped |
+| 2 | HP | `chore(slice 9-p)` | set MARKETING_VERSION to 0.1.0 for all targets |
+| 3 | HP | `docs(slice 9-p)` | normalize version labels in HarmoniaPlayer docs |
+| 4 | HP | `docs(slice 9-p)` | normalize version labels in HarmoniaPlayer source and test comments |
+| 5 | HP | `docs(slice 9-p)` | correct development plan slice-9 facts and version labels |
+| 6 | HP | `docs(slice 9-p)` | normalize slice_09_micro.md version labels and mark 9-P as shipped |
+| 7 | HC | `docs` | normalize version labels to three-component form |
+
+Commit 6 is the final HarmoniaPlayer-side edit to `slice_09_micro.md`; it
+also flips this section's status and the 9-P summary-table row to ✅.
+Commit 7 is the trailing cross-repo HarmoniaCore commit.
+
+### 7. No test phase
+
+This slice changes version strings, documentation, and source comments
+only. There is no runtime behaviour change, no public API change, and no
+new or modified test logic. The assertion-message strings touched in
+Commit 4 are failure-message text only; the assertions themselves are
+unchanged.
+
+### 8. Out of scope
+
+- HarmoniaCore `v0.1.0` SPM tag cut and revision-to-tag pin migration —
+  separate "release HarmoniaCore v0.1.0" slice.
+- `slice_01_micro.md` – `slice_08_micro.md` version labels — left as
+  settled historical records.
+- AppIcon assets, Manual QA on a Release archive, and App Store Connect
+  metadata — separate pre-submission steps.
