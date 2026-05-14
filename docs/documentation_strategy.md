@@ -178,7 +178,7 @@ Exception: version-specific documents may include a version header:
 ```markdown
 # HarmoniaPlayer Architecture
 
-> This document describes HarmoniaPlayer v0.1.
+> This document describes HarmoniaPlayer v0.1.0.
 ```
 
 Use only when the doc is deliberately frozen to a version.
@@ -320,7 +320,7 @@ Before committing documentation changes:
 
 - Every code example compiles against the current repo
 - No invented types, methods, or features
-- Planned features clearly marked as such ("v0.2 Pro", "deferred")
+- Planned features clearly marked as such ("v0.2.0 Pro", "deferred")
 
 ### Navigation
 

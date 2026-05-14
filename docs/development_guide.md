@@ -410,7 +410,7 @@ The user grants access by selecting an audio file via `NSOpenPanel` or drag-drop
 3. Call `startAccessingSecurityScopedResource()` on the resolved URL — `Track.isAccessible` is set to its return value. Do NOT call `stopAccessingSecurityScopedResource()` after success: the macOS sandbox requires an active extension at every read, and stopping releases the extension so PlaybackService open returns FigFile err=-12203 / "File Not Found". The extension is held for the URL's lifetime and released as a side effect when the Track value is dropped from the playlist (NSURL ref count → 0).
 4. The resolved URL replaces the in-memory `Track.url`. On the next `JSONEncoder().encode(track)` pass, `URL.bookmarkData(.withSecurityScope)` regenerates the bookmark from the now-current URL — this implicitly handles `bookmarkDataIsStale = true` without an explicit refresh helper.
 
-Legacy `.minimalBookmark` data (in case any made it to a development build) fails to resolve under `[.withSecurityScope]`; the decode path falls through to `urlPath` with `isAccessible = false`. No migration tool is shipped — v0.1 is HarmoniaPlayer's first public release.
+Legacy `.minimalBookmark` data (in case any made it to a development build) fails to resolve under `[.withSecurityScope]`; the decode path falls through to `urlPath` with `isAccessible = false`. No migration tool is shipped — v0.1.0 is HarmoniaPlayer's first public release.
 
 ### 8.2 Sibling files: Related Items + NSFileCoordinator
 
@@ -771,7 +771,7 @@ Spec and code commits are always separate. One logical change per commit.
 
 | Phase | Recommendation |
 |-------|----------------|
-| Initial submission | Ship Free functionality only. Paywall UI hidden in v0.1; Pro code paths reserved for v0.2. |
+| Initial submission | Ship Free functionality only. Paywall UI hidden in v0.1.0; Pro code paths reserved for v0.2.0. |
 | After IAP approval | Enable visible Paywall and Pro feature entry points. |
 | External payments | Never include external payment links (PayPal, Buy Me a Coffee) inside the app. Such links belong only in GitHub/README. |
 
