@@ -58,6 +58,7 @@
 "ctx_delete" = "刪除";
 "ctx_new_playlist" = "新增播放清單";
 "ctx_export_playlist" = "匯出播放清單…";
+"ctx_import_playlist" = "匯入播放清單…";
 
 /* MARK: - PlaylistView: Toolbar Help */
 "help_restore_order" = "還原加入順序";

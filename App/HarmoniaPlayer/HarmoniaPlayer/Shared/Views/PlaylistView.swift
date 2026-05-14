@@ -156,14 +156,16 @@ struct PlaylistView: View {
         .frame(height: 36)
         .background(Color(nsColor: .windowBackgroundColor))
         .contextMenu {
-            // Right-click anywhere on the tab bar shows "New Playlist".
-            // Per-tab .contextMenu (Rename / Delete) on each Button takes priority
-            // over this one because child views win SwiftUI hit testing on their own
-            // bounds; this contextMenu fires only when no tab is under the cursor.
+            // Right-click anywhere on the tab bar shows "New Playlist" and
+            // "Import Playlist…". Per-tab .contextMenu (Rename / Export /
+            // Delete) on each Button takes priority over this one because
+            // child views win SwiftUI hit testing on their own bounds; this
+            // contextMenu fires only when no tab is under the cursor.
             Button(L("ctx_new_playlist")) {
                 appState.newPlaylist(name: "")
                 NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
             }
+            Button(L("ctx_import_playlist")) { importPlaylist() }
         }
     }
 
@@ -793,6 +795,45 @@ struct PlaylistView: View {
                     let alert = NSAlert()
                     alert.messageText = L("alert_export_failed")
                     alert.informativeText = error.localizedDescription
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    // MARK: - Import Playlist (tab bar empty-area context menu)
+
+    /// Presents an NSOpenPanel and imports the chosen .m3u8 file as a new
+    /// playlist tab.
+    ///
+    /// Used by the tab bar empty-area right-click "Import Playlist…" context
+    /// menu item. Behaviour mirrors `HarmoniaPlayerCommands.importPlaylist(appState:)`
+    /// — same NSOpenPanel filter, same skipped-files warning alert — and shares
+    /// the same `appState.importPlaylist(from:)` flow that creates a new tab
+    /// named after the .m3u8 filename.
+    private func importPlaylist() {
+        let panel = NSOpenPanel()
+        panel.title = L("panel_import_title")
+        if let m3u8Type = UTType(filenameExtension: "m3u8") {
+            panel.allowedContentTypes = [m3u8Type]
+        }
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+
+        Task {
+            await appState.importPlaylist(from: url)
+            let skipped = appState.skippedImportURLs
+            if !skipped.isEmpty {
+                await MainActor.run {
+                    let alert = NSAlert()
+                    alert.messageText = L("alert_import_missing_title")
+                    alert.informativeText = String(
+                        format: L("alert_import_missing_body"),
+                        skipped.map { $0.path }.joined(separator: "\n")
+                    )
+                    alert.alertStyle = .warning
                     alert.runModal()
                 }
             }
