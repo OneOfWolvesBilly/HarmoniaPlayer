@@ -619,6 +619,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | Method | Description |
 |--------|-------------|
 | `writeExport(to:pathStyle:) throws` | Exports active playlist to M3U8 file |
+| `writeExport(playlistAt:to:pathStyle:) throws` | Exports `playlists[index]` to M3U8 file; used by per-tab Export Playlist; no-ops if index out of bounds |
 | `importPlaylist(from:) async` | Imports M3U8 into new playlist tab; format gate + sub-batch save |
 
 ### 3.8 Methods — Main File (`AppState.swift`)

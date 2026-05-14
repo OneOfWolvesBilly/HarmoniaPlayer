@@ -171,6 +171,18 @@ on next launch.
 - **Rename:** double-click the tab name, or **File → Rename Playlist**
 - **Delete:** right-click the tab → Delete, or **File → Delete Playlist**
 
+### Playlist tab context menu
+
+Right-click a playlist tab for:
+
+- **Rename** — start inline rename of the tab name
+- **Export Playlist…** — save this playlist as an M3U8 file; a checkbox
+  offers relative paths (useful for sharing or USB drives)
+- **Delete** — remove this playlist
+
+Right-clicking a non-active tab still targets that tab — for example,
+Export Playlist… exports the tab you clicked, not the currently active one.
+
 ### Track operations
 
 Right-click a track for the context menu:
