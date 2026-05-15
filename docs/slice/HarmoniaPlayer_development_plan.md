@@ -5,7 +5,7 @@
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
 >
-> **Scope note:** Sections 2–10 cover Slices 1–6 (v0.1 foundation, now complete).
+> **Scope note:** Sections 2–10 cover Slices 1–6 (v0.1.0 foundation, now complete).
 > Slices 7–9 are defined in their respective spec files and summarised in
 > Section 11 of this document.
 
@@ -819,72 +819,87 @@ spec file; this section provides a summary for orientation.
 
 ### 11.1 Scope Evolution
 
-The original plan targeted Slice 6 as the v0.1 gate. After completing
-Slice 6, the scope was extended:
+The original plan targeted Slice 6 as the v0.1.0 gate. After completing
+Slice 6, the gate moved twice as scope expanded:
 
-- **Slices 7–8** — additional Free tier features required for a releasable v0.1
-- **Slice 9** — Pro tier gated behind StoreKit 2 IAP (v0.2)
+- **Slices 7–8** — additional Free tier features required for a
+  releasable v0.1.0; the v0.1.0 gate moved to Slice 8.
+- **Slice 9** — initially planned as the v0.2.0 Pro tier slice; expanded
+  during execution into the v0.1.0 close-out (StoreKit 2 IAP
+  infrastructure, EQ, lyrics display, Now Playing integration, App
+  Sandbox, App Store ship preparation). The v0.1.0 gate moved to Slice 9.
+- **Slice 10** — Pro tier (FLAC / DSD playback + Tag Editor) for v0.2.0.
+  Spec lives in `docs/slice/slice_10_micro_draft.md` (draft until
+  Slice 10 officially opens).
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
 **Spec:** `docs/slice/slice_07_micro.md`
-**Developer spec:** `docs/slice/HarmoniaPlayer_slice_micro/HarmoniaPlayer_slice_7_micro.md`
 
 | Sub-slice | Content | Status |
 |---|---|---|
-| 7-A | Volume control end-to-end (AudioOutputPort → PlayerView) | ✅ Complete |
-| 7-B | Multiple playlist tabs (create, rename, delete) | ✅ Complete |
-| 7-C | M3U8 playlist import / export (absolute + relative paths) | ✅ Complete |
-| 7-D | Drag-to-reorder tracks in PlaylistView | Pending |
-| 7-E | Persistence via UserDefaults (playlists, settings, volume) | Pending |
-| 7-F | UI localisation — 24 languages including Arabic RTL | Pending |
-| 7-G | Column customization + sort; Track model expansion (Groups A–E) | Pending |
-| 7-H | File Info Panel (read-only tech info + editable source URL) | Pending |
+| 7-A | Volume control end-to-end (AudioOutputPort → PlayerView) | ✅ |
+| 7-B | Multiple playlist tabs (create, rename, delete) | ✅ |
+| 7-C | M3U8 playlist import / export (absolute + relative paths) | ✅ |
+| 7-D | Drag-to-reorder tracks in PlaylistView | ✅ |
+| 7-E | Persistence via UserDefaults (playlists, settings, volume) | ✅ |
+| 7-F | UI localisation — 24 languages including Arabic RTL | ✅ |
+| 7-G | Column customization + sort; Track model expansion (Groups A–E) | ✅ |
+| 7-H | File Info Panel (read-only technical info + editable source URL) | ✅ |
 
-**Testing approach:** Unit tests (FakePlaybackService) for all AppState behaviour.
-Column customization persisted via `@AppStorage` in View layer (not AppState).
+**Testing approach:** Unit tests (FakePlaybackService) for all AppState
+behaviour. Column customization persisted via `@AppStorage` in the View
+layer (not AppState).
 
 ### 11.3 Slice 8: UX Polish and Advanced Playback (Free)
 
-**Spec:** `docs/slice/slice_08_micro_draft.md`
-**Status:** Draft — review before implementation begins
+**Spec:** `docs/slice/slice_08_micro.md`
 
-| Sub-slice | Content |
-|---|---|
-| 8-A | Menu bar disabled states + Play/Pause label fix + UndoManager (⌘Z / ⌘Y) |
-| 8-C | Mini Player floating window (⌘M, always on top) |
-| 8-D | ReplayGain volume normalisation (off / track / album mode) |
+| Sub-slice | Content | Status |
+|---|---|---|
+| 8-A | Menu bar UX fixes + UndoManager (⌘Z / ⌘Y) | ✅ |
+| 8-B | Mini Player floating window (⌘M, always on top) | ✅ |
+| 8-C | ReplayGain volume normalisation (off / track / album mode) | ✅ |
 
-> 8-B (Music Library / folder scanning) — removed; conflicts with foobar2000
-> design philosophy (no library management).
->
-> 8-E (Play statistics + track rating) — deferred to backlog; fields already
-> defined in Track model Group E (Slice 7-G).
+### 11.4 Slice 9: v0.1.0 Close-Out (Free; StoreKit IAP infrastructure built but hidden)
 
-**v0.1 gate:** Slice 8 complete.
+**Spec:** `docs/slice/slice_09_micro.md`
 
-### 11.4 Slice 9: Pro Tier — IAP and Tag Editor
+Slice 9 was initially scoped as the Pro tier / Tag Editor slice (v0.2.0).
+During execution it expanded into the v0.1.0 close-out: it landed the
+StoreKit 2 IAP infrastructure (Paywall built but hidden in Free), plus
+several Free-tier features and ship-preparation work needed before App
+Store submission.
 
-**Spec:** `docs/slice/slice_09_micro_draft.md`
-**Status:** Draft — review before implementation begins
+| Sub-slice | Content | Status |
+|---|---|---|
+| 9-A | StoreKit 2 IAP infra + Paywall (built, hidden) + v0.1.0 Free load gate | ✅ |
+| 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | ✅ |
+| 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | ✅ |
+| 9-D | FileInfoView `.sheet` → independent `WindowGroup` | ✅ |
+| 9-E | Polling loop CPU fix (`CancellationError` handling) | ✅ |
+| 9-F | Error reporting Phase 1 (`lastErrorDetail` + mailto) | ✅ |
+| 9-G | Play/Pause menu label investigation (`@FocusedObject` limitation) | ✅ |
+| 9-H | Mini Player menu bar fix (hiddenTitleBar + focusedSceneValue) | ✅ |
+| 9-I | Xcode warning cleanup | ✅ |
+| 9-J | Lyrics display (USLT embedded + sidecar `.lrc`, full text) | ✅ |
+| 9-K | Equalizer (10-band, global, custom presets) | ✅ |
+| 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | ✅ |
+| 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | ✅ |
+| 9-N | HarmoniaCore cleanup: `MonotonicTimePort` rename + `FileAccessPort` deletion | ✅ |
+| 9-O | v0.1.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menus | ✅ |
+| 9-P | v0.1.0 ship close-out: version number alignment | ⬜ |
 
-| Sub-slice | Content |
-|---|---|
-| 9-A | StoreKit 2 IAP + Paywall UI |
-| 9-B | Tag Editor — basic fields (Groups A+B + bpm + comment) |
-| 9-C | Tag Editor — sort fields (sortTitle, sortArtist, etc.) |
-| 9-D | Tag Editor — artwork (embedded album art) |
-| 9-E | Tag Editor — lyrics (USLT embedded lyrics) |
+**Pro feature gating** for FLAC and DSD playback is implemented in
+`AppState.play(trackID:)`. StoreKit 2 infrastructure is wired and the
+Paywall UI is built; both are hidden in v0.1.0. Activating the real Pro
+purchase flow and exposing the Paywall is v0.2.0 work (Slice 10).
 
-**Pro feature gating** for FLAC/DSD is already implemented in
-`AppState.play(trackID:)` (Slice 5-A). Slice 9-A only needs to provide a
-real `isProUser == true` after purchase.
-
-**v0.2 gate:** Slice 9 complete.
+**v0.1.0 gate:** Slice 9 complete (including ship close-out 9-O and 9-P).
 
 ### 11.5 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
-| v0.1 | Slice 8 complete | Free tier feature complete; first public release |
-| v0.2 | Slice 9 complete | Pro tier; Tag Editor + FLAC/DSD via App Store IAP |
+| v0.1.0 | Slice 9 complete | Free tier feature complete; first public release |
+| v0.2.0 | Slice 10 complete | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
