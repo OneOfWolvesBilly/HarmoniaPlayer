@@ -888,7 +888,7 @@ Store submission.
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | ✅ |
 | 9-N | HarmoniaCore cleanup: `MonotonicTimePort` rename + `FileAccessPort` deletion | ✅ |
 | 9-O | v0.1.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menus | ✅ |
-| 9-P | v0.1.0 ship close-out: version number alignment | ✅ |
+| 9-P | v1.0.0 ship close-out: version number alignment + scheme migration | ⬜ |
 
 **Pro feature gating** for FLAC and DSD playback is implemented in
 `AppState.play(trackID:)`. StoreKit 2 infrastructure is wired and the
