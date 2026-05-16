@@ -5,7 +5,7 @@
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
 >
-> **Scope note:** Sections 2–10 cover Slices 1–6 (v0.1.0 foundation, now complete).
+> **Scope note:** Sections 2–10 cover Slices 1–6 (v1.0.0 foundation, now complete).
 > Slices 7–9 are defined in their respective spec files and summarised in
 > Section 11 of this document.
 
@@ -819,16 +819,16 @@ spec file; this section provides a summary for orientation.
 
 ### 11.1 Scope Evolution
 
-The original plan targeted Slice 6 as the v0.1.0 gate. After completing
+The original plan targeted Slice 6 as the v1.0.0 gate. After completing
 Slice 6, the gate moved twice as scope expanded:
 
 - **Slices 7–8** — additional Free tier features required for a
-  releasable v0.1.0; the v0.1.0 gate moved to Slice 8.
-- **Slice 9** — initially planned as the v0.2.0 Pro tier slice; expanded
-  during execution into the v0.1.0 close-out (StoreKit 2 IAP
+  releasable v1.0.0; the v1.0.0 gate moved to Slice 8.
+- **Slice 9** — initially planned as the v2.0.0 Pro tier slice; expanded
+  during execution into the v1.0.0 close-out (StoreKit 2 IAP
   infrastructure, EQ, lyrics display, Now Playing integration, App
-  Sandbox, App Store ship preparation). The v0.1.0 gate moved to Slice 9.
-- **Slice 10** — Pro tier (FLAC / DSD playback + Tag Editor) for v0.2.0.
+  Sandbox, App Store ship preparation). The v1.0.0 gate moved to Slice 9.
+- **Slice 10** — Pro tier (FLAC / DSD playback + Tag Editor) for v2.0.0.
   Spec lives in `docs/slice/slice_10_micro_draft.md` (draft until
   Slice 10 officially opens).
 
@@ -861,19 +861,19 @@ layer (not AppState).
 | 8-B | Mini Player floating window (⌘M, always on top) | ✅ |
 | 8-C | ReplayGain volume normalisation (off / track / album mode) | ✅ |
 
-### 11.4 Slice 9: v0.1.0 Close-Out (Free; StoreKit IAP infrastructure built but hidden)
+### 11.4 Slice 9: v1.0.0 Close-Out (Free; StoreKit IAP infrastructure built but hidden)
 
 **Spec:** `docs/slice/slice_09_micro.md`
 
-Slice 9 was initially scoped as the Pro tier / Tag Editor slice (v0.2.0).
-During execution it expanded into the v0.1.0 close-out: it landed the
+Slice 9 was initially scoped as the Pro tier / Tag Editor slice (v2.0.0).
+During execution it expanded into the v1.0.0 close-out: it landed the
 StoreKit 2 IAP infrastructure (Paywall built but hidden in Free), plus
 several Free-tier features and ship-preparation work needed before App
 Store submission.
 
 | Sub-slice | Content | Status |
 |---|---|---|
-| 9-A | StoreKit 2 IAP infra + Paywall (built, hidden) + v0.1.0 Free load gate | ✅ |
+| 9-A | StoreKit 2 IAP infra + Paywall (built, hidden) + v1.0.0 Free load gate | ✅ |
 | 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | ✅ |
 | 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | ✅ |
 | 9-D | FileInfoView `.sheet` → independent `WindowGroup` | ✅ |
@@ -887,19 +887,19 @@ Store submission.
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | ✅ |
 | 9-N | HarmoniaCore cleanup: `MonotonicTimePort` rename + `FileAccessPort` deletion | ✅ |
-| 9-O | v0.1.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menus | ✅ |
+| 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menus | ✅ |
 | 9-P | v1.0.0 ship close-out: version number alignment + scheme migration | ⬜ |
 
 **Pro feature gating** for FLAC and DSD playback is implemented in
 `AppState.play(trackID:)`. StoreKit 2 infrastructure is wired and the
-Paywall UI is built; both are hidden in v0.1.0. Activating the real Pro
-purchase flow and exposing the Paywall is v0.2.0 work (Slice 10).
+Paywall UI is built; both are hidden in v1.0.0. Activating the real Pro
+purchase flow and exposing the Paywall is v2.0.0 work (Slice 10).
 
-**v0.1.0 gate:** Slice 9 complete (including ship close-out 9-O and 9-P).
+**v1.0.0 gate:** Slice 9 complete (including ship close-out 9-O and 9-P).
 
 ### 11.5 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
-| v0.1.0 | Slice 9 complete | Free tier feature complete; first public release |
-| v0.2.0 | Slice 10 complete | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
+| v1.0.0 | Slice 9 complete | Free tier feature complete; first public release |
+| v2.0.0 | Slice 10 complete | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
