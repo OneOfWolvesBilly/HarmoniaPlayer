@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This document defines **Slice 9: StoreKit 2 IAP + v0.1.0 Free Preparation**
+This document defines **Slice 9: StoreKit 2 IAP + v1.0.0 Free Preparation**
 for HarmoniaPlayer.
 
 Slice 9 builds the StoreKit 2 purchase infrastructure, freezes Pro features
-for v0.1.0 Free release, and prepares infrastructure for the v0.2.0 Tag Editor.
+for v1.0.0 Free release, and prepares infrastructure for the v2.0.0 Tag Editor.
 
 > **Prerequisite:** HarmoniaCore TagBundle patch must be committed before any
 > Slice 9 work begins. The patch adds `composer`, `trackTotal`, `discTotal`,
@@ -25,8 +25,8 @@ for v0.1.0 Free release, and prepares infrastructure for the v0.2.0 Tag Editor.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 9-A | StoreKit 2 IAP infra + Paywall (built, UI hidden) + v0.1.0 Free load gate | — | ✅ |
-| Post-9-A | v0.1.0 freeze fixes + architecture cleanup (pre-9-B preparation) | Free | ✅ |
+| 9-A | StoreKit 2 IAP infra + Paywall (built, UI hidden) + v1.0.0 Free load gate | — | ✅ |
+| Post-9-A | v1.0.0 freeze fixes + architecture cleanup (pre-9-B preparation) | Free | ✅ |
 | 9-B | HarmoniaCore replaceItemAt fix + FileInfoView read-only + FileOriginService | Free | ✅ |
 | 9-C | Codec + Encoding fields (TagBundle → Track → FileInfoView) | Free | ✅ |
 | 9-D | FileInfoView `.sheet` → independent `WindowGroup` | Free | ✅ |
@@ -40,19 +40,19 @@ for v0.1.0 Free release, and prepares infrastructure for the v0.2.0 Tag Editor.
 | 9-L | macOS Now Playing integration (Control Center / lock screen / media keys) | Free | ✅ |
 | 9-M | Re-enable App Sandbox + directory bookmark for sibling file access | Free | ✅ |
 | 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ✅ |
-| 9-O | v0.1.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
-| 9-P | v1.0.0 ship close-out: version number alignment + scheme migration (MARKETING_VERSION + label normalisation + dev-plan facts + v0.x → v1.x migration) | All | ⬜ |
+| 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
+| 9-P | v1.0.0 ship close-out: version number alignment + scheme migration (MARKETING_VERSION + label normalisation + dev-plan facts + v0.x → v1.x migration) | All | ✅ |
 
-### Goals (v0.1.0)
+### Goals (v1.0.0)
 
 - Build StoreKit 2 purchase flow (`StoreKitIAPManager`) ✅
-- Build Paywall sheet (`PaywallView`) — hidden in v0.1.0 ✅
+- Build Paywall sheet (`PaywallView`) — hidden in v1.0.0 ✅
 - Gate FLAC/DSF/DFF at load time — blocked as unsupported ✅
 - Add batch operation safety (`isPerformingBlockingOperation`, sub-batch save) ✅
 - Add directory drag-and-drop with recursive scanning (`FileDropService`) ✅
 - Fix HarmoniaCore tag writer to preserve xattr on file replacement
-- Make FileInfoView read-only (source editing deferred to v0.2.0 Tag Editor)
-- Define `FileOriginService` protocol (infrastructure for v0.2.0)
+- Make FileInfoView read-only (source editing deferred to v2.0.0 Tag Editor)
+- Define `FileOriginService` protocol (infrastructure for v2.0.0)
 - Add Codec + Encoding to FileInfoView Technical section
 - Convert FileInfoView from `.sheet` to independent `WindowGroup`
 - Fix polling loop CPU issue (proper `CancellationError` handling)
@@ -62,13 +62,13 @@ for v0.1.0 Free release, and prepares infrastructure for the v0.2.0 Tag Editor.
 - Fix Xcode warnings in test files
 
 ### Non-goals
-- Pro paywall visible in v0.1.0 (deferred to v0.2.0)
-- FLAC/DSD playback (deferred to v0.2.0)
-- Tag editing UI (deferred to v0.2.0 — see Slice 10)
+- Pro paywall visible in v1.0.0 (deferred to v2.0.0)
+- FLAC/DSD playback (deferred to v2.0.0)
+- Tag editing UI (deferred to v2.0.0 — see Slice 10)
 
 ### Constraints
 - `import HarmoniaCore` restricted to Integration Layer files only
-- All Pro UI commented out but code preserved for v0.2.0 restore
+- All Pro UI commented out but code preserved for v2.0.0 restore
 - File origin (`kMDItemWhereFroms`) is filesystem metadata, not audio metadata —
   `FileOriginService` lives in Application Layer, not HarmoniaCore
 
@@ -80,11 +80,11 @@ for v0.1.0 Free release, and prepares infrastructure for the v0.2.0 Tag Editor.
 
 ---
 
-## Slice 9-A: StoreKit 2 IAP Infrastructure + v0.1.0 Free Load Gate ✅
+## Slice 9-A: StoreKit 2 IAP Infrastructure + v1.0.0 Free Load Gate ✅
 
 ### Goal
 Build the full StoreKit 2 IAP infrastructure and Paywall UI. Then freeze
-all Pro features for v0.1.0 Free release: FLAC/DSF/DFF blocked at load time,
+all Pro features for v1.0.0 Free release: FLAC/DSF/DFF blocked at load time,
 Pro UI hidden.
 
 ### Scope
@@ -102,7 +102,7 @@ Pro UI hidden.
 - `AppState.featureFlags` changed to `private(set) var` — rebuilt after
   `purchasePro()` and `refreshEntitlements()`
 
-#### Paywall UI (built, hidden in v0.1.0)
+#### Paywall UI (built, hidden in v1.0.0)
 - New `PaywallView` sheet: lists Pro features, "Unlock Pro" button,
   "Restore Purchases" button, session skip checkbox
 - `AppState.showPaywall: Bool`, `showPaywallIfNeeded() -> Bool`,
@@ -112,9 +112,9 @@ Pro UI hidden.
 - `HarmoniaPlayerApp`: `.defaultLaunchBehavior(.suppressed)` +
   `didFinishLaunching` observer to prevent MiniPlayer auto-restoration
 
-#### v0.1.0 Free load gate
+#### v1.0.0 Free load gate
 - `AppState.freeFormats` / `proOnlyFormats` static sets for classification
-- New `allowedFormats` computed property: v0.1.0 returns `freeFormats` only
+- New `allowedFormats` computed property: v1.0.0 returns `freeFormats` only
 - New `isURLSupported(_:)` uses `allowedFormats`
 - `load(urls:)`: FLAC/DSF/DFF rejected, `skippedUnsupportedURLs` alert
 - `importPlaylist(from:)`: `isURLSupported()` check + final `saveState()`
@@ -215,7 +215,7 @@ struct FileDropService {
 | `testValidate_Directory_ExpandsRecursively` | directory with nested audio | `validate([dirURL])` | returns all audio files |
 | `testValidate_Directory_SkipsHiddenFiles` | `.hidden.mp3` | `validate([dirURL])` | hidden file not in result |
 
-Pro format gate tests (14 tests commented out, full bodies preserved for v0.2.0).
+Pro format gate tests (14 tests commented out, full bodies preserved for v2.0.0).
 
 ### Done criteria
 
@@ -223,24 +223,24 @@ Pro format gate tests (14 tests commented out, full bodies preserved for v0.2.0)
 - ✅ `Transaction.updates` listener running throughout app lifecycle
 - ✅ `isProUnlocked` persisted in UserDefaults via didSet
 - ✅ `featureFlags` rebuilt after `purchasePro()` / `refreshEntitlements()`
-- ✅ `PaywallView` built (hidden in v0.1.0)
+- ✅ `PaywallView` built (hidden in v1.0.0)
 - ✅ FLAC/DSF/DFF blocked at load time via `allowedFormats`
 - ✅ All Pro UI commented out
 - ✅ `isPerformingBlockingOperation` prevents concurrent batch ops
 - ✅ Sub-batch save every 5 tracks
 - ✅ `FileDropService` recursively expands directories
-- ✅ All v0.1.0 tests green
+- ✅ All v1.0.0 tests green
 - ✅ All Slice 1–8 tests still green
 
 ### Commit message
 
 ```
-feat(slice 9-A): add StoreKit 2 IAP infrastructure and v0.1.0 Free load gate
+feat(slice 9-A): add StoreKit 2 IAP infrastructure and v1.0.0 Free load gate
 
 - Add StoreKitIAPManager with refreshEntitlements, purchasePro, Transaction.updates
-- Add PaywallView sheet (hidden in v0.1.0)
+- Add PaywallView sheet (hidden in v1.0.0)
 - Add showPaywall, showPaywallIfNeeded, paywallDismissedThisSession to AppState
-- Add freeFormats, proOnlyFormats, allowedFormats (v0.1.0: Free only)
+- Add freeFormats, proOnlyFormats, allowedFormats (v1.0.0: Free only)
 - Block FLAC/DSF/DFF at load time via allowedFormats
 - Comment out Pro UI: play gate, autoplay gate, Upgrade menu, refreshEntitlements
 - Add isPerformingBlockingOperation with menu and drop disable
@@ -251,22 +251,22 @@ feat(slice 9-A): add StoreKit 2 IAP infrastructure and v0.1.0 Free load gate
 
 ---
 
-## Post-9-A: v0.1.0 Freeze Fixes + Architecture Cleanup ✅
+## Post-9-A: v1.0.0 Freeze Fixes + Architecture Cleanup ✅
 
 Preparation fixes committed after 9-A and before 9-B. These address
-architecture issues (Split A/B/C) and bug fixes discovered during v0.1.0
+architecture issues (Split A/B/C) and bug fixes discovered during v1.0.0
 freeze testing. They are not part of any sub-slice's SDD scope —
 they are reactive fixes that clean up technical debt before 9-B begins.
 
 ### Commits
 
 ```
-chore(v0.1.0-freeze): comment out launch refreshEntitlements
-chore(v0.1.0-freeze): comment out Upgrade to Pro menu item
-feat(v0.1.0-freeze): add isPerformingBlockingOperation flag with menu and drop disable
-feat(v0.1.0): support directory drop and selection in file picker
-feat(v0.1.0-freeze): dynamic allowedFormats, hide Pro formats from load and import
-docs(v0.1.0-freeze): update api_reference and slice_09_micro for v0.1.0 freeze
+chore(v1.0.0-freeze): comment out launch refreshEntitlements
+chore(v1.0.0-freeze): comment out Upgrade to Pro menu item
+feat(v1.0.0-freeze): add isPerformingBlockingOperation flag with menu and drop disable
+feat(v1.0.0): support directory drop and selection in file picker
+feat(v1.0.0-freeze): dynamic allowedFormats, hide Pro formats from load and import
+docs(v1.0.0-freeze): update api_reference and slice_09_micro for v1.0.0 freeze
 refactor: split AppState.swift into 5 extension files
 refactor(slice 9): remove AVFoundation from HarmoniaTagReaderAdapter
 refactor(slice 9): replace string-matching error mapping with typed PlaybackError codes
@@ -295,8 +295,8 @@ feat(free): add artwork display section to FileInfoView
 
 ### Goal
 Fix HarmoniaCore tag writer to preserve file attributes on write.
-Make FileInfoView read-only (source editing deferred to v0.2.0 Tag Editor).
-Define `FileOriginService` protocol as infrastructure for v0.2.0.
+Make FileInfoView read-only (source editing deferred to v2.0.0 Tag Editor).
+Define `FileOriginService` protocol as infrastructure for v2.0.0.
 
 ### Scope
 
@@ -316,8 +316,8 @@ Define `FileOriginService` protocol as infrastructure for v0.2.0.
 - New `DarwinFileOriginAdapter` wraps existing `ExtendedAttributeService`
 - `ExtendedAttributeService` retained as bottom-level Darwin utility
 - Infrastructure only — `CoreServiceProviding` / `CoreFactory` /
-  `HarmoniaCoreProvider` / `AppState` wiring is deferred to v0.2.0 along with
-  Source editing (see "Deferred to v0.2.0" note below)
+  `HarmoniaCoreProvider` / `AppState` wiring is deferred to v2.0.0 along with
+  Source editing (see "Deferred to v2.0.0" note below)
 
 ### Files
 
@@ -394,10 +394,10 @@ HarmoniaPlayer:
 
 Commit 1 is a HarmoniaCore repo commit. Commits 2–3 are HarmoniaPlayer.
 
-### Deferred to v0.2.0
+### Deferred to v2.0.0
 
-Because Source editing is read-only in v0.1.0 Free, the following items that
-were originally planned inside 9-B are deferred to the v0.2.0 Tag Editor slice:
+Because Source editing is read-only in v1.0.0 Free, the following items that
+were originally planned inside 9-B are deferred to the v2.0.0 Tag Editor slice:
 
 - `CoreServiceProviding` / `CoreFactory` / `HarmoniaCoreProvider` extended with
   `makeFileOriginService()`
@@ -409,7 +409,7 @@ were originally planned inside 9-B are deferred to the v0.2.0 Tag Editor slice:
   `testSaveSources_Failure_ShowsAlert` test
 
 Commit 2 already lands the protocol, adapter, fake, and adapter tests, so the
-v0.2.0 Tag Editor slice starts from a ready FileOriginService foundation.
+v2.0.0 Tag Editor slice starts from a ready FileOriginService foundation.
 
 ---
 
@@ -730,7 +730,7 @@ Real-world manual testing after Slice 8-A landed confirmed the menu
 bar Play/Pause label updates correctly on every state transition
 (play → pause → stop → play, including cross-application focus
 changes in the main window). No further code change is required for
-v0.1.0.
+v1.0.0.
 
 ### Files touched by Slice 8-A (retrospective reference)
 
@@ -742,7 +742,7 @@ v0.1.0.
 
 - ✅ Play/Pause menu label updates correctly when playback state changes
 - ✅ Root cause and adopted workaround documented
-- ✅ No open `@FocusedObject` reliability issue remaining in v0.1.0
+- ✅ No open `@FocusedObject` reliability issue remaining in v1.0.0
 
 ### Future considerations
 
@@ -999,7 +999,7 @@ API and reference-implementation findings that informed this slice's design.
   writing USLT specifically.
 - Third-party Swift libraries (ID3TagEditor) implement direct ID3 USLT write;
   AVFoundation write support is uncertain.
-- 9-J does not write USLT. v0.2.0 Tag Editor lyrics editing may require TagLib
+- 9-J does not write USLT. v2.0.0 Tag Editor lyrics editing may require TagLib
   adapter.
 
 **3. Sidecar `.lrc` filename conventions (foobar2000 OpenLyrics behaviour)**
@@ -1008,7 +1008,7 @@ API and reference-implementation findings that informed this slice's design.
   `Artist - Title.lrc`), not file basename.
 - Search extensions: both `.lrc` and `.txt`.
 - These conventions are popular but not industry-standard. 9-J targets
-  file-basename convention only (decision B-1; v0.1.5 backlog).
+  file-basename convention only (decision B-1; v1.1.0 backlog).
 
 **4. ID3 lyrics frame in foobar2000 (writes)**
 
@@ -1016,7 +1016,7 @@ API and reference-implementation findings that informed this slice's design.
   `SYNCEDLYRICS` / `UNSYNCEDLYRICS` / `UNSYNCED LYRICS` — not the standard
   `USLT` frame.
 - Reading these requires TXXX with description match, not USLT.
-- 9-J reads only standard USLT (decision A-1; v0.1.5 backlog for foobar2000
+- 9-J reads only standard USLT (decision A-1; v1.1.0 backlog for foobar2000
   compatibility).
 
 **5. Multi-language USLT data model**
@@ -1102,7 +1102,7 @@ Embedded and LRC file (auto) when both available. Choice is persisted.
 ### Custom source selection (NOT in 9-J)
 
 Custom file selection (`LRC file (custom)` and
-`Embedded from another file (custom)`) is **deferred to v0.1.5**,
+`Embedded from another file (custom)`) is **deferred to v1.1.0**,
 implemented together as a single sub-slice using `NSOpenPanel`. The
 `LyricsPreference` schema in 9-J reserves a `customPath: String?` field
 for forward compatibility but never writes to it.
@@ -1141,7 +1141,7 @@ for forward compatibility but never writes to it.
   stripped.**
 - Only the plain text after timestamps is shown.
 - Blank lines in the original file are preserved (for stanza breaks).
-- Timestamp parsing logic is retained internally for future v0.1.5
+- Timestamp parsing logic is retained internally for future v1.1.0
   synchronized scrolling upgrade, but not surfaced in 9-J UI.
 
 ### Persistence
@@ -1153,7 +1153,7 @@ for forward compatibility but never writes to it.
     (e.g. `hp.lyrics.prefs./Music/Album.flac#track=3`)
   - Key generation function handles both cases; CUE support is latent
     in 9-J (Track model's `cueTrackNumber` is added in Phase 3a) and
-    activates when CUE ships in v0.1.5.
+    activates when CUE ships in v1.1.0.
 - **Value (Codable):**
 
   ```swift
@@ -1161,7 +1161,7 @@ for forward compatibility but never writes to it.
       var source: LyricsSource     // .embedded | .lrc
       var encoding: String         // IANA charset name, "auto" = detect
       var languageCode: String?    // ISO 639-2; applies when source = .embedded; nil = auto (locale match)
-      var customPath: String?      // reserved for v0.1.5, always nil in 9-J
+      var customPath: String?      // reserved for v1.1.0, always nil in 9-J
   }
   ```
 
@@ -1184,7 +1184,7 @@ To avoid button flicker on track change:
    with encoding detection. This is the slow path (ms-range for `.lrc`
    reads).
 
-**Future v0.1.5 γ upgrade note:** full preload — read next track's
+**Future v1.1.0 γ upgrade note:** full preload — read next track's
 lyrics content (not just existence) when current track nears end.
 Requires `PlaybackService.preloadNext()` API in HarmoniaCore (Phase 3a
 deliverable) and HarmoniaPlayer-side preload orchestration. 9-J
@@ -1375,50 +1375,50 @@ deliberately stops at β to keep this slice focused.
 
 ### Non-goals (explicit)
 
-- **No SYLT reading.** Deferred to v0.1.5.
-- **No synchronized scrolling / line highlighting.** Deferred to v0.1.5.
+- **No SYLT reading.** Deferred to v1.1.0.
+- **No synchronized scrolling / line highlighting.** Deferred to v1.1.0.
 - **No custom file selection** (`LRC file (custom)`,
-  `Embedded from another file (custom)`). Deferred to v0.1.5.
+  `Embedded from another file (custom)`). Deferred to v1.1.0.
 - **No USLT content splitting.** A single USLT blob containing lyrics
   for multiple songs is displayed as-is; no heuristic splitting (format
   has no standard for segmentation, user must pre-split into separate
   files).
-- **No lyrics editing.** Deferred to v0.2.0 Tag Editor.
+- **No lyrics editing.** Deferred to v2.0.0 Tag Editor.
 - **No TXXX-frame lyrics reading** (frames `LYRICS` / `UNSYNCEDLYRICS` /
   `UNSYNCED LYRICS` / `SYNCEDLYRICS`, written by foobar2000). Deferred
-  to v0.1.5.
+  to v1.1.0.
 - **No alternative sidecar filename formats** (e.g. `Artist - Title.lrc`,
-  `.txt` extension). Deferred to v0.1.5.
+  `.txt` extension). Deferred to v1.1.0.
 - **No language code extraction from .lrc files.** LRC `[la:xxx]` metadata
-  header is stripped, not parsed. Deferred to v0.1.5.
+  header is stripped, not parsed. Deferred to v1.1.0.
 - **No full content preload on track change** (β strategy only; γ full
-  preload deferred to v0.1.5 after Phase 3a adds HarmoniaCore preload
+  preload deferred to v1.1.0 after Phase 3a adds HarmoniaCore preload
   API).
 
 ### Related future work
 
 - **Phase 3a (HarmoniaCore refactor):** add
-  `PlaybackService.preloadNext()` API serving both v0.2.0 gapless
-  playback and v0.1.5 lyrics γ-strategy preload.
-- **v0.1.5 lyrics expansion (planned):**
+  `PlaybackService.preloadNext()` API serving both v2.0.0 gapless
+  playback and v1.1.0 lyrics γ-strategy preload.
+- **v1.1.0 lyrics expansion (planned):**
   - **foobar2000 TXXX compatibility**: read TXXX frames `LYRICS`,
     `UNSYNCEDLYRICS`, `UNSYNCED LYRICS`, `SYNCEDLYRICS`. These merge into
     the existing `[LyricsLanguageVariant]` array with `languageCode = nil`
     (TXXX has no standard language slot). 9-J's reader extension point: a
     single `readEmbeddedLyrics(items:) -> [LyricsLanguageVariant]`
-    function — v0.1.5 adds TXXX branches without touching `Track`,
+    function — v1.1.0 adds TXXX branches without touching `Track`,
     `LyricsService`, `AppState`, or UI.
   - **Alternative sidecar filenames**: add `<artist> - <title>.lrc` and
     `.txt` extension variants. 9-J's `LyricsService` extension point:
     keep sidecar search paths as a
     `private let sidecarSearchPaths: [...]` array of path-builder
-    closures. v0.1.5 appends entries; no callers change.
+    closures. v1.1.0 appends entries; no callers change.
   - **LRC language tag**: parse `[la:xxx]` metadata header in `.lrc`,
     populate `LyricsLanguageVariant.languageCode` for sidecar source.
-- **v0.1.5:** SYLT reading, synchronized line scrolling, custom file
+- **v1.1.0:** SYLT reading, synchronized line scrolling, custom file
   selection (both LRC custom and Embedded-from-another-file custom),
   γ-strategy full preload.
-- **v0.2.0:** gapless playback built on Phase 3a preload API, lyrics
+- **v2.0.0:** gapless playback built on Phase 3a preload API, lyrics
   editing in Tag Editor.
 
 ---
@@ -1447,7 +1447,7 @@ tiers (Free).
   HarmoniaCore EQ).
 - `AppState`: EQ state (`eqEnabled`, `eqBands[10]`, `preamp`,
   `currentPresetName`, `customPresets[]`).
-- EQ is **global state** (v0.1.0 scope — not per-track, not
+- EQ is **global state** (v1.0.0 scope — not per-track, not
   per-playlist).
 - EQ + ReplayGain coexistence: preamp and ReplayGain track gain are
   combined additively before final output gain.
@@ -1529,7 +1529,7 @@ This is documented behaviour. Tests verify the additive combination.
 ### Persistence (with schema versioning)
 
 Forward-compatible schema with explicit version field. 9-K introduces
-schema version **1**. Future slices (e.g. v0.1.5 per-track EQ, v0.1.5/v0.2.0
+schema version **1**. Future slices (e.g. v1.1.0 per-track EQ, v1.1.0/v2.0.0
 user-adjustable Q) will bump version and migrate via `EQSchemaMigrator`.
 
 **UserDefaults keys:**
@@ -1750,11 +1750,11 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 - **No 31-band EQ.** 10-band is final scope.
 - **No spectrum visualiser** (real-time FFT display). Future work.
 - **No preset import/export to file.** UserDefaults only. Future work.
-- **No per-track EQ memory.** EQ is global in v0.1.0. Future work
-  (v0.1.5 / v0.2.0) will migrate schema.
+- **No per-track EQ memory.** EQ is global in v1.0.0. Future work
+  (v1.1.0 / v2.0.0) will migrate schema.
 - **No frequency response curve visualisation.** Slider-only UI.
 - **No Q factor / bandwidth user control.** Fixed Butterworth
-  Q = 0.7071 in 9-K. Future (v0.1.5 / v0.2.0) may expose Q control via
+  Q = 0.7071 in 9-K. Future (v1.1.0 / v2.0.0) may expose Q control via
   schema version bump.
 - **No automatic EQ via DRC** (Dynamic Range Control). Future work.
 
@@ -1763,10 +1763,10 @@ On load, `EQPersistenceStore` reads `hp.eq.schemaVersion`:
 - **Phase 3a (HarmoniaCore refactor):** `EQPort` architecture may be
   generalised to a wider `AudioProcessorChain` supporting multiple
   insertable processors (EQ, fade, future HarmoniaAlarm needs).
-- **v0.1.5:** consider per-track EQ memory (schema version 2,
+- **v1.1.0:** consider per-track EQ memory (schema version 2,
   migration writes per-track keys `hp.eq.track.<path>...`); consider
   user-adjustable Q (schema version 3); preset import/export.
-- **v0.2.0 (Pro):** spectrum visualiser, optional 31-band advanced EQ
+- **v2.0.0 (Pro):** spectrum visualiser, optional 31-band advanced EQ
   (Pro-only decision deferred), DRC.
 - **HarmoniaAlarm:** alarm sound rarely needs EQ; `EQPort` being an
   optional processor in the audio chain means HarmoniaAlarm can skip
@@ -2142,7 +2142,7 @@ changes warrant deeper automated testing).
   system-framework agnostic per module boundary rules. Re-evaluate
   testing strategy at that time (if interface grows or integration
   changes warrant deeper automated testing).
-- **v0.1.5:** re-evaluate the six Non-goals above to see whether
+- **v1.1.0:** re-evaluate the six Non-goals above to see whether
   user feedback, Pro feature planning, or scope changes justify
   adding any of them. Re-evaluate elapsed-time push strategy if
   Control Center scrubber drift becomes user-visible (current 9-L
@@ -2150,7 +2150,7 @@ changes warrant deeper automated testing).
   resync if needed). Consider populating
   `PlaybackQueueIndex` / `PlaybackQueueCount` for richer widget
   info.
-- **v0.2.0 (Pro):** chapter navigation if chapter metadata support
+- **v2.0.0 (Pro):** chapter navigation if chapter metadata support
   lands. Rating / like if Pro tier adds library-like features
   (unlikely given file-based positioning).
 - **HarmoniaAlarm:** will likely use `MPNowPlayingInfoCenter`
@@ -2183,7 +2183,7 @@ selected via `NSOpenPanel`. The slice migrates Track bookmark options to
 handling and `isAccessible` runtime checks.
 
 All tiers (Free + Pro). Required for App Store submission, therefore the
-final v0.1.0 release blocker.
+final v1.0.0 release blocker.
 
 ### Background
 
@@ -2279,8 +2279,8 @@ Two implementation paths were considered. Path B selected.
 
 | Path | Mechanism | Decision |
 |---|---|---|
-| A — Directory bookmark | `NSOpenPanel.canChooseDirectories=true` + persist directory-level `[.withSecurityScope]` bookmark on Track / Playlist | **Rejected.** Adds new persistent fields to Track / Playlist, increasing v0.1.5 SwiftData migration burden. UX shift: user must select a directory rather than files. Cold-launch recovery is more user-visible (directory bookmark stale handling exposes more edge cases). Required only when sibling does not share base name (e.g. `<artist> - <title>.lrc`), which is a v0.1.5-deferred non-goal. |
-| **B — Related Items** | `CFBundleDocumentTypes` declaration + `NSFileCoordinator` reads | **Selected.** Apple's first-class mechanism for the same-base-name + different-extension topology that 9-J introduces and v0.2.0 (CUE / cover art) will reuse. No persistent schema additions for sibling support. UX unchanged (user still picks files). v0.1.5 SwiftData migration burden minimal. |
+| A — Directory bookmark | `NSOpenPanel.canChooseDirectories=true` + persist directory-level `[.withSecurityScope]` bookmark on Track / Playlist | **Rejected.** Adds new persistent fields to Track / Playlist, increasing v1.1.0 SwiftData migration burden. UX shift: user must select a directory rather than files. Cold-launch recovery is more user-visible (directory bookmark stale handling exposes more edge cases). Required only when sibling does not share base name (e.g. `<artist> - <title>.lrc`), which is a v1.1.0-deferred non-goal. |
+| **B — Related Items** | `CFBundleDocumentTypes` declaration + `NSFileCoordinator` reads | **Selected.** Apple's first-class mechanism for the same-base-name + different-extension topology that 9-J introduces and v2.0.0 (CUE / cover art) will reuse. No persistent schema additions for sibling support. UX unchanged (user still picks files). v1.1.0 SwiftData migration burden minimal. |
 
 The skeleton in `slice_09_micro.md` line 2186-2194 originally proposed
 Path A. STEP 2 web_search and the empirical verification above identified
@@ -2300,7 +2300,7 @@ as future-work pointers):
   exceeding the documented 4 MB CFPreferences threshold. The system
   printed: `"Attempting to store >= 4194304 bytes of data in
   CFPreferences/NSUserDefaults on this platform is invalid. This is a
-  bug in HarmoniaPlayer or a library it uses."`. This confirms the v0.1.5
+  bug in HarmoniaPlayer or a library it uses."`. This confirms the v1.1.0
   storage refactor is no longer a theoretical risk. **9-M does not
   modify storage** — bookmark data type changes from `.minimalBookmark`
   to `.withSecurityScope` produce roughly equivalent byte counts, and
@@ -2445,7 +2445,7 @@ errors when sandbox-related failures do occur in edge cases.
   to a TestFlight build during 9-A → 9-I development): on resolution
   failure with the security-scope option, log via the existing logger
   and treat the Track as inaccessible. **No data migration tool is
-  shipped** — v0.1.0 is HarmoniaPlayer's first public release per
+  shipped** — v1.0.0 is HarmoniaPlayer's first public release per
   current memory; production users have no shipped bookmark data to
   migrate.
 
@@ -2792,7 +2792,7 @@ release archive installed to `/Applications`:**
 - **No support for `<artist> - <title>.lrc` or other
   non-same-base-name sidecars.** Related Items only handles
   `<basename>.<related-ext>` matching. Non-conforming sidecars
-  deferred to v0.1.5.
+  deferred to v1.1.0.
 - **No write-back to sibling files.** 9-M is read-only. Lyrics
   write-back (USLT write + sidecar `.lrc` write) is Slice 10-D Pro,
   which will reuse `SiblingFilePresenter` with
@@ -2811,12 +2811,12 @@ release archive installed to `/Applications`:**
   for them would be dead code per current LyricsPanel routing.
 - **No NSUserDefaults storage refactor.** The 6.4 MB system warning
   observed during 9-M investigation is acknowledged but deferred to
-  v0.1.5 storage refactor. 9-M's own additions (bookmark data type
+  v1.1.0 storage refactor. 9-M's own additions (bookmark data type
   change) do not materially increase storage size.
 - **No `FileAccessPort` / `SandboxFileAccessAdapter` cleanup.** Dead
   code in HarmoniaCore is unrelated to 9-M (different I/O layer);
   deferred to combined cleanup slice with `ClockPort` rename.
-- **No legacy `.minimalBookmark` migration tooling.** v0.1.0 is
+- **No legacy `.minimalBookmark` migration tooling.** v1.0.0 is
   HarmoniaPlayer's first public release per current memory; no
   shipped bookmark data exists in user containers. Decode path logs
   and treats legacy bookmark bytes as inaccessible.
@@ -2834,7 +2834,7 @@ release archive installed to `/Applications`:**
 
 ### Related future work
 
-- **v0.1.5:** NSUserDefaults storage refactor — bring playlist data,
+- **v1.1.0:** NSUserDefaults storage refactor — bring playlist data,
   lyrics prefs, EQ settings under SwiftData or another container that
   doesn't trip the 4 MB CFPreferences threshold. Re-evaluate whether
   `<artist> - <title>.lrc` / TXXX-frame lyrics from 9-J non-goals
@@ -2878,7 +2878,7 @@ release archive installed to `/Applications`:**
 
 **Tier:** All (HC SDK surface cleanup; HP consumer alignment)
 **Repo scope:** HarmoniaCore-Swift (primary) + HarmoniaPlayer (consumer)
-**Release blocker:** Yes — must land before HC v0.1.0 SPM tag is cut
+**Release blocker:** Yes — must land before HC v1.0.0 SPM tag is cut
 
 ### 1. Goal
 
@@ -2896,12 +2896,12 @@ public SPM tag:
 ### 2. Why this is a release blocker
 
 Both `ClockPort` and `FileAccessPort` are `public` symbols on the
-HarmoniaCore-Swift SPM API surface. Once HC v0.1.0 is tagged and HP
+HarmoniaCore-Swift SPM API surface. Once HC v1.0.0 is tagged and HP
 moves from commit-SHA pin to tag pin, renaming or removing these symbols
 requires a deprecation cycle and a major-version bump. The window to act
-is between v0.1.0 HP code freeze and the HC v0.1.0 tag cut.
+is between v1.0.0 HP code freeze and the HC v1.0.0 tag cut.
 
-The actual `v0.1.0` tag cut and HP commit-SHA-to-tag pin migration are
+The actual `v1.0.0` tag cut and HP commit-SHA-to-tag pin migration are
 **out of scope for 9-N** — see §9.
 
 ### 3. Change A — `ClockPort` rename
@@ -3008,7 +3008,7 @@ exist); green = build compiles + all previously passing tests still pass.
 
 Updates only the lines/sections directly affected by rename or deletion.
 Broader HC docs structural restructuring (specs/ ↔ impl/ duplication
-concern) is **out of scope** and remains a separate post-v0.1.0 slice.
+concern) is **out of scope** and remains a separate post-v1.0.0 slice.
 
 #### 6.1 HP-side (this repo)
 
@@ -3032,7 +3032,7 @@ specs/ ↔ impl/ structural duplication — separate slice.
 
 HC and HP have separate commit flows and separate output directories.
 SPM tag cut and `Package.resolved` tag-pin migration are deferred to a
-separate "release HC v0.1.0" slice.
+separate "release HC v1.0.0" slice.
 
 #### 7.1 HC commit (lands first)
 
@@ -3085,7 +3085,7 @@ Living docs
 
 Package.resolved: HC SPM revision bumped from old commit SHA to new
 post-rename commit SHA on HC main (commit-pinned; tag migration
-deferred to release HC v0.1.0 slice)
+deferred to release HC v1.0.0 slice)
 ```
 
 ### 8. Acceptance criteria
@@ -3102,10 +3102,10 @@ deferred to release HC v0.1.0 slice)
 
 ### 9. Out of scope (explicit non-goals)
 
-- HC v0.1.0 SPM tag cut — separate "release HC v0.1.0" slice
+- HC v1.0.0 SPM tag cut — separate "release HC v1.0.0" slice
 - HP `Package.resolved` migration from commit-SHA pin to tag pin — same release slice
-- HC docs structural restructuring (specs/ ↔ impl/ duplication concern) — separate post-v0.1.0 slice
-- AppState refactor ("AppState as Locator" pattern propagation) — v0.2.0 work
+- HC docs structural restructuring (specs/ ↔ impl/ duplication concern) — separate post-v1.0.0 slice
+- AppState refactor ("AppState as Locator" pattern propagation) — v2.0.0 work
 - Adding any replacement for `FileAccessPort` — sandbox file coordination remains application-layer concern (`SiblingFilePresenter` from 9-M)
 - `HarmoniaCore` → `HarmoniaAudioCore` rename — separate slice if pursued
 
@@ -3134,15 +3134,15 @@ grep -rn "FileAccessPort\|SandboxFileAccessAdapter\|MockFileAccessPort" \
 
 ---
 
-## Slice 9-O: v0.1.0 Ship Close-Out — PrivacyInfo + Build Phase Cleanup + Tab Bar Context Menu ✅
+## Slice 9-O: v1.0.0 Ship Close-Out — PrivacyInfo + Build Phase Cleanup + Tab Bar Context Menu ✅
 
-**Tier:** Free (all v0.1.0 builds)
+**Tier:** Free (all v1.0.0 builds)
 **Repo scope:** HarmoniaPlayer only
 **Release blocker:** Yes — final pre-ship slice before App Store submission
 
 ### 1. Goal
 
-Three independent close-out items required before v0.1.0 Free is uploaded to
+Three independent close-out items required before v1.0.0 Free is uploaded to
 App Store Connect. None are user-facing features in the strict sense; they
 are submission-blocking compliance items plus one long-pending UX gap.
 
@@ -3162,9 +3162,9 @@ are submission-blocking compliance items plus one long-pending UX gap.
   (`ITMS-91055`).
 - The Copy Bundle Resources warning for `Info.plist` has persisted across
   multiple Slice 9 sub-slices; close-out is the right time to clear it.
-- The context menu gap is the only known v0.1.0 UX regression not tracked
-  under a prior sub-slice; addressing it now avoids a v0.1.1 patch
-  release.
+- The context menu gap is the only known v1.0.0 UX regression not tracked
+  under a prior sub-slice; addressing it now avoids a patch release
+  after v1.0.0 ships.
 
 ### 3. Item 1 — `PrivacyInfo.xcprivacy`
 
@@ -3269,7 +3269,7 @@ fall back to a `ZStack(alignment: .leading)` structure with the
 
 | Order | Type / Scope | Subject |
 | --- | --- | --- |
-| 1 | `docs(slice 9-o)` | add v0.1.0 ship close-out spec and mark 9-N as shipped |
+| 1 | `docs(slice 9-o)` | add v1.0.0 ship close-out spec and mark 9-N as shipped |
 | 2 | `chore(slice 9-o)` | add PrivacyInfo.xcprivacy declaring UserDefaults and FileTimestamp reasons |
 | 3 | `chore(slice 9-o)` | remove Info.plist from main target Copy Bundle Resources phase |
 | 4 | `feat(slice 9-o)` | add right-click new-playlist context menu on tab bar empty area |
@@ -3282,7 +3282,7 @@ fall back to a `ZStack(alignment: .leading)` structure with the
 - MiniPlayer audio underrun investigation (post-ship debug backlog).
 ---
 
-## Slice 9-P: v1.0.0 Ship Close-Out — Version Number Alignment + Scheme Migration ⬜
+## Slice 9-P: v1.0.0 Ship Close-Out — Version Number Alignment + Scheme Migration ✅
 
 **Tier:** All (affects every v1.0.0 build)
 **Repo scope:** HarmoniaPlayer
@@ -3297,17 +3297,17 @@ one topic. None changes runtime behaviour, public API, or test logic.
    must read `1.0.0` for the first App Store submission.
 2. **Scope B** — Normalise two-component version labels in the live
    HarmoniaPlayer documentation surface to three-component semver form
-   (e.g. `v0\.1` → `v0.1.0`, `v0\.15` → `v0.1.5`, `v0\.2` → `v0.2.0`).
+   (e.g. `v0\.1` → `v1.0.0`, `v0\.15` → `v1.1.0`, `v0\.2` → `v2.0.0`).
    This scope was executed in commits 2–5 under the original v0.x
    scheme; the resulting three-component labels are then migrated by
    Scope D below.
 3. **Layer 3** — Correct factual drift in
    `HarmoniaPlayer_development_plan.md` regarding Slice 9's identity
-   (v1.0.0 close-out, originally documented as v0.2.0 Pro / Tag Editor)
+   (v1.0.0 close-out, originally documented as v2.0.0 Pro / Tag Editor)
    and the version-target table. Executed in Commit 4 under the v0.x
    scheme; re-aligned to the v1.x family by Scope D.
 4. **Scope D** — Migrate the project's version scheme from the v0.x
-   family (v0.1.0 / v0.1.5 / v0.2.0) to the v1.x family (v1.0.0 /
+   family (`v0\.1\.0` / `v0\.1\.5` / `v0\.2\.0`) to the v1.x family (v1.0.0 /
    v1.1.0 / v2.0.0) to match consumer-app semver convention, where
    1.0.0 marks the first production release and 0.x signals
    pre-release / library API-not-yet-stable.
@@ -3358,11 +3358,11 @@ archive's `CFBundleShortVersionString` is `1.0.0`.
 
 | Pattern | Replacement |
 | --- | --- |
-| `v0\.1` (no trailing digit or `.digit`) | `v0.1.0` |
-| `v0\.15` (no trailing digit) | `v0.1.5` |
-| `v0\.2` (no trailing digit or `.digit`) | `v0.2.0` |
-| `v0\.2+` (literal trailing plus) | `v0.2.0+` |
-| `post-v0\.2` | `post-v0.2.0` |
+| `v0\.1` (no trailing digit or `.digit`) | `v1.0.0` |
+| `v0\.15` (no trailing digit) | `v1.1.0` |
+| `v0\.2` (no trailing digit or `.digit`) | `v2.0.0` |
+| `v0\.2+` (literal trailing plus) | `v2.0.0+` |
+| `post-v0\.2` | `post-v2.0.0` |
 
 Not changed: floating-point literals (`1.0`, `0.1`, `0.15` used as
 numeric values) and the `vNN` placeholder token in `SLICE_TEMPLATE.md`.
@@ -3390,7 +3390,7 @@ removal or rewriting, not normalisation. That cleanup is scoped to a
 separate post-v1.0.0 source-comment hygiene slice.
 
 HarmoniaCore docs are also out of scope. HarmoniaCore currently has no
-independent version identity: its sole `v0.1.0` git tag points to an
+independent version identity: its sole `v1.0.0` git tag points to an
 old commit far behind HEAD, and the `v0.x` labels in HC docs are
 HP-mirrored or undefined. Normalising those labels would write the
 HP-coupling more precisely without addressing it. The correct work is
@@ -3405,9 +3405,10 @@ consumer macOS-app versioning convention. The original v0.x family
 signals library-style semver ("API not yet stable; 0.x.x is
 pre-release"), but HarmoniaPlayer is a consumer app being shipped to
 the App Store, where the convention is 1.0.0 = first production
-release. The v0.1.5 label additionally violated semver patch-number
-conventions (a v0.1.0 release should be followed by v0.1.1, v0.1.2, …
-not jump to v0.1.5), because it was a planned minor feature release,
+release. The original `v0\.1\.5` label additionally violated semver
+patch-number conventions — under the v0.x scheme a `v0\.1\.0` release
+should have been followed by `v0\.1\.1`, `v0\.1\.2`, … not jumped to
+`v0\.1\.5` — because it represented a planned minor feature release,
 not a patch.
 
 #### 5.1 Scheme mapping
@@ -3417,8 +3418,8 @@ not a patch.
 | `v0\.1\.0` | `v1.0.0` | App Store first ship (Free tier complete) |
 | `v0\.1\.5` | `v1.1.0` | Next Free minor release (CUE support, lyrics extras, NSUserDefaults storage refactor) |
 | `v0\.2\.0` | `v2.0.0` | Pro tier introduction (Tag Editor, FLAC, DSD) — major bump because the new paid tier is itself a major release |
-| `v0\.2\.0+` | `v2.0.0+` | "v0.2.0 and later" → "v2.0.0 and later" |
-| `post-v0\.2\.0` | `post-v2.0.0` | "after v0.2.0" → "after v2.0.0" |
+| `v0\.2\.0+` | `v2.0.0+` | "v2.0.0 and later" → "v2.0.0 and later" |
+| `post-v0\.2\.0` | `post-v2.0.0` | "after v2.0.0" → "after v2.0.0" |
 
 (Old-column patterns are written with backslash-escaped periods so
 the migration find/replace pass does not rewrite the table itself.)
@@ -3453,9 +3454,9 @@ HP's migration to consumer-app convention does not propagate to HC.
 
 `HarmoniaPlayer_development_plan.md` §11.4 / §11.5 originally
 described Slice 9 as "Pro Tier — IAP and Tag Editor" with sub-slices
-9-A…9-E and stated "v0.2.0 gate: Slice 9 complete". The actual
+9-A…9-E and stated "v2.0.0 gate: Slice 9 complete". The actual
 `slice_09_micro.md` defines Slice 9 as the v1.0.0 close-out slice
-(originally v0.1.0 close-out before Scope D) with sub-slices 9-A…9-P.
+(originally v1.0.0 close-out before Scope D) with sub-slices 9-A…9-P.
 
 #### 6.2 Action
 
@@ -3476,7 +3477,7 @@ v0.x scheme; re-aligned to the v1.x scheme by Scope D in Commit 9.
 | 5 | HP | `docs(slice 9-p)` | normalize slice_09_micro.md version labels, amend Scope B for source exclusion, and mark 9-P as shipped (✅ shipped under v0.x scheme; the 9-P shipped flip is reverted by Commit 6 and re-applied by Commit 10) |
 | 6 | HP | `docs(slice 9-p)` | extend 9-P spec to add Scope D scheme migration, fold in the scope clean-ups that the in-flight v0.x errata would have done, and flip 9-P back to open (this commit) |
 | 7 | HP | `chore(slice 9-p)` | migrate `MARKETING_VERSION` from `0.1.0` to `1.0.0` |
-| 8 | HP | `docs(slice 9-p)` | migrate version scheme in HarmoniaPlayer living docs (v0.1.0 → v1.0.0, v0.1.5 → v1.1.0, v0.2.0 → v2.0.0) |
+| 8 | HP | `docs(slice 9-p)` | migrate version scheme in HarmoniaPlayer living docs (v1.0.0 → v1.0.0, v1.1.0 → v1.1.0, v2.0.0 → v2.0.0) |
 | 9 | HP | `docs(slice 9-p)` | migrate version scheme in development_plan.md and re-align §11 to the v1.x family |
 | 10 | HP | `docs(slice 9-p)` | migrate version scheme in slice_09_micro.md (earlier sections and §1–§4 of the 9-P section) and re-mark 9-P as shipped in both slice_09 and development_plan |
 
