@@ -30,7 +30,7 @@ Complete guide for using HarmoniaPlayer on macOS.
 
 ### Install
 
-Pre-built downloads will be available with the v0.1.0 release. Until then, see
+Pre-built downloads will be available with the v1.0.0 release. Until then, see
 [README.md](../README.md#build-from-source) for build-from-source instructions.
 
 ---
@@ -84,9 +84,9 @@ are scanned recursively — all supported audio files inside are added.
 - **File → Add Files…** or press **`⌘O`**
 - Select one or more files, click **Open**
 
-### Supported formats (v0.1.0 Free)
+### Supported formats (v1.0.0 Free)
 
-HarmoniaPlayer v0.1.0 supports these audio formats:
+HarmoniaPlayer v1.0.0 supports these audio formats:
 
 - **MP3** — MPEG-1/2 Layer 3
 - **AAC / M4A** — Advanced Audio Coding
@@ -96,7 +96,7 @@ HarmoniaPlayer v0.1.0 supports these audio formats:
 
 Files in other formats (including FLAC, DSF, DFF) are skipped at import time
 and listed in the "Unsupported Format" alert. Support for FLAC and DSD is
-planned for v0.2.0 (Pro).
+planned for v2.0.0 (Pro).
 
 ### Duplicate handling
 
@@ -340,8 +340,8 @@ unavailable — remove it, or put the file back at its original location.
 
 ### "Unsupported Format" alert when adding files
 
-The file's format is not supported in v0.1.0. Free formats are MP3, AAC,
-ALAC, WAV, AIFF. Formats like FLAC and DSD are planned for v0.2.0 (Pro).
+The file's format is not supported in v1.0.0. Free formats are MP3, AAC,
+ALAC, WAV, AIFF. Formats like FLAC and DSD are planned for v2.0.0 (Pro).
 Convert the file to a supported format, or wait for Pro.
 
 ### "Already in Playlist" alert
@@ -395,13 +395,13 @@ resolve the bookmark.
 ## FAQ
 
 **Is HarmoniaPlayer free?**
-Yes. v0.1.0 (Free tier) is free and open source (MIT). v0.2.0 will add a Pro
+Yes. v1.0.0 (Free tier) is free and open source (MIT). v2.0.0 will add a Pro
 tier via a one-time in-app purchase for additional formats and features.
 
 **What's the difference between Free and Pro?**
-- **Free (v0.1.0):** MP3, AAC, ALAC, WAV, AIFF + all playback, playlist,
+- **Free (v1.0.0):** MP3, AAC, ALAC, WAV, AIFF + all playback, playlist,
   metadata-reading, and UI features
-- **Pro (v0.2.0, planned):** adds FLAC and DSD playback, tag editing,
+- **Pro (v2.0.0, planned):** adds FLAC and DSD playback, tag editing,
   synchronised lyrics, gapless playback
 
 **Is my music uploaded anywhere?**
@@ -409,13 +409,13 @@ No. HarmoniaPlayer is completely offline. All music stays on your Mac.
 The app does not make any network calls for audio content.
 
 **Can I edit tags?**
-Not in v0.1.0 — tags are read-only. Tag editing is planned for v0.2.0.
+Not in v1.0.0 — tags are read-only. Tag editing is planned for v2.0.0.
 
 **Does it support synchronised lyrics?**
-Not in v0.1.0. LRC / synchronised lyrics are planned for v0.2.0 (Pro).
+Not in v1.0.0. LRC / synchronised lyrics are planned for v2.0.0 (Pro).
 
 **Does it support gapless playback?**
-Not in v0.1.0. Gapless playback is planned for v0.2.0 (Pro).
+Not in v1.0.0. Gapless playback is planned for v2.0.0 (Pro).
 
 **Does it support streaming services?**
 No. HarmoniaPlayer plays local files only.

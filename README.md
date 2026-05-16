@@ -51,7 +51,7 @@ It serves as:
 
 ## Features
 
-### v0.1.0 Free (current target)
+### v1.0.0 Free (current target)
 
 - Playlist-based audio playback (MP3, AAC, ALAC, WAV, AIFF)
 - Multiple playlists with drag reorder, M3U8 import/export
@@ -61,7 +61,7 @@ It serves as:
 - Persistence (playlists, settings survive relaunch)
 - Localisation: English, 繁體中文, 日本語
 
-### v0.2.0 Pro (planned)
+### v2.0.0 Pro (planned)
 
 - FLAC / DSD playback
 - Tag Editor (ID3 / MP4 metadata editing)
@@ -148,8 +148,8 @@ See [Development Guide](docs/development_guide.md) for:
 
 ### Milestones
 
-- **v0.1.0** — Free tier feature complete → App Store
-- **v0.2.0** — Pro tier via In-App Purchase
+- **v1.0.0** — Free tier feature complete → App Store
+- **v2.0.0** — Pro tier via In-App Purchase
 
 For detailed planning, see [Development Plan](docs/slice/HarmoniaPlayer_development_plan.md).
 
