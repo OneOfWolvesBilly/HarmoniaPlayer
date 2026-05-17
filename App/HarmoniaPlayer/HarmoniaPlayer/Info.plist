@@ -2,20 +2,22 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>LRC Lyrics File</string>
-            <key>CFBundleTypeExtensions</key>
-            <array>
-                <string>lrc</string>
-            </array>
-            <key>CFBundleTypeRole</key>
-            <string>Editor</string>
-            <key>NSIsRelatedItemType</key>
-            <true/>
-        </dict>
-    </array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>LRC Lyrics File</string>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>lrc</string>
+			</array>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>NSIsRelatedItemType</key>
+			<true/>
+		</dict>
+	</array>
 </dict>
 </plist>

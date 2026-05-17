@@ -44,7 +44,7 @@ struct HarmoniaPlayerApp: App {
     }
 
     @StateObject private var appState = AppState(
-        iapManager: StoreKitIAPManager(),
+        iapManager: FreeTierIAPManager(),
         provider: HarmoniaCoreProvider()
     )
 

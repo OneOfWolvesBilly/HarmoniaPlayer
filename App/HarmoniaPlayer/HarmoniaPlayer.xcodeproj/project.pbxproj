@@ -7,9 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C0819FEF2F1D539C005ABA46 /* HarmoniaCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0819FEE2F1D539C005ABA46 /* HarmoniaCore */; };
 		C09D38C22F9402D400E4526D /* HarmoniaCore in Frameworks */ = {isa = PBXBuildFile; productRef = C09D38C12F9402D400E4526D /* HarmoniaCore */; };
-		C0B472CF2F81FA4400F46865 /* HarmoniaPlayer.storekit in Resources */ = {isa = PBXBuildFile; fileRef = C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,7 +30,6 @@
 /* Begin PBXFileReference section */
 		C07D74D72F3DA2B5007782C0 /* HarmoniaPlayerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarmoniaPlayerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C0A47A2C2F6981E400022CC3 /* HarmoniaPlayerUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HarmoniaPlayerUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */ = {isa = PBXFileReference; lastKnownFileType = text; path = HarmoniaPlayer.storekit; sourceTree = "<group>"; };
 		C0FCFCF62EF669DA006DE114 /* HarmoniaPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HarmoniaPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -87,7 +84,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				C09D38C22F9402D400E4526D /* HarmoniaCore in Frameworks */,
-				C0819FEF2F1D539C005ABA46 /* HarmoniaCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -98,7 +94,6 @@
 			isa = PBXGroup;
 			children = (
 				C0819FFC2F1D56F5005ABA46 /* HarmoniaPlayer */,
-				C0B472CE2F81FA4400F46865 /* HarmoniaPlayer.storekit */,
 				C07D74D82F3DA2B5007782C0 /* HarmoniaPlayerTests */,
 				C0A47A2D2F6981E400022CC3 /* HarmoniaPlayerUITests */,
 				C0FCFCF72EF669DA006DE114 /* Products */,
@@ -181,7 +176,6 @@
 			);
 			name = HarmoniaPlayer;
 			packageProductDependencies = (
-				C0819FEE2F1D539C005ABA46 /* HarmoniaCore */,
 				C09D38C12F9402D400E4526D /* HarmoniaCore */,
 			);
 			productName = HarmoniaPlayer;
@@ -277,7 +271,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C0B472CF2F81FA4400F46865 /* HarmoniaPlayer.storekit in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -557,6 +550,9 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_FILE[sdk=*]" = HarmoniaPlayer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Harmonia Player";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Chih-hao (Billy) Chen. All rights reserved.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -615,6 +611,9 @@
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
 				"INFOPLIST_FILE[sdk=*]" = HarmoniaPlayer/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Harmonia Player";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2025 Chih-hao (Billy) Chen. All rights reserved.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -699,10 +698,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		C0819FEE2F1D539C005ABA46 /* HarmoniaCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = HarmoniaCore;
-		};
 		C09D38C12F9402D400E4526D /* HarmoniaCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = C09D38C02F9402D400E4526D /* XCRemoteSwiftPackageReference "HarmoniaCore-Swift" */;
