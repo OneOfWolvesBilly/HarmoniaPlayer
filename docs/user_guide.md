@@ -30,7 +30,8 @@ Complete guide for using HarmoniaPlayer on macOS.
 
 ### Install
 
-Pre-built downloads will be available with the v1.0.0 release. Until then, see
+HarmoniaPlayer v1.0.0 Free is being prepared for Mac App Store submission.
+Until the App Store listing is live, see
 [README.md](../README.md#build-from-source) for build-from-source instructions.
 
 ---
@@ -400,9 +401,10 @@ tier via a one-time in-app purchase for additional formats and features.
 
 **What's the difference between Free and Pro?**
 - **Free (v1.0.0):** MP3, AAC, ALAC, WAV, AIFF + all playback, playlist,
-  metadata-reading, and UI features
+  metadata-reading, static lyrics display (from embedded USLT tags or
+  sidecar `.lrc` files, shown as full text), and UI features
 - **Pro (v2.0.0, planned):** adds FLAC and DSD playback, tag editing,
-  synchronised lyrics, gapless playback
+  time-synchronised (line-by-line) lyrics, gapless playback
 
 **Is my music uploaded anywhere?**
 No. HarmoniaPlayer is completely offline. All music stays on your Mac.
@@ -411,8 +413,10 @@ The app does not make any network calls for audio content.
 **Can I edit tags?**
 Not in v1.0.0 — tags are read-only. Tag editing is planned for v2.0.0.
 
-**Does it support synchronised lyrics?**
-Not in v1.0.0. LRC / synchronised lyrics are planned for v2.0.0 (Pro).
+**Does it support lyrics?**
+Yes — v1.0.0 displays static lyrics from embedded USLT tags or a sidecar
+`.lrc` file next to the audio file. Lyrics appear in the Lyrics panel as
+full text. Time-synchronised (line-by-line) lyrics are planned for v2.0.0 (Pro).
 
 **Does it support gapless playback?**
 Not in v1.0.0. Gapless playback is planned for v2.0.0 (Pro).

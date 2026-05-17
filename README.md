@@ -73,7 +73,8 @@ It serves as:
 
 ### Download Pre-Built App
 
-*(Not yet available - currently in active development)*
+HarmoniaPlayer v1.0.0 Free is being prepared for Mac App Store submission.
+Source builds are available below for developers.
 
 ### Build from Source
 
