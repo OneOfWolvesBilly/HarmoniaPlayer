@@ -4,7 +4,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 @MainActor
 final class M3U8ServiceTests: XCTestCase {

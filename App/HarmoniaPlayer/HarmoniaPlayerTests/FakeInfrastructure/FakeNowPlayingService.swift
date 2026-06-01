@@ -16,7 +16,7 @@
 //
 
 import Foundation
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Test fake for `NowPlayingService`.
 ///

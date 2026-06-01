@@ -114,9 +114,9 @@ final class HarmoniaPlayerUITests: XCTestCase {
     /// Waits for the menu item to exist before clicking to avoid
     /// timing failures caused by menu-open delays.
     private func openSettingsWindow() {
-        let harmoniaMenu = app.menuBarItems["HarmoniaPlayer"]
+        let harmoniaMenu = app.menuBarItems["Harmonia Player"]
         XCTAssertTrue(harmoniaMenu.waitForExistence(timeout: 5),
-                      "HarmoniaPlayer menu bar item must exist")
+                      "Harmonia Player menu bar item must exist")
         harmoniaMenu.click()
         let settingsItem = harmoniaMenu.menus.menuItems["Settings…"]
         XCTAssertTrue(settingsItem.waitForExistence(timeout: 3),

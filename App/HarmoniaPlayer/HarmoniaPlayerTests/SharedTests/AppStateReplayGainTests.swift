@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Tests for Slice 8-C: ReplayGain mode selection and volume gain application.
 @MainActor

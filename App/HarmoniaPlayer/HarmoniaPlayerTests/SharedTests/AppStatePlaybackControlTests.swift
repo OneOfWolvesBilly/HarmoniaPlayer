@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Tests for AppState transport controls: play() / pause() / stop() (Slice 4-B).
 ///

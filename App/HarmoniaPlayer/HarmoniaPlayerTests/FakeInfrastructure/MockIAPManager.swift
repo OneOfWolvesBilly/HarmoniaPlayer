@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Mock implementation of IAPManager for testing and development
 ///

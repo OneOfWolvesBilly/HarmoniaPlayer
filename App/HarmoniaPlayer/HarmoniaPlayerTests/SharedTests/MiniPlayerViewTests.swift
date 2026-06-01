@@ -14,7 +14,7 @@
 
 import XCTest
 import SwiftUI
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 @MainActor
 final class MiniPlayerViewTests: XCTestCase {

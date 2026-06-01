@@ -7,7 +7,7 @@
 //
 
 import Foundation
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Fake TagReaderService for deterministic test setups.
 ///

@@ -1077,7 +1077,7 @@ actor automatically, so individual methods don't need `await MainActor.run {}`:
 
 ```swift
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 @MainActor
 final class AppStatePlaybackControlTests: XCTestCase {

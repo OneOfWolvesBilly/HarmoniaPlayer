@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Tests for AppState.play(trackID:) load-and-play orchestration (Slice 4-C)
 ///

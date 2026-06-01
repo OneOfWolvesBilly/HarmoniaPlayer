@@ -6,7 +6,7 @@
 //
 
 import Foundation
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Fake service provider for testing
 ///

@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Verifies that AppState correctly persists and restores state via UserDefaults.
 ///

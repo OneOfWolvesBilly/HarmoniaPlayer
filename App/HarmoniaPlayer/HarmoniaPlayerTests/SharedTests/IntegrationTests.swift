@@ -41,7 +41,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// End-to-end integration tests using a real `HarmoniaCoreProvider` and real
 /// audio bundle resources.

@@ -30,7 +30,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 final class EQServiceTests: XCTestCase {
 

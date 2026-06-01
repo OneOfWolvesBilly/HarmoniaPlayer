@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Unit tests for the upgraded FakeTagReaderService (Slice 3-A).
 ///

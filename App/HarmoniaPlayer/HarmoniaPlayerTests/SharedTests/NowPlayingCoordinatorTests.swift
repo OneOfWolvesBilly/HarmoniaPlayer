@@ -26,7 +26,7 @@
 
 import XCTest
 import Combine
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 @MainActor
 final class NowPlayingCoordinatorTests: XCTestCase {

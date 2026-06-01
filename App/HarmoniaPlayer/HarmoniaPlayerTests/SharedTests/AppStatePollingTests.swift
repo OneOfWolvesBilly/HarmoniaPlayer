@@ -6,7 +6,7 @@
 //
 
 import XCTest
-@testable import HarmoniaPlayer
+@testable import Harmonia_Player
 
 /// Tests for AppState playback polling task lifecycle (Slice 9-E).
 ///
