@@ -42,6 +42,7 @@ for v1.0.0 Free release, and prepares infrastructure for the v2.0.0 Tag Editor.
 | 9-N | HarmoniaCore cleanup: ClockPort rename + FileAccessPort deletion | All | ✅ |
 | 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
 | 9-P | v1.0.0 ship close-out: version number alignment + scheme migration (MARKETING_VERSION + label normalisation + dev-plan facts + v0.x → v1.x migration) | All | ✅ |
+| 9-Q | v1.0.0 Mac App Store ship blockers: FreeTierIAPManager swap + .storekit / dangling-dep removal + INFOPLIST_KEY display name / category / copyright + README / user_guide release-ready + .gitignore cleanup | Free | ✅ |
 
 ### Goals (v1.0.0)
 
@@ -3502,3 +3503,68 @@ modified test logic.
   settled historical records on the v0.x labelling they shipped under.
 - AppIcon assets, Manual QA on a Release archive, and App Store
   Connect metadata — separate pre-submission steps.
+
+## Slice 9-Q: v1.0.0 Mac App Store Ship Blockers — IAP Manager Swap + Bundle Cleanup ✅
+
+**Tier:** Free (all v1.0.0 builds)
+**Repo scope:** HarmoniaPlayer only
+**Release blocker:** Yes — final ship-blocker cleanup before App Store submission
+
+> **Backfill note.** Slice 9-Q shipped as three commits (`cc1725b`, `3567a89`,
+> `7db2efb`) but its spec section was never added to this document at ship
+> time. This section is reconstructed from those commit diffs to close the
+> documentation gap. The backfill changes no code.
+
+### 1. Goal
+
+Clear the remaining v1.0.0 Free Mac App Store ship blockers so a Release
+archive uploads to App Store Connect without an export-compliance prompt,
+without embedded StoreKit test configuration, and without a dangling package
+product dependency — plus documentation release-readiness and a stray
+`.gitignore` cleanup.
+
+### 2. Item 1 — IAP manager swap (fix)
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` | Change `AppState` `iapManager` from `StoreKitIAPManager()` to `FreeTierIAPManager()` so the Free build does not start the StoreKit `Transaction.updates` listener. |
+
+### 3. Item 2 — Bundle / project cleanup (fix)
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/Info.plist` | Add `ITSAppUsesNonExemptEncryption = false` to skip the export-compliance prompt on Archive upload. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Remove `HarmoniaPlayer.storekit` from `PBXBuildFile`, `PBXFileReference`, `PBXGroup` children, and `PBXResourcesBuildPhase` so the StoreKit test config is not embedded in the production `.app`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Remove the dangling HarmoniaCore SPM product dependency `C0819FEE2F1D539C005ABA46` from `PBXFrameworksBuildPhase`, `packageProductDependencies`, and `XCSwiftPackageProductDependency`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Add `INFOPLIST_KEY_CFBundleDisplayName = "Harmonia Player"`, `INFOPLIST_KEY_LSApplicationCategoryType = public.app-category.music`, and `INFOPLIST_KEY_NSHumanReadableCopyright` to the Debug and Release configurations. |
+
+### 4. Item 3 — Documentation release-readiness (docs)
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `README.md` | Download section: replace the in-development placeholder with a release-ready notice that v1.0.0 Free is being prepared for Mac App Store submission. |
+| Modify | `docs/user_guide.md` | Install section: same release-ready notice; point to the README build-from-source instructions. |
+| Modify | `docs/user_guide.md` | Free/Pro comparison: the Free row mentions static lyrics display from embedded USLT tags or sidecar `.lrc` files; the Pro row is rephrased from "synchronised lyrics" to "time-synchronised (line-by-line) lyrics". |
+| Modify | `docs/user_guide.md` | FAQ: rewrite the "Does it support synchronised lyrics?" entry to describe v1.0.0 static lyrics (shipped in slice 9-J) plus the v2.0.0 plan for time-synchronised lyrics. |
+
+### 5. Item 4 — `.gitignore` cleanup (chore)
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `.gitignore` | Remove the three leftover shell here-doc lines (`cd`, the `cat` redirect, and the trailing `EOF` marker) accidentally committed in slice 1a commit `1f61a7b`; the real ignore patterns are preserved. |
+
+### 6. No test phase
+
+This slice swaps an injected manager type, removes build artifacts and config,
+edits `Info.plist` keys, and updates documentation. There is no new runtime
+logic and no new or modified test logic. Verification is that the Release
+archive builds and uploads without the export-compliance prompt, without an
+embedded `.storekit`, and without the dangling dependency.
+
+### 7. Commit plan (as shipped)
+
+| Order | Repo | Type / Scope | Subject |
+| --- | --- | --- | --- |
+| 1 | HP | `fix(slice 9-q)` | swap to FreeTierIAPManager and clean v1.0.0 Mac App Store ship blockers |
+| 2 | HP | `docs(slice 9-q)` | mark v1.0.0 release-ready and clarify static-vs-sync lyrics in README and user_guide |
+| 3 | HP | `chore(slice 9-q)` | clean .gitignore of shell here-doc fragments left in since slice 1a |
