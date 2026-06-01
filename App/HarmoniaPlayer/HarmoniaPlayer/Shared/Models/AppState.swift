@@ -165,7 +165,10 @@ final class AppState: ObservableObject {
     ///
     /// `nil` when no track is selected. Updated whenever `currentTrack` changes,
     /// applying any persisted `LyricsPreference` for the new track.
-    /// `lyricsResolution?.hasAny == true` drives lyrics-button visibility.
+    /// `lyricsResolution?.hasAny` drives the lyrics panel's content-vs-empty
+    /// state (the "No lyrics available" + Recheck placeholder), not the toggle
+    /// button's visibility — the button is always shown and is disabled only
+    /// when no track is loaded.
     @Published var lyricsResolution: LyricsResolution?
 
     /// IDs of tracks currently selected in PlaylistView's Table.

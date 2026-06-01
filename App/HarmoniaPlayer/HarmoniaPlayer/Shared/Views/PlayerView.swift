@@ -80,24 +80,23 @@ struct PlayerView: View {
 
             // Top-trailing controls
             HStack(spacing: 8) {
-                // Lyrics toggle — always visible when a track is loaded.
-                // Panel handles the no-lyrics empty state with a Recheck
-                // button so users can drop in a sidecar .lrc and refresh
-                // without re-loading the track.
-                if appState.currentTrack != nil {
-                    Button {
-                        appState.toggleLyrics()
-                    } label: {
-                        Image(systemName: appState.showLyrics
-                              ? "text.bubble.fill"
-                              : "text.bubble")
-                            .font(.system(size: 16))
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .help(L("lyrics_toggle"))
-                    .accessibilityIdentifier("lyrics-toggle")
+                // Lyrics toggle — always visible; disabled when no track is
+                // loaded. The panel handles the no-lyrics empty state with a
+                // Recheck button so users can drop in a sidecar .lrc and
+                // refresh without re-loading the track.
+                Button {
+                    appState.toggleLyrics()
+                } label: {
+                    Image(systemName: appState.showLyrics
+                          ? "text.bubble.fill"
+                          : "text.bubble")
+                        .font(.system(size: 16))
+                        .foregroundStyle(.secondary)
                 }
+                .buttonStyle(.plain)
+                .help(L("lyrics_toggle"))
+                .accessibilityIdentifier("lyrics-toggle")
+                .disabled(appState.currentTrack == nil)
 
                 // Equalizer — opens the EQ window (Slice 9-K commit 7-A).
                 // Always visible; icon tint reflects EQ enabled state so

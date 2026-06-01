@@ -17,11 +17,13 @@ import Foundation
 /// point `resolveContent` is called and AppState stores the loaded content
 /// in an updated `LyricsResolution`.
 ///
-/// `hasAny` drives button visibility — checked synchronously on track load.
+/// `hasAny` is checked synchronously on track load and drives the lyrics
+/// panel's content-vs-empty state, not the toggle button's visibility.
 struct LyricsResolution {
 
     /// Whether any lyrics source (USLT or sidecar `.lrc`) is available.
-    /// Drives the toggle-button visibility in `PlayerView`.
+    /// Drives the lyrics panel's empty-state placeholder in `LyricsPanel`,
+    /// not the toggle button's visibility.
     let hasAny: Bool
 
     /// The currently selected source, or `nil` when `hasAny == false`.
