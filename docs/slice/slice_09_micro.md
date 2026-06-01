@@ -43,6 +43,7 @@ for v1.0.0 Free release, and prepares infrastructure for the v2.0.0 Tag Editor.
 | 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
 | 9-P | v1.0.0 ship close-out: version number alignment + scheme migration (MARKETING_VERSION + label normalisation + dev-plan facts + v0.x → v1.x migration) | All | ✅ |
 | 9-Q | v1.0.0 Mac App Store ship blockers: FreeTierIAPManager swap + .storekit / dangling-dep removal + INFOPLIST_KEY display name / category / copyright + README / user_guide release-ready + .gitignore cleanup | Free | ✅ |
+| 9-R | Post-rename cleanup + main-window identification: App Name Definition (Harmonia Player) + post-rename config (TEST_HOST + shared scheme) + identify main window by `main` identifier (not display title) | Free | ⬜ |
 
 ### Goals (v1.0.0)
 
@@ -3568,3 +3569,156 @@ embedded `.storekit`, and without the dangling dependency.
 | 1 | HP | `fix(slice 9-q)` | swap to FreeTierIAPManager and clean v1.0.0 Mac App Store ship blockers |
 | 2 | HP | `docs(slice 9-q)` | mark v1.0.0 release-ready and clarify static-vs-sync lyrics in README and user_guide |
 | 3 | HP | `chore(slice 9-q)` | clean .gitignore of shell here-doc fragments left in since slice 1a |
+
+## Slice 9-R: Post-Rename Cleanup + Main-Window Identification ⬜
+
+**Tier:** Free (all v1.0.0 builds)
+**Repo scope:** HarmoniaPlayer only — no HarmoniaCore change
+**Release blocker:** Yes — found during the v1.0.0 Release smoke test; fixed before submission
+
+### 1. Problem
+
+During the v1.0.0 Release archive smoke test, opening the MiniPlayer no longer
+hides the main window — both windows stay visible. Closing the MiniPlayer also
+fails to bring the main window back to the front.
+
+### 2. Root cause
+
+Four sites locate the main window by matching its on-screen display **title**
+against the literal string `"HarmoniaPlayer"` (no space):
+
+| # | File : line | Operation |
+| --- | --- | --- |
+| 1 | `…/macOS/Free/Views/HarmoniaPlayerCommands.swift` : 105 | open MiniPlayer → `orderOut` the main window |
+| 2 | `…/macOS/Free/Views/MiniPlayerView.swift` : 96 | `makeKeyAndOrderFront` (already carries an `identifier == "main"` clause that never matched) |
+| 3 | `…/macOS/Free/Views/MiniPlayerView.swift` : 203 | close MiniPlayer → `makeKeyAndOrderFront` the main window |
+| 4 | `…/Shared/Views/PlayerView.swift` : 125 | main-window targeting |
+
+Slice 9-Q (`cc1725b`) set `INFOPLIST_KEY_CFBundleDisplayName = "Harmonia Player"`.
+The main `WindowGroup` carries no explicit window title, so its title tracks
+the app display name — which became `"Harmonia Player"` (with a space). The
+hard-coded predicate `$0.title == "HarmoniaPlayer"` stopped matching, and all
+four operations silently became no-ops. The defect was introduced in 9-Q and
+surfaced only in the Release smoke test.
+
+Identifying a window by its display title is fragile — it breaks on rename or
+localization. The main window is the only top-level window without a stable
+identifier; the MiniPlayer (`"mini-player"`) and Equalizer
+(`"equalizer-window"`) windows already carry explicit identifiers via
+`Window(id:)`. The product rename to `"Harmonia Player"` (committed in the
+AppIcon commit) belongs to the same naming change but concerns the `.app`
+bundle name and did not independently cause this window defect.
+
+### 3. App Name Definition (CANONICAL — FROZEN)
+
+The produced application is named **Harmonia Player**. This is the canonical
+naming, frozen as of this slice. The product rename already shipped
+(`PRODUCT_NAME` set in the AppIcon commit); this section is its authoritative
+documentation.
+
+| Layer | Value |
+| --- | --- |
+| `PRODUCT_NAME` | `Harmonia Player` |
+| `CFBundleDisplayName` | `Harmonia Player` |
+| Built artifact (`.app`) | `Harmonia Player.app` |
+| Bundle Identifier | `io.github.oneofwolvesbilly.HarmoniaPlayer` (unchanged) |
+
+The tracked shared scheme `HarmoniaPlayer.xcscheme` mirrors this `.app` name in
+its `BuildableName` references.
+
+Window identification convention (FROZEN):
+
+| Window | SwiftUI scene | Stable identifier |
+| --- | --- | --- |
+| Main window | `WindowGroup { ContentView() }` | `main` |
+| MiniPlayer | `Window("Mini Player", id: "mini-player")` | `mini-player` |
+| Equalizer | `Window("Equalizer", id: "equalizer-window")` | `equalizer-window` |
+| File Info | `WindowGroup(for: Track.ID.self)` | keyed by `Track.ID` |
+
+**Rule: top-level windows are located and operated on by their stable
+`NSWindow.identifier`, never by display title.**
+
+### 4. Scope
+
+The window-identification defect, plus two tracked project references that
+still point at the old bundle name after the rename shipped:
+
+1. **Window identification (fix the defect).**
+   - Assign the main window the stable identifier `"main"` via an `NSWindow`
+     accessor attached to `ContentView` (the main `WindowGroup` root).
+   - Replace all four `$0.title == "HarmoniaPlayer"` predicates with
+     `$0.identifier?.rawValue == "main"`.
+   - Drop the now-redundant title fallback at `MiniPlayerView.swift` : 96.
+2. **`TEST_HOST` correction.** After the rename the app builds as
+   `Harmonia Player.app/Contents/MacOS/Harmonia Player`, but `TEST_HOST` still
+   points at the old `HarmoniaPlayer.app/…/HarmoniaPlayer` path, so the unit
+   test bundle fails to launch under ⌘U. Update both unit-test configurations.
+3. **Shared scheme `BuildableName`.** The tracked shared scheme
+   `HarmoniaPlayer.xcscheme` carries three `BuildableName = "HarmoniaPlayer.app"`
+   references (Build, Launch, and Profile actions). Xcode already re-resolved
+   them to `"Harmonia Player.app"` after the rename; commit the regenerated
+   scheme so a fresh clone gets a scheme consistent with the renamed product.
+   The scheme is regenerated by Xcode, never hand-edited.
+
+### 5. Files
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/ContentView.swift` | Attach an `NSWindow` accessor that sets `window.identifier = "main"` on the main window. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/HarmoniaPlayerCommands.swift` | Line 105 predicate → `$0.identifier?.rawValue == "main"`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/macOS/Free/Views/MiniPlayerView.swift` | Lines 96 and 203 predicates → `$0.identifier?.rawValue == "main"`; drop the redundant title fallback at line 96. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer/Shared/Views/PlayerView.swift` | Line 125 predicate → `$0.identifier?.rawValue == "main"`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/project.pbxproj` | Update `TEST_HOST` in the Debug and Release unit-test configurations from `…/HarmoniaPlayer.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/HarmoniaPlayer` to `…/Harmonia Player.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Harmonia Player`. |
+| Modify | `App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj/xcshareddata/xcschemes/HarmoniaPlayer.xcscheme` | Three `BuildableName` references update from `HarmoniaPlayer.app` to `Harmonia Player.app` (Build, Launch, Profile actions); regenerated by Xcode, not hand-edited. |
+
+### 6. TDD matrix
+
+| Behaviour under test | Test | Test File Decision |
+| --- | --- | --- |
+| Open MiniPlayer hides the main window; close restores it | Manual smoke verification (see §7) | N/A — manual smoke |
+
+`orderOut` / `makeKeyAndOrderFront` are AppKit side effects on live `NSWindow`
+instances enumerated from `NSApp.windows`. A meaningful unit test requires
+abstracting window enumeration and ordering behind a `WindowControlling` port;
+that abstraction is **deferred to v1.1.0** as a testability refinement, not a
+v1.0.0 behaviour change. 9-R is therefore verified by manual smoke
+verification, consistent with how live AppKit window behaviour is checked
+elsewhere in this project.
+
+### 7. Manual smoke verification (on the Release `.app`)
+
+1. Launch the Release `.app` extracted from Organizer (not Xcode Run).
+2. Open the MiniPlayer → main window hides, MiniPlayer remains visible.
+3. Close the MiniPlayer → main window returns to the front.
+4. Repeat steps 2–3 three times → no orphaned or stuck-hidden main window.
+5. Run ⌘U → the unit-test bundle launches (confirms the `TEST_HOST` fix).
+
+### 8. Doc updates (folded into the code commit)
+
+| Status | Doc | Change |
+| --- | --- | --- |
+| Modify | `development_guide.md` | Add an "App Identity & Window Identification" section: the App Name Definition table, the window-identifier table, and the identify-by-identifier rule. |
+
+No public API change (`api_reference.md` unchanged); no module-boundary change
+(`module_boundary.md` unchanged); no HarmoniaCore change, so the
+`architecture.md` HarmoniaCore five-area audit is not triggered.
+
+### 9. Commit plan
+
+| Order | Repo | Type / Scope | Subject |
+| --- | --- | --- | --- |
+| 1 | HP | `docs(slice 9-r)` | add 9-R post-rename cleanup and main-window identification spec |
+| 2 | HP | `fix(slice 9-r)` | identify main window by stable identifier instead of display title |
+| 3 | HP | `chore(slice 9-r)` | align TEST_HOST and shared scheme with renamed "Harmonia Player" bundle |
+
+The spec commit precedes the code commits (sdd-core Rule 1). Commit 2 is the
+behaviour fix and ships the `development_guide.md` update with it, per the 9-L
+single-commit ship standard. Commit 3 is the rename-consequence config
+housekeeping — the `project.pbxproj` `TEST_HOST` path and the
+`HarmoniaPlayer.xcscheme` `BuildableName` references — kept separate from the
+behaviour fix for commit atomicity.
+
+### 10. Out of scope (deferred to v1.1.0)
+
+- `WindowControlling` port abstraction enabling unit-tested window operations.
+  Architecture unchanged; testability refinement only.
