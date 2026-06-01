@@ -93,7 +93,7 @@ private struct WindowCloseObserver: NSViewRepresentable {
             DispatchQueue.main.async {
                 // Bring Full Player (main WindowGroup) to front.
                 NSApp.windows
-                    .filter { $0.identifier?.rawValue == "main" || $0.title == "HarmoniaPlayer" }
+                    .filter { $0.identifier?.rawValue == "main" }
                     .first?
                     .makeKeyAndOrderFront(nil)
             }
@@ -200,7 +200,7 @@ struct MiniPlayerView: View {
             .first { $0.identifier?.rawValue == "mini-player" }?
             .close()
         NSApp.windows
-            .filter { $0.title == "HarmoniaPlayer" }
+            .filter { $0.identifier?.rawValue == "main" }
             .first?
             .makeKeyAndOrderFront(nil)
     }

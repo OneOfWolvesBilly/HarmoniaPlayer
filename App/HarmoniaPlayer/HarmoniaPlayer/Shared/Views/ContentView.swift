@@ -68,6 +68,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 620, minHeight: 480)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(MainWindowIdentitySetter())
         // Propagate live playbackState into the focus system so
         // HarmoniaPlayerCommands can observe it via @FocusedValue.
         // @FocusedObject does not reliably re-evaluate Commands body on
@@ -193,4 +194,22 @@ struct ContentView: View {
 
         NSWorkspace.shared.open(url)
     }
+}
+
+// MARK: - Main window identity
+
+/// Tags the host window with the stable identifier `"main"` so other windows
+/// (MiniPlayer, transport menus) can locate the main window by its
+/// `NSWindow.identifier` instead of its display title. The title tracks the
+/// localized app name and is therefore unreliable for window lookup.
+private struct MainWindowIdentitySetter: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.identifier = NSUserInterfaceItemIdentifier("main")
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }

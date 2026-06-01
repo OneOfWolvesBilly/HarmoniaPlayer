@@ -698,6 +698,34 @@ When the upstream fix lands, this workaround can be removed in one sweep.
 Until then, every new `@MainActor` `final class` added to the codebase
 should ship with `nonisolated deinit { }` from the first commit.
 
+### 8.7 App identity and window identification
+
+The produced application is named **Harmonia Player**. This naming is canonical
+and frozen.
+
+| Layer | Value |
+|-------|-------|
+| `PRODUCT_NAME` | `Harmonia Player` |
+| `CFBundleDisplayName` | `Harmonia Player` |
+| Built artifact (`.app`) | `Harmonia Player.app` |
+| Bundle Identifier | `io.github.oneofwolvesbilly.HarmoniaPlayer` |
+
+Top-level windows are located and operated on by their stable
+`NSWindow.identifier`, **never by display title** — the title tracks the
+localized app name and changes per language and on rename.
+
+| Window | SwiftUI scene | Stable identifier |
+|--------|---------------|-------------------|
+| Main window | `WindowGroup { ContentView() }` | `main` |
+| MiniPlayer | `Window("Mini Player", id: "mini-player")` | `mini-player` |
+| Equalizer | `Window("Equalizer", id: "equalizer-window")` | `equalizer-window` |
+| File Info | `WindowGroup(for: Track.ID.self)` | keyed by `Track.ID` |
+
+The MiniPlayer and Equalizer scenes receive their identifier from `Window(id:)`.
+The main `WindowGroup` has no `id:`, so `ContentView` attaches a
+`MainWindowIdentitySetter` (`NSViewRepresentable`) that sets
+`window.identifier = "main"`.
+
 ---
 
 ## 9. Workflow
