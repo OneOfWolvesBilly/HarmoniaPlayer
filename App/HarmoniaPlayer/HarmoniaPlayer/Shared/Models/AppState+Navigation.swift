@@ -120,6 +120,11 @@ extension AppState {
     /// No-op if `currentTrack` is `nil`.
     func trackDidFinishPlaying() async {
         guard let lastID = lastPlayedTrackID else { return }
+        guard let playingIndex = playlists.firstIndex(where: { $0.id == playingPlaylistID }) else {
+            await stop()
+            currentTrack = nil
+            return
+        }
         switch repeatMode {
         case .off:
             if isShuffled {
@@ -129,7 +134,7 @@ extension AppState {
                 var nextIndex = shuffleQueueIndex + 1
                 while nextIndex < shuffleQueue.count {
                     guard let trackID = shuffleQueue[safe: nextIndex],
-                          let next = playlists[activePlaylistIndex].tracks.first(where: { $0.id == trackID })
+                          let next = playlists[playingIndex].tracks.first(where: { $0.id == trackID })
                     else { nextIndex += 1; continue }
 
                     // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
@@ -171,12 +176,12 @@ extension AppState {
             } else {
                 // Normal mode: skip inaccessible tracks and format-gated tracks
                 // (when paywallDismissedThisSession is true).
-                guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
+                guard let currentIndex = playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
                 else { return }
                 var skipped: [String] = []
                 var nextIndex = currentIndex + 1
-                while nextIndex < playlists[activePlaylistIndex].tracks.count {
-                    let next = playlists[activePlaylistIndex].tracks[nextIndex]
+                while nextIndex < playlists[playingIndex].tracks.count {
+                    let next = playlists[playingIndex].tracks[nextIndex]
 
                     // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
@@ -215,14 +220,14 @@ extension AppState {
         case .all:
             // Wrap around skipping inaccessible tracks and format-gated tracks
             // (when paywallDismissedThisSession is true).
-            guard let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == lastID })
+            guard let currentIndex = playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
             else { return }
-            let count = playlists[activePlaylistIndex].tracks.count
+            let count = playlists[playingIndex].tracks.count
             var nextIndex = (currentIndex + 1) % count
             var attempts = 0
             var skipped: [String] = []
             while attempts < count {
-                let next = playlists[activePlaylistIndex].tracks[nextIndex]
+                let next = playlists[playingIndex].tracks[nextIndex]
 
                 // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
                 // Silently skip format-gated tracks if user dismissed paywall this session.
@@ -261,7 +266,7 @@ extension AppState {
             await stop()
             currentTrack = nil
         case .one:
-            guard let current = playlists[activePlaylistIndex].tracks.first(where: { $0.id == lastID })
+            guard let current = playlists[playingIndex].tracks.first(where: { $0.id == lastID })
             else { return }
             if !current.isAccessible {
                 failedTrackName = displayName(for: current)

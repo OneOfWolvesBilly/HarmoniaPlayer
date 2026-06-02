@@ -229,6 +229,46 @@ final class AppStateNavigationTests: XCTestCase {
         XCTAssertEqual(fake.loadCallCount, 2)
     }
 
+    // MARK: - trackDidFinishPlaying: playing playlist differs from active
+
+    /// Finishing the last track of the *playing* playlist while a *different*
+    /// playlist is selected must still stop and clear now-playing state.
+    func testTrackDidFinish_PlayingDiffersFromActive_RepeatOff_StopsAndClears() async {
+        let (sut, _) = makeSUT()
+        await sut.load(urls: [makeURL("a1"), makeURL("a2")])   // PL1 (index 0)
+        sut.newPlaylist(name: "PL2")                            // PL2 (index 1), now active
+        await sut.load(urls: [makeURL("b1"), makeURL("b2")])
+        await sut.play(trackID: sut.playlist.tracks[1].id)      // play last track of PL2
+
+        sut.switchPlaylist(to: 0)                               // browse PL1; PL2 still playing
+        await sut.trackDidFinishPlaying()
+
+        XCTAssertEqual(sut.playbackState, .stopped)
+        XCTAssertNil(sut.currentTrack)
+    }
+
+    /// Repeat-one must replay the *playing* track even when a different
+    /// playlist is selected.
+    func testTrackDidFinish_PlayingDiffersFromActive_RepeatOne_Replays() async {
+        let (sut, fake) = makeSUT()
+        await sut.load(urls: [makeURL("a1"), makeURL("a2")])   // PL1 (index 0)
+        sut.newPlaylist(name: "PL2")                            // PL2 (index 1), now active
+        await sut.load(urls: [makeURL("b1"), makeURL("b2")])
+        await sut.play(trackID: sut.playlist.tracks[0].id)      // play first track of PL2
+        sut.cycleRepeatMode() // .off → .all
+        sut.cycleRepeatMode() // .all → .one
+        let playingURL = sut.currentTrack?.url
+        let loadsBefore = fake.loadCallCount
+
+        sut.switchPlaylist(to: 0)                               // browse PL1; PL2 still playing
+        await sut.trackDidFinishPlaying()
+
+        XCTAssertEqual(sut.currentTrack?.url, playingURL)
+        XCTAssertEqual(sut.playbackState, .playing)
+        XCTAssertEqual(fake.loadCallCount, loadsBefore + 1,
+                       "repeat-one must reload and replay the playing track")
+    }
+
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
     nonisolated deinit {}
 }
