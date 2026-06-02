@@ -505,9 +505,9 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Step 12: Persist replayGainMode and selectedLanguage whenever they
-        // change. SettingsView must not call saveState() directly — persistence
-        // is AppState's responsibility.
+        // Step 12: Persist replayGainMode, selectedLanguage, repeatMode, and
+        // isShuffled whenever they change. Callers must not call saveState()
+        // directly — persistence is AppState's responsibility.
         $replayGainMode
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -515,6 +515,18 @@ final class AppState: ObservableObject {
             .store(in: &cancellables)
 
         $selectedLanguage
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.saveState() }
+            .store(in: &cancellables)
+        
+        $repeatMode
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.saveState() }
+            .store(in: &cancellables)
+
+        $isShuffled
             .dropFirst()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.saveState() }

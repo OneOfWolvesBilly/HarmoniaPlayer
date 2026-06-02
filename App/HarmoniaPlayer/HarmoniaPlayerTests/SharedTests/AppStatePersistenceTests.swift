@@ -237,18 +237,33 @@ final class AppStatePersistenceTests: XCTestCase {
                        "replayGainMode must be persisted automatically via Combine sink")
     }
 
-    /// Changing `selectedLanguage` must trigger automatic persistence via its
-    /// Combine sink — SettingsView must NOT need to call saveState() directly.
-    func testSelectedLanguage_AutoSaves_ViaCombineSink() async throws {
-        // When: change selectedLanguage without calling saveState()
-        sut.selectedLanguage = "zh-Hant"
+    /// Changing `repeatMode` must trigger automatic persistence via its
+    /// Combine sink — toggling repeat must NOT require an explicit saveState() call.
+    func testRepeatMode_AutoSaves_ViaCombineSink() async throws {
+        // When: change repeatMode without calling saveState()
+        sut.repeatMode = .one
 
         // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
         try await Task.sleep(nanoseconds: 50_000_000)
 
         // Then: a fresh AppState backed by the same UserDefaults reads back the value
         let restored = makeRestoredAppState()
-        XCTAssertEqual(restored.selectedLanguage, "zh-Hant",
-                       "selectedLanguage must be persisted automatically via Combine sink")
+        XCTAssertEqual(restored.repeatMode, .one,
+                       "repeatMode must be persisted automatically via Combine sink")
+    }
+
+    /// Changing `isShuffled` must trigger automatic persistence via its
+    /// Combine sink — toggling shuffle must NOT require an explicit saveState() call.
+    func testShuffleMode_AutoSaves_ViaCombineSink() async throws {
+        // When: change isShuffled without calling saveState()
+        sut.isShuffled = .on
+
+        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        // Then: a fresh AppState backed by the same UserDefaults reads back the value
+        let restored = makeRestoredAppState()
+        XCTAssertTrue(restored.isShuffled,
+                      "isShuffled must be persisted automatically via Combine sink")
     }
 }
