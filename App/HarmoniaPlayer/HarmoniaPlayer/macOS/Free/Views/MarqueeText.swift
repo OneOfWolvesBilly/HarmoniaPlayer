@@ -15,8 +15,9 @@
 //  - If text overflows, animates a continuous left-scroll loop:
 //      1. Pause (hp.marqueePause seconds) at the start.
 //      2. Scroll left until the text end is visible.
-//      3. Instant reset to start position.
-//      4. Repeat.
+//      3. Pause (hp.marqueePause seconds) at the end.
+//      4. Instant reset to start position.
+//      5. Repeat.
 //  - Scroll speed and pause duration read from @AppStorage so SettingsView
 //    and the right-click popover changes take effect immediately.
 //  - No import HarmoniaCore.
@@ -111,8 +112,11 @@ struct MarqueeText: View {
             try? await Task.sleep(nanoseconds: animNanos)
             guard !Task.isCancelled else { return }
 
+            // Pause at the fully-scrolled end so the tail is readable.
+            try? await Task.sleep(nanoseconds: pauseNanos)
+            guard !Task.isCancelled else { return }
+
             await MainActor.run { offset = 0 }
-            try? await Task.sleep(nanoseconds: 200_000_000)
         }
     }
 }
