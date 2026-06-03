@@ -173,4 +173,81 @@ final class EQCoordinatorTests: XCTestCase {
         XCTAssertEqual(fakeService.lastSetEnabled, false,
                        "EQService must receive setEnabled(false) so audio bypasses the EQ node")
     }
+
+    // MARK: - Load validation and named-only persistence
+
+    /// A persisted `currentPresetName` that resolves to no built-in or
+    /// custom preset must not survive load: the picker would otherwise
+    /// show a selection with no matching option (a phantom). The
+    /// coordinator must clear the name to nil and reset the curve to flat.
+    func testEQCoordinator_InitWithUnresolvableName_ResetsToCustomFlat() {
+        store.save(EQPersistedState(
+            isEnabled: true,
+            preamp: 3,
+            bandGains: Array(repeating: 6, count: 10),
+            currentPresetName: "Ghost",
+            customPresets: []
+        ))
+
+        let reloaded = EQCoordinator(service: FakeEQService(), store: store)
+
+        XCTAssertNil(reloaded.currentPresetName,
+                     "An unresolvable persisted preset name must be cleared to nil on load")
+        XCTAssertEqual(reloaded.bandGains, EQPersistedState.defaults.bandGains,
+                       "Band gains must reset to flat when the persisted name does not resolve")
+        XCTAssertEqual(reloaded.preamp, EQPersistedState.defaults.preamp,
+                       "Preamp must reset to flat when the persisted name does not resolve")
+    }
+
+    /// A persisted name that resolves to a built-in preset must be
+    /// preserved, and the live curve must come from that preset so the
+    /// picker label always matches the curve — not from stale persisted
+    /// band data.
+    func testEQCoordinator_InitWithValidBuiltinName_RestoresPresetCurve() {
+        let rock = EQPresets.builtin.first { $0.name == "Rock" }!
+        let expectedGains = rock.bands.map { $0.gain }
+        store.save(EQPersistedState(
+            isEnabled: false,
+            preamp: 0,
+            bandGains: Array(repeating: -5, count: 10),  // deliberately not Rock's curve
+            currentPresetName: "Rock",
+            customPresets: []
+        ))
+
+        let reloaded = EQCoordinator(service: FakeEQService(), store: store)
+
+        XCTAssertEqual(reloaded.currentPresetName, "Rock",
+                       "A valid built-in preset name must be preserved on load")
+        XCTAssertEqual(reloaded.bandGains, expectedGains,
+                       "The live curve must come from the resolved preset, not stale persisted bands")
+    }
+
+    /// Editing a band moves the live state to custom (no named preset).
+    /// Only named presets persist their curve, so the unsaved custom
+    /// curve must not reach disk: the store must hold flat band data.
+    func testEQCoordinator_CustomEdit_PersistsFlatBands() {
+        sut.selectPreset("Rock")
+        sut.setBand(index: 3, gain: 6)  // -> custom state, triggers persist()
+
+        let persisted = store.load()
+
+        XCTAssertEqual(persisted.bandGains, EQPersistedState.defaults.bandGains,
+                       "An unsaved custom curve must not be persisted; persisted bands must be flat")
+        XCTAssertNil(persisted.currentPresetName,
+                     "Custom state must not persist a preset name")
+    }
+
+    /// End to end: a custom (unsaved) curve must not survive a relaunch.
+    /// A fresh coordinator over the same store loads flat with no preset.
+    func testEQCoordinator_CustomEdit_DoesNotSurviveReload() {
+        sut.selectPreset("Rock")
+        sut.setBand(index: 3, gain: 6)  // -> custom state, triggers persist()
+
+        let reloaded = EQCoordinator(service: FakeEQService(), store: store)
+
+        XCTAssertNil(reloaded.currentPresetName,
+                     "A custom (unsaved) state must reload with no preset selected")
+        XCTAssertEqual(reloaded.bandGains, EQPersistedState.defaults.bandGains,
+                       "A custom (unsaved) curve must not survive a reload")
+    }
 }

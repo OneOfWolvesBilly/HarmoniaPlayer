@@ -119,11 +119,27 @@ final class EQCoordinator: ObservableObject {
         self.currentPresetName = state.currentPresetName
         self.customPresets = state.customPresets
 
-        // Push the loaded state to the service so the audio chain
+        // Resolve the persisted preset name against the available
+        // presets. Only a named preset persists its curve: if the name
+        // resolves, the live curve comes from that preset so the picker
+        // label always matches it. If the name is nil or no longer
+        // resolves (e.g. its custom preset was removed), fall back to a
+        // flat custom state so the picker never selects a preset that
+        // does not exist.
+        if let name = currentPresetName, let preset = preset(named: name) {
+            bandGains = preset.bands.map { clamp($0.gain) }
+            preamp = clamp(preset.preamp)
+        } else {
+            currentPresetName = nil
+            bandGains = EQPersistedState.defaults.bandGains
+            preamp = EQPersistedState.defaults.preamp
+        }
+
+        // Push the resolved state to the service so the audio chain
         // matches the coordinator's published state from t=0.
-        service.setEnabled(state.isEnabled)
-        service.setPreamp(state.preamp)
-        service.setBandGains(state.bandGains)
+        service.setEnabled(isEnabled)
+        service.setPreamp(preamp)
+        service.setBandGains(bandGains)
     }
 
     // MARK: - Mutators
@@ -214,10 +230,19 @@ final class EQCoordinator: ObservableObject {
     }
 
     private func persist() {
+        // Only a named preset persists its curve. When the live state is
+        // custom (no named preset), persist a flat curve so an unsaved
+        // edit does not survive a relaunch.
+        let persistedBands = currentPresetName == nil
+            ? EQPersistedState.defaults.bandGains
+            : bandGains
+        let persistedPreamp = currentPresetName == nil
+            ? EQPersistedState.defaults.preamp
+            : preamp
         store.save(EQPersistedState(
             isEnabled: isEnabled,
-            preamp: preamp,
-            bandGains: bandGains,
+            preamp: persistedPreamp,
+            bandGains: persistedBands,
             currentPresetName: currentPresetName,
             customPresets: customPresets
         ))
