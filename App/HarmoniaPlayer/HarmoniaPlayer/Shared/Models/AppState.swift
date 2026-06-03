@@ -126,6 +126,11 @@ final class AppState: ObservableObject {
     /// Derived from feature flags. UI can observe this for Pro gating.
     @Published private(set) var isProUnlocked: Bool
 
+    /// Read-only mirror of `eqCoordinator.isEnabled` so SwiftUI views bound to
+    /// `AppState` re-render when EQ enable is toggled. The coordinator remains
+    /// the source of truth; this property is fed by a sink in `init`.
+    @Published private(set) var eqEnabled: Bool
+
     // MARK: - Playlist State
 
     /// All playlists managed by the app.
@@ -461,6 +466,11 @@ final class AppState: ObservableObject {
                 store: EQPersistenceStore(defaults: userDefaults)
             )
 
+        // Mirror the EQ coordinator's enabled state for the toolbar button.
+        // The coordinator stays the source of truth; eqEnabled is a read-only
+        // UI mirror so PlayerView re-renders when Enable is toggled.
+        self.eqEnabled = self.eqCoordinator.isEnabled
+
         // Step 5: Store UndoManager.
         // Default parameter uses nil instead of UndoManager() to avoid
         // calling a @MainActor initializer from a nonisolated context (Swift 6).
@@ -541,6 +551,15 @@ final class AppState: ObservableObject {
             .sink { [weak self] track in
                 self?.updateLyricsResolution(for: track)
             }
+            .store(in: &cancellables)
+
+        // Step 13b: Keep the eqEnabled mirror in sync after launch. dropFirst
+        // skips the value at subscription time; the initial mirror is set in
+        // Step 4b. Delivered on RunLoop.main so the toolbar button re-renders.
+        self.eqCoordinator.$isEnabled
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.eqEnabled = $0 }
             .store(in: &cancellables)
 
         // Step 14: Construct the NowPlayingCoordinator (Slice 9-L).

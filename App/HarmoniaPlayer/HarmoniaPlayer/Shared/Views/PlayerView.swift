@@ -107,7 +107,7 @@ struct PlayerView: View {
                 } label: {
                     Image(systemName: "slider.vertical.3")
                         .font(.system(size: 16))
-                        .foregroundStyle(appState.eqCoordinator.isEnabled
+                        .foregroundStyle(appState.eqEnabled
                                          ? Color.accentColor
                                          : .secondary)
                 }

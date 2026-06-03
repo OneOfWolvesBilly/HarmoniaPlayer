@@ -480,6 +480,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `isProUnlocked` | `Bool` | read | Pro features unlocked |
+| `eqEnabled` | `Bool` | read | Mirror of `eqCoordinator.isEnabled`; lets the toolbar EQ button re-render when Enable is toggled |
 | `featureFlags` | `CoreFeatureFlags` | read | Tier-specific capabilities |
 
 #### Playlist State
@@ -932,7 +933,7 @@ nonisolated enum EQSchemaMigrator {
 
 **Location:** `Shared/Models/EQCoordinator.swift`
 
-**Purpose:** `@MainActor` `ObservableObject` that owns all EQ-related observable state for the UI layer. Coordinates between `EQService` (the Application Layer view of HarmoniaCore's EQ control surface) and `EQPersistenceStore`. Slice 9-K. Lives in `Shared/Models/` (not `Services/`) because, like `AppState`, it is a state-bearing observable object rather than a stateless service. AppState holds a single `let eqCoordinator: EQCoordinator` and views read EQ state via `appState.eqCoordinator.…`; AppState itself has no EQ-specific `@Published` properties or methods.
+**Purpose:** `@MainActor` `ObservableObject` that owns all EQ-related observable state for the UI layer. Coordinates between `EQService` (the Application Layer view of HarmoniaCore's EQ control surface) and `EQPersistenceStore`. Slice 9-K. Lives in `Shared/Models/` (not `Services/`) because, like `AppState`, it is a state-bearing observable object rather than a stateless service. AppState holds a single `let eqCoordinator: EQCoordinator` and views read EQ state via `appState.eqCoordinator.…`; the one exception is `eqEnabled` — a read-only `@Published` mirror of `eqCoordinator.isEnabled` that lets `AppState`-bound views (the toolbar EQ button) re-render when Enable is toggled.
 
 ```swift
 @MainActor

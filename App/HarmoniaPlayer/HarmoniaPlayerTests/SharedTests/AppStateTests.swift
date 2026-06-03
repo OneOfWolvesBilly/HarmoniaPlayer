@@ -6,6 +6,7 @@
 //
 
 import XCTest
+import Combine
 @testable import Harmonia_Player
 
 /// Unit tests for AppState wiring
@@ -304,5 +305,35 @@ final class AppStateTests: XCTestCase {
         // Then: No metadata reads triggered by init
         XCTAssertEqual(knownFake.readMetadataCallCount, 0,
                        "AppState.init must not call readMetadata — no eager fetch in Slice 1")
+    }
+
+    // MARK: - Tests: EQ enabled mirror
+
+    func testEQEnabled_InitialValue_MatchesCoordinator() {
+        let sut = makeSUT()
+
+        XCTAssertEqual(sut.eqEnabled, sut.eqCoordinator.isEnabled,
+                       "eqEnabled must mirror the coordinator's isEnabled at init")
+    }
+
+    func testEQEnabled_ReflectsCoordinatorToggle() async {
+        let sut = makeSUT()
+        let toggled = !sut.eqCoordinator.isEnabled
+
+        // Observe the mirror directly so the assertion does not depend on
+        // queue ordering. The sink is delivered on RunLoop.main; awaiting
+        // (rather than a synchronous wait that spins the run loop) lets the
+        // main actor make progress without a blocking spin.
+        let mirrored = expectation(description: "eqEnabled mirrors the toggle")
+        let cancellable = sut.$eqEnabled
+            .dropFirst()
+            .sink { if $0 == toggled { mirrored.fulfill() } }
+
+        sut.eqCoordinator.setEnabled(toggled)
+        await fulfillment(of: [mirrored], timeout: 1.0)
+        cancellable.cancel()
+
+        XCTAssertEqual(sut.eqEnabled, toggled,
+                       "eqEnabled must update when the coordinator toggles isEnabled")
     }
 }
