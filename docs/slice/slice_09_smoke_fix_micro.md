@@ -22,7 +22,7 @@ Classification principle (why these are separate slices, not folded):
 | 9-S | Persist repeat and shuffle mode on change | Free | ✅ |
 | 9-T | Resolve natural completion against the playing playlist | Free | ✅ |
 | 9-U | Pause marquee at both ends | Free | ✅ |
-| 9-V | EQ persistence (named-only) + button tint live update | Free | ⬜ |
+| 9-V | EQ persistence (named-only) + load fallback to Flat + button tint live update | Free | ⬜ |
 
 Deferred (not a slice): **#5** untracked natural-completion `Task` — see §5.
 Withdrawn: the original 9-T Part B (mini-player browse-only switch) — see 9-T.
@@ -216,7 +216,8 @@ signal and the button tint stays bound to it (blue = enabled, not window-open).
   cases.
 
 Net: a named preset persists and restores; "—" is session-live but loads flat
-next launch; an unresolvable name loads as "—" + flat → phantom impossible.
+next launch; an unresolvable name loads as "—" + flat → phantom impossible. (Part C below
+revises this fallback to resolve to the built-in "Flat" preset instead of `nil`.)
 
 ### Part B — toolbar tint updates when the enabled state changes (EQ-2)
 
@@ -243,6 +244,67 @@ EQ-button tint live. (Launch tint is correct — it reflects the persisted
   UI mirror (keeps Views → AppState).
 - `PlayerView` — bind the EQ button tint to `appState.eqEnabled`
   (was `appState.eqCoordinator.isEnabled`). Semantics unchanged: blue = enabled.
+
+### Part C — load fallback resolves to the Flat preset (EQ-3)
+
+**Problem (UX, not a defect).** Part A's load fallback resolves an unsaved
+("—") or unresolvable persisted state to `currentPresetName = nil` + a flat
+curve. On relaunch the state reads "EQ enabled, curve flat, picker shows —".
+Because the first built-in preset "Flat" *is* an all-zero curve, this landing
+is audibly identical to Flat yet the picker claims nothing is selected — the
+"why is it on and flat with nothing chosen" mismatch reported in smoke testing.
+
+**Decision.** Land the fallback on the built-in **"Flat"** preset instead of
+`nil`. The curve is unchanged (still all-zero); only `currentPresetName` moves
+from `nil` to `"Flat"`, so the picker shows Flat and the "—" sentinel no longer
+appears at launch. `isEnabled` is **not** touched — enable and preset selection
+are independent dimensions (matching reference players, where the EQ on/off
+switch is independent of the chosen curve), so the user's on/off intent is
+preserved.
+
+**Fix (`EQCoordinator.init`).** In the fallback branch (persisted name is `nil`
+or does not resolve), set `currentPresetName = "Flat"` and take the curve from
+`preset(named: "Flat")` (bands clamped, preamp clamped). If "Flat" is somehow
+absent from the built-ins (defensive; it ships in `EQPresets.builtin`), fall
+back to the prior `nil` + flat-defaults path so init never traps. `init` does
+**not** write the store — the resolved "Flat" lands in UserDefaults on the next
+mutator, so the no-persist-on-init invariant is unchanged. `EQView` and
+`persist()` need no change: `currentPresetName == "Flat"` selects the built-in
+tag (the "—" sentinel renders only when the name is `nil`), and `persist()`'s
+non-nil branch writes the live (flat) curve.
+
+**Tests (Part C).** Revises two Part A expectations and adds one:
+
+| # | Behaviour under test | SUT | Test File Decision |
+| --- | --- | --- | --- |
+| V1′ | Constructing with an unresolvable persisted name → `currentPresetName == "Flat"`, bands/preamp flat (rename `…ResetsToCustomFlat` → `…ResolvesToFlatPreset`; supersedes Part A's `== nil`) | `EQCoordinator` | Extend `EQCoordinatorTests.swift` |
+| V4′ | After a custom edit, a fresh coordinator over the same store loads flat + `currentPresetName == "Flat"` (supersedes Part A's `== nil`) | `EQCoordinator` | Extend `EQCoordinatorTests.swift` |
+| V7 | Constructing with no persisted preset name (name absent) → `currentPresetName == "Flat"`, bands/preamp flat | `EQCoordinator` | Extend `EQCoordinatorTests.swift` |
+
+V2 (valid name restores its curve), V3 (custom edit persists flat bands), and
+V5 / V6 (Part B) are unaffected.
+
+**Files (Part C).**
+
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `Shared/Models/EQCoordinator.swift` | init fallback branch resolves to "Flat" instead of nil |
+| Modify | `HarmoniaPlayerTests/SharedTests/EQCoordinatorTests.swift` | revise V1 / V4 expectations to "Flat"; add V7 |
+| Modify | `docs/api_reference.md` | §5.8 — load fallback resolves to the built-in Flat preset (not nil) |
+
+**Commit (Part C).**
+
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 3 | `fix(slice 9-v)` | resolve unsaved or unresolvable eq state to the flat preset on load |
+
+**Non-goals / deferred (Part C).**
+- v1.1.0: on a normal quit (⌘Q) with an unsaved custom curve, prompt to save it
+  as a preset — save → reloadable named preset; decline → Flat. An abnormal
+  termination (no prompt path) falls back to this Part C load-time Flat
+  resolution. Tracked for v1.1.0; not in v1.0.
+- `init` gains no new persist side effect — the resolved name lands on the next
+  mutator, not during construction.
 
 ### TDD matrix
 | # | Behaviour under test | SUT | Test File Decision |
