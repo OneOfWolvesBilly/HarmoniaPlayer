@@ -120,15 +120,19 @@ final class EQCoordinator: ObservableObject {
         self.customPresets = state.customPresets
 
         // Resolve the persisted preset name against the available
-        // presets. Only a named preset persists its curve: if the name
-        // resolves, the live curve comes from that preset so the picker
-        // label always matches it. If the name is nil or no longer
-        // resolves (e.g. its custom preset was removed), fall back to a
-        // flat custom state so the picker never selects a preset that
-        // does not exist.
+        // presets. A name that resolves drives the live curve, so the
+        // picker label always matches it. A nil or unresolvable name
+        // (e.g. its custom preset was removed) resolves to the built-in
+        // "Flat" preset: the curve is flat and the picker reads Flat
+        // instead of an empty selection. If "Flat" is somehow absent,
+        // fall back to a flat custom state so init never traps.
         if let name = currentPresetName, let preset = preset(named: name) {
             bandGains = preset.bands.map { clamp($0.gain) }
             preamp = clamp(preset.preamp)
+        } else if let flat = preset(named: "Flat") {
+            currentPresetName = "Flat"
+            bandGains = flat.bands.map { clamp($0.gain) }
+            preamp = clamp(flat.preamp)
         } else {
             currentPresetName = nil
             bandGains = EQPersistedState.defaults.bandGains

@@ -177,10 +177,11 @@ final class EQCoordinatorTests: XCTestCase {
     // MARK: - Load validation and named-only persistence
 
     /// A persisted `currentPresetName` that resolves to no built-in or
-    /// custom preset must not survive load: the picker would otherwise
-    /// show a selection with no matching option (a phantom). The
-    /// coordinator must clear the name to nil and reset the curve to flat.
-    func testEQCoordinator_InitWithUnresolvableName_ResetsToCustomFlat() {
+    /// custom preset must not survive load as-is: the picker would
+    /// otherwise show a selection with no matching option (a phantom).
+    /// The coordinator resolves the fallback to the built-in "Flat"
+    /// preset — the curve is flat and the picker reads Flat, not "—".
+    func testEQCoordinator_InitWithUnresolvableName_ResolvesToFlatPreset() {
         store.save(EQPersistedState(
             isEnabled: true,
             preamp: 3,
@@ -191,12 +192,12 @@ final class EQCoordinatorTests: XCTestCase {
 
         let reloaded = EQCoordinator(service: FakeEQService(), store: store)
 
-        XCTAssertNil(reloaded.currentPresetName,
-                     "An unresolvable persisted preset name must be cleared to nil on load")
+        XCTAssertEqual(reloaded.currentPresetName, "Flat",
+                       "An unresolvable persisted preset name must resolve to the Flat preset on load")
         XCTAssertEqual(reloaded.bandGains, EQPersistedState.defaults.bandGains,
-                       "Band gains must reset to flat when the persisted name does not resolve")
+                       "Band gains must be flat when the fallback resolves to Flat")
         XCTAssertEqual(reloaded.preamp, EQPersistedState.defaults.preamp,
-                       "Preamp must reset to flat when the persisted name does not resolve")
+                       "Preamp must be flat when the fallback resolves to Flat")
     }
 
     /// A persisted name that resolves to a built-in preset must be
@@ -238,16 +239,39 @@ final class EQCoordinatorTests: XCTestCase {
     }
 
     /// End to end: a custom (unsaved) curve must not survive a relaunch.
-    /// A fresh coordinator over the same store loads flat with no preset.
+    /// A fresh coordinator over the same store loads flat and resolves
+    /// the fallback to the Flat preset.
     func testEQCoordinator_CustomEdit_DoesNotSurviveReload() {
         sut.selectPreset("Rock")
         sut.setBand(index: 3, gain: 6)  // -> custom state, triggers persist()
 
         let reloaded = EQCoordinator(service: FakeEQService(), store: store)
 
-        XCTAssertNil(reloaded.currentPresetName,
-                     "A custom (unsaved) state must reload with no preset selected")
+        XCTAssertEqual(reloaded.currentPresetName, "Flat",
+                       "A custom (unsaved) state must reload as the Flat preset")
         XCTAssertEqual(reloaded.bandGains, EQPersistedState.defaults.bandGains,
                        "A custom (unsaved) curve must not survive a reload")
+    }
+
+    /// A persisted state with no preset name (name absent) must resolve
+    /// the fallback to the built-in "Flat" preset, not leave the picker
+    /// empty: flat curve, name reads "Flat".
+    func testEQCoordinator_InitWithNoPersistedName_ResolvesToFlatPreset() {
+        store.save(EQPersistedState(
+            isEnabled: false,
+            preamp: 2,
+            bandGains: Array(repeating: -4, count: 10),
+            currentPresetName: nil,
+            customPresets: []
+        ))
+
+        let reloaded = EQCoordinator(service: FakeEQService(), store: store)
+
+        XCTAssertEqual(reloaded.currentPresetName, "Flat",
+                       "A missing persisted preset name must resolve to the Flat preset on load")
+        XCTAssertEqual(reloaded.bandGains, EQPersistedState.defaults.bandGains,
+                       "Band gains must be flat when the fallback resolves to Flat")
+        XCTAssertEqual(reloaded.preamp, EQPersistedState.defaults.preamp,
+                       "Preamp must be flat when the fallback resolves to Flat")
     }
 }
