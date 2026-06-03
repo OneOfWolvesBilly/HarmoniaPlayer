@@ -21,7 +21,7 @@ Classification principle (why these are separate slices, not folded):
 | --- | --- | --- | --- |
 | 9-S | Persist repeat and shuffle mode on change | Free | ✅ |
 | 9-T | Resolve natural completion against the playing playlist | Free | ✅ |
-| 9-U | Pause marquee at both ends | Free | ⬜ |
+| 9-U | Pause marquee at both ends | Free | ✅ |
 | 9-V | EQ persistence (named-only) + button tint live update | Free | ⬜ |
 
 Deferred (not a slice): **#5** untracked natural-completion `Task` — see §5.
