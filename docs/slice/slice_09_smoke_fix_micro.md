@@ -23,6 +23,7 @@ Classification principle (why these are separate slices, not folded):
 | 9-T | Resolve natural completion against the playing playlist | Free | ✅ |
 | 9-U | Pause marquee at both ends | Free | ✅ |
 | 9-V | EQ persistence (named-only) + load fallback to Flat + button tint live update | Free | ⬜ |
+| 9-W | Move playlist persistence to an Application Support file + exclude artwork/lyrics (root-fix `hp.playlists` overflow) | Free | ⬜ |
 
 Deferred (not a slice): **#5** untracked natural-completion `Task` — see §5.
 Withdrawn: the original 9-T Part B (mini-player browse-only switch) — see 9-T.
@@ -347,6 +348,149 @@ V5 / V6 (Part B) are unaffected.
 
 ---
 
+## Slice 9-W: Move playlist persistence to a file and exclude artwork/lyrics
+
+Playlist persistence overflows the UserDefaults value-size limit, and the limit
+itself is the root constraint. HarmoniaPlayer-layer only; HarmoniaCore untouched.
+Two parts: **Part A** excludes the only large per-track payloads (artwork,
+lyrics) from the encoded `Track`; **Part B** moves the playlists blob off
+UserDefaults into an Application Support file, so the ~4 MB single-value limit no
+longer applies at any library size.
+
+### Problem
+
+`hp.playlists` reaches ~6.75 MB, over the NSUserDefaults ~4 MB value-size limit;
+writes past the limit fail silently, so playlists — and every other setting
+written in the same `saveState` pass (EQ, language, repeat/shuffle) — can fail to
+persist. Excluding artwork (Part A) fixes the *current* size, but `accessBookmark`
+(~1–2 KB/track) plus metadata still accumulate ~1.5–2.5 KB/track, so a large
+library (~2–3k tracks) would breach the same limit again. The limit is the root
+cause; only moving off UserDefaults (Part B) removes it for good at any size.
+
+### Part A — exclude artwork and lyrics from the encoded Track
+
+**Root cause.** `Track.encode(to:)` writes `artworkData` (cover-image binary,
+tens to hundreds of KB each) and `lyrics` (full text). These are the bulk of the
+per-track size; the other 28 fields (incl. `accessBookmark`) total a few KB.
+
+**Fix.**
+1. `Track.encode(to:)` — stop writing `artworkData` (line 232) and `lyrics`
+   (line 256). The other 28 fields, incl. `accessBookmark` (the security-scoped
+   bookmark that is the only credential for reaching the file after relaunch),
+   are unchanged.
+2. `Track.init(from:)` — both already `decodeIfPresent` → `nil` when absent;
+   verified invariant, no edit.
+3. `AppState.refreshMetadataIfNeeded()` — widen the candidate condition with
+   `|| track.artworkData == nil` (still gated on `isAccessible`); add
+   `playlists[pi].tracks[ti].artworkData = refreshed.artworkData` (and `lyrics`)
+   to the merge, so the existing background re-read restores artwork after launch.
+4. Display sites (`MiniPlayerView` / `FileInfoView` / `PlayerView` /
+   `MPNowPlayingAdapter`) unchanged; the grey placeholder shows briefly until the
+   re-read lands.
+
+### Part B — move playlists to an Application Support file
+
+**Root cause.** `saveState` writes the whole `[Playlist]` JSON into the
+UserDefaults key `hp.playlists` (line 699), subject to the ~4 MB single-value
+limit. A file has no such per-value limit.
+
+**Fix.**
+1. New `PlaylistStore` protocol + `FilePlaylistStore` in `Shared/Services/`
+   (`import Foundation` only), mirroring the existing `EQPersistenceStore` /
+   `LyricsPreferenceStore` injected-store pattern. It is a *storage service*, not
+   a new data model — `Track` / `Playlist` are unchanged.
+   - `func save(_ playlists: [Playlist]) throws` — `JSONEncoder` → **atomic** write
+     to `Application Support/playlists.json` (the sandbox container's Application
+     Support directory, via `FileManager.url(for: .applicationSupportDirectory…)`).
+   - `func load() throws -> [Playlist]?` — read + `JSONDecoder`; missing file →
+     `nil`; corrupt file → throws.
+2. `AppState.init` — inject `playlistStore: PlaylistStore = FilePlaylistStore()`
+   (same default-parameter pattern as the other stores).
+3. `saveState` — replace `userDefaults.set(data, forKey: .playlists)` (line 699)
+   with `try? playlistStore.save(playlists)`. `activePlaylistIndex`, `sortKey`,
+   and the other small keys stay in UserDefaults.
+4. `restoreState` — load playlists from `playlistStore.load()` instead of
+   `hp.playlists`; a `nil` or thrown result (missing / corrupt) is treated as
+   empty playlists (logged, no crash).
+5. **Migration (one-shot).** In `restoreState`, if `playlistStore.load()` returns
+   `nil` (no file yet) but `userDefaults` still holds `hp.playlists`, decode the
+   legacy blob once and use it; the next `saveState` writes the new file (artwork
+   excluded by Part A) and the old `hp.playlists` key is removed to reclaim the
+   space. Thereafter the file is authoritative.
+
+`Track` core fields, bookmark handling, and `restoreState`'s accessibility check
+are unchanged.
+
+### TDD matrix
+
+| # | Behaviour under test | SUT | Test File Decision |
+| --- | --- | --- | --- |
+| W1 | `encode(to:)` output contains no `artworkData` key | `Track` | Extend `TrackTests.swift` |
+| W2 | `encode(to:)` output contains no `lyrics` key | `Track` | Extend `TrackTests.swift` |
+| W3 | encode → decode preserves the metadata fields and `accessBookmark` (bookmark round-trip survives) | `Track` | Extend `TrackTests.swift` |
+| W4 | Decoding a payload with no `artworkData` / `lyrics` keys yields `nil` for both | `Track` | Extend `TrackTests.swift` |
+| W5 | `refreshMetadataIfNeeded()` includes an accessible track whose `artworkData == nil` and fills its artwork from the re-read | `AppState` | Extend `AppStateTests.swift` |
+| W6 | `FilePlaylistStore` save → load round-trips a `[Playlist]` (file written, decoded equal) | `FilePlaylistStore` | New `FilePlaylistStoreTests.swift` |
+| W7 | `load()` returns `nil` when no file exists; throws on a corrupt file | `FilePlaylistStore` | New `FilePlaylistStoreTests.swift` |
+| W8 | `saveState` writes playlists via the store and does **not** write the `hp.playlists` UserDefaults key | `AppState` | Extend `AppStateTests.swift` |
+| W9 | `restoreState` loads playlists from the store | `AppState` | Extend `AppStateTests.swift` |
+| W10 | Migration: no file + legacy `hp.playlists` present → playlists restored, then file written and `hp.playlists` key cleared | `AppState` | Extend `AppStateTests.swift` |
+
+W3 note: `accessBookmark` comes from `url.bookmarkData(.withSecurityScope)`, which
+needs a real file and may not yield a security-scoped bookmark in the unsandboxed
+test host; the test seeds a temp file and asserts the bookmark `encode` produces
+survives the decode (round-trip), not a specific scope. W6–W10 inject a temp
+directory (`FilePlaylistStore`) and a fake `PlaylistStore` + `UserDefaults(suiteName:)`
+(`AppState`).
+
+### Files
+
+| Status | File | Change |
+| --- | --- | --- |
+| New | `Shared/Services/PlaylistStore.swift` | `PlaylistStore` protocol + `FilePlaylistStore` |
+| Modify | `Shared/Models/Track.swift` | `encode(to:)` drops `artworkData` + `lyrics` |
+| Modify | `Shared/Models/AppState.swift` | inject `playlistStore`; `saveState` / `restoreState` use the store; one-shot migration; `refreshMetadataIfNeeded` artwork merge |
+| New | `HarmoniaPlayerTests/SharedTests/FilePlaylistStoreTests.swift` | W6–W7 |
+| Modify | `HarmoniaPlayerTests/SharedTests/TrackTests.swift` | W1–W4 |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStateTests.swift` | W5, W8–W10 |
+| Modify | `docs/api_reference.md` | persistence section: playlists in an Application Support file; artwork/lyrics excluded; one-shot migration |
+
+### Commit plan
+
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 1 | `fix(slice 9-w)` | exclude artwork and lyrics from track persistence |
+| 2 | `fix(slice 9-w)` | move playlist persistence to an application support file |
+
+Part A first (shrinks the blob; artwork restored by the background re-read), then
+Part B (moves it off UserDefaults and migrates the legacy key). Each commit is
+independently green.
+
+### Doc updates
+
+- `api_reference.md` — persistence section: playlists persisted to an Application
+  Support file (not the UserDefaults `hp.playlists` key); persisted `Track`
+  excludes `artworkData` / `lyrics`, restored after launch by
+  `refreshMetadataIfNeeded`; one-shot migration off the legacy key.
+- No `module_boundary.md` change — the existing persistence stores
+  (`EQPersistenceStore` / `LyricsPreferenceStore`) are not listed there either, so
+  `PlaylistStore` follows suit.
+- No `architecture.md` change (no HarmoniaCore surface, no new cross-repo boundary).
+
+### Non-goals
+
+- **Per-playlist files / binary format** (foobar2000 `.fpl` style) — a v1.1.0
+  scale optimisation; v1.0 keeps a single JSON file.
+- **Artwork lazy load** (read on display) — v1.1.0; this slice uses the background
+  re-read, which re-reads each restored track's tags on launch (background,
+  non-blocking).
+- **Moving the small keys** (`activePlaylistIndex`, EQ, language) off UserDefaults
+  — they are tiny; only the large playlists blob moves.
+- **Per-track stats** (`playCount` / `lastPlayedAt` / `rating`) — unused in v1.0,
+  unaffected.
+
+---
+
 ## 5. Deferred — #5 untracked natural-completion `Task`
 
 `startPolling()` fires `Task { await self.trackDidFinishPlaying() }` as an
@@ -366,4 +510,4 @@ so `stop()` / `play()` can cancel it).
 
 Spec frozen and committed first. Then per slice: red (failing tests) →
 `是請執行` → green (minimum code) + doc updates in the same commit → commit.
-Order: **9-S → 9-T (Part A) → 9-U → 9-V.**
+Order: **9-S → 9-T (Part A) → 9-U → 9-V → 9-W.**
