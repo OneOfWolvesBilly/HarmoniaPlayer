@@ -534,4 +534,80 @@ final class TrackTests: XCTestCase {
             + "isAccessible = false (bookmark resolution failure → "
             + "fall through to urlPath path with isAccessible = false).")
     }
+
+    // MARK: - Tests: 9-W Part A — artwork / lyrics excluded from persistence
+
+    /// W1: encoded output must not contain the `artworkData` key.
+    func testTrack_Encode_OmitsArtworkData() throws {
+        var track = Track(url: sampleURL, title: "With Art")
+        track.artworkData = Data([0x01, 0x02, 0x03])
+
+        let data = try JSONEncoder().encode(track)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        XCTAssertNil(json?["artworkData"],
+            "9-W Part A: artworkData must not be written to persistence")
+    }
+
+    /// W2: encoded output must not contain the `lyrics` key.
+    func testTrack_Encode_OmitsLyrics() throws {
+        var track = Track(url: sampleURL, title: "With Lyrics")
+        track.lyrics = [LyricsLanguageVariant(languageCode: "en", text: "la la la")]
+
+        let data = try JSONEncoder().encode(track)
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+
+        XCTAssertNil(json?["lyrics"],
+            "9-W Part A: lyrics must not be written to persistence")
+    }
+
+    /// W3: metadata fields and the security-scoped bookmark survive the
+    /// round-trip even though artwork / lyrics are dropped.
+    func testTrack_Encode_PreservesMetadataAndBookmark() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        var track = Track(url: url, title: "Keep")
+        track.artist      = "Artist"
+        track.album       = "Album"
+        track.albumArtist = "AA"
+        track.year        = 2021
+        track.bitrate     = 320
+        track.fileFormat  = "MP3"
+        track.artworkData = Data([0xFF])
+        track.lyrics      = [LyricsLanguageVariant(languageCode: nil, text: "x")]
+
+        let data = try JSONEncoder().encode(track)
+        let restored = try JSONDecoder().decode(Track.self, from: data)
+
+        XCTAssertEqual(restored.title,       "Keep")
+        XCTAssertEqual(restored.artist,      "Artist")
+        XCTAssertEqual(restored.albumArtist, "AA")
+        XCTAssertEqual(restored.year,        2021)
+        XCTAssertEqual(restored.bitrate,     320)
+        XCTAssertTrue(restored.isAccessible,
+            "bookmark must round-trip so the file stays reachable after relaunch")
+        XCTAssertNil(restored.artworkData,
+            "artwork is not persisted; it is restored later from the tag")
+        XCTAssertNil(restored.lyrics,
+            "lyrics are not persisted")
+    }
+
+    /// W4: decoding a payload with no artwork / lyrics keys yields nil for both.
+    func testTrack_Decode_MissingArtworkAndLyrics_AreNil() throws {
+        let dir = try makeTempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = try makeRealFile(in: dir)
+
+        var track = Track(url: url, title: "T")
+        track.artworkData = Data([0x01])
+        track.lyrics      = [LyricsLanguageVariant(languageCode: "en", text: "y")]
+
+        let data = try JSONEncoder().encode(track)
+        let restored = try JSONDecoder().decode(Track.self, from: data)
+
+        XCTAssertNil(restored.artworkData)
+        XCTAssertNil(restored.lyrics)
+    }
 }

@@ -229,7 +229,6 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         try c.encode(artist,   forKey: .artist)
         try c.encode(album,    forKey: .album)
         try c.encode(duration, forKey: .duration)
-        try c.encodeIfPresent(artworkData,    forKey: .artworkData)
         try c.encode(albumArtist,             forKey: .albumArtist)
         try c.encode(composer,                forKey: .composer)
         try c.encode(genre,                   forKey: .genre)
@@ -253,7 +252,6 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         try c.encodeIfPresent(lastPlayedAt,   forKey: .lastPlayedAt)
         try c.encodeIfPresent(rating,         forKey: .rating)
         try c.encode(metadataVersion,         forKey: .metadataVersion)
-        try c.encodeIfPresent(lyrics,          forKey: .lyrics)
     }
 
     // MARK: - Decodable

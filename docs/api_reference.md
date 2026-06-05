@@ -91,6 +91,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
 
 Persistence: encoded with security-scoped URL bookmark (`[.withSecurityScope]`) for file access across cold-launch under the App Sandbox (Slice 9-M). Decoding resolves the bookmark under `[.withSecurityScope]`, then urlPath, then legacy URL key.
 
+`artworkData` and `lyrics` are **not** persisted (Slice 9-W) — they are the only large per-track payloads and would overflow persistence at scale. After launch they are restored on demand: `AppState.refreshMetadataIfNeeded()` re-reads the file's tags for any accessible track whose `artworkData` is `nil` and refills both fields.
+
 `isAccessible` (runtime-only, not persisted via Codable, defaults `true`) is set during decode according to:
 
 - Bookmark resolves successfully AND `startAccessingSecurityScopedResource()` returns `true` → `isAccessible = true`. The security-scoped extension is held for the URL's lifetime; the macOS sandbox requires an active extension at every read, so calling `stopAccessingSecurityScopedResource()` after verification releases the extension and breaks all subsequent access (PlaybackService open returns FigFile err=-12203 / "File Not Found"). The extension is released as a side effect when the Track value is dropped from the playlist (NSURL ref count → 0).

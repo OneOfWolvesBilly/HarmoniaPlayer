@@ -773,7 +773,7 @@ final class AppState: ObservableObject {
     /// Runs in the background after `restoreState()`. Only tracks restored from
     /// older saves (version 0) are affected. New fields are written back and
     /// `saveState()` is called so the refresh only happens once per track.
-    private func refreshMetadataIfNeeded() async {
+    func refreshMetadataIfNeeded() async {
         var didRefreshAny = false
 
         // Snapshot track IDs and URLs that need refresh, so we don't
@@ -787,7 +787,8 @@ final class AppState: ObservableObject {
         for playlist in playlists {
             for track in playlist.tracks {
                 if track.isAccessible,
-                   track.metadataVersion < tagReaderService.currentSchemaVersion {
+                   track.metadataVersion < tagReaderService.currentSchemaVersion
+                       || track.artworkData == nil {
                     candidates.append(RefreshCandidate(id: track.id, url: track.url))
                 }
             }
@@ -826,6 +827,8 @@ final class AppState: ObservableObject {
             playlists[pi].tracks[ti].fileFormat      = refreshed.fileFormat
             playlists[pi].tracks[ti].codec           = refreshed.codec
             playlists[pi].tracks[ti].encoding        = refreshed.encoding
+            playlists[pi].tracks[ti].artworkData     = refreshed.artworkData
+            playlists[pi].tracks[ti].lyrics          = refreshed.lyrics
             playlists[pi].tracks[ti].metadataVersion = tagReaderService.currentSchemaVersion
 
             didRefreshAny = true

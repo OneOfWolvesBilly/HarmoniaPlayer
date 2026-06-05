@@ -250,4 +250,30 @@ final class AppStateMetadataTests: XCTestCase {
         XCTAssertEqual(sut.playlist.tracks[0].title, "Existing Track")
         XCTAssertEqual(sut.playlist.tracks[1].title, "New Track")
     }
+
+    // MARK: - Tests: 9-W Part A — refresh restores dropped artwork
+
+    /// W5: a track restored with `artworkData == nil` (artwork was excluded
+    /// from persistence) is picked up by the background re-read and refilled.
+    func testRefresh_FillsArtworkWhenNil() async {
+        let url = makeURL("art-song")
+
+        // Loaded with no artwork (stub returns none) → artworkData is nil,
+        // mirroring a track restored from persistence after Part A.
+        fakeTagReader.stubbedMetadata[url] = Track(url: url, title: "Song")
+        await sut.load(urls: [url])
+        XCTAssertNil(sut.playlist.tracks.first?.artworkData,
+                     "precondition: loaded track has no artwork yet")
+
+        // The tag now carries artwork; the background re-read should refill it.
+        var enriched = Track(url: url, title: "Song")
+        enriched.artworkData = Data([0xAA, 0xBB, 0xCC])
+        fakeTagReader.stubbedMetadata[url] = enriched
+
+        await sut.refreshMetadataIfNeeded()
+
+        XCTAssertEqual(sut.playlist.tracks.first?.artworkData,
+                       Data([0xAA, 0xBB, 0xCC]),
+                       "9-W Part A: refresh must refill artwork for a nil-artwork track")
+    }
 }
