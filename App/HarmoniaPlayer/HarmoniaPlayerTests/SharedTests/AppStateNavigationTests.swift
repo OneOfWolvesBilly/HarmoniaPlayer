@@ -35,7 +35,7 @@ final class AppStateNavigationTests: XCTestCase {
         let suiteName = "hp-test-\(UUID().uuidString)"
         createdSuiteNames.append(suiteName)
         let defaults = UserDefaults(suiteName: suiteName)!
-        let sut = AppState(iapManager: MockIAPManager(isProUnlocked: isProUser), provider: provider, userDefaults: defaults)
+        let sut = AppState(iapManager: MockIAPManager(isProUnlocked: isProUser), provider: provider, userDefaults: defaults, playlistStore: FakePlaylistStore())
         return (sut, fake)
     }
 

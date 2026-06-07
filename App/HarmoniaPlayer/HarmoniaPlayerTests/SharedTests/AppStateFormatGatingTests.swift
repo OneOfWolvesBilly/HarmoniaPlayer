@@ -69,7 +69,8 @@ final class AppStateFormatGatingTests: XCTestCase {
         sut = AppState(
             iapManager: MockIAPManager(isProUnlocked: isProUnlocked),
             provider: provider,
-            userDefaults: testDefaults
+            userDefaults: testDefaults,
+            playlistStore: FakePlaylistStore()
         )
     }
 

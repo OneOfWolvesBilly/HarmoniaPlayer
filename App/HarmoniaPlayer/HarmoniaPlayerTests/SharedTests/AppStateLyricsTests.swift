@@ -53,7 +53,8 @@ final class AppStateLyricsTests: XCTestCase {
         sut = AppState(
             iapManager: MockIAPManager(),
             provider: provider,
-            userDefaults: testDefaults
+            userDefaults: testDefaults,
+            playlistStore: FakePlaylistStore()
         )
     }
 

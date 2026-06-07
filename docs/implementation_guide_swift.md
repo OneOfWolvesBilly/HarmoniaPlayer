@@ -452,6 +452,7 @@ final class AppState: ObservableObject {
     // Dependencies kept private
     private let iapManager: IAPManager
     private let userDefaults: UserDefaults
+    private let playlistStore: PlaylistStore
 
     // Derived from IAPManager
     private(set) var featureFlags: CoreFeatureFlags
@@ -473,6 +474,7 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
+        playlistStore: PlaylistStore? = nil,
         undoManager: UndoManager? = nil,
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
@@ -507,6 +509,10 @@ final class AppState: ObservableObject {
         self.isProUnlocked  = iapManager.isProUnlocked
         self.playlists      = [Playlist(name: "Playlist 1")]
         self.userDefaults   = userDefaults
+        // Playlist store — injected fake for tests, default for production.
+        // Built in the @MainActor init body (not a default argument) because a
+        // @MainActor initializer cannot run in the nonisolated default-arg context.
+        self.playlistStore  = playlistStore ?? FilePlaylistStore()
         // ... (remaining init: undoManager, languageBundle, restoreState(),
         //      Combine sinks for replayGainMode/selectedLanguage/lyricsResolution)
 
@@ -1137,6 +1143,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
 Key points:
 - `@MainActor` on the test class — do not put it on individual methods
 - Use a fresh `UserDefaults(suiteName:)` per test and clean up in `tearDown`
+- Inject a fresh `FakePlaylistStore()` per test alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. Tests that exercise relaunch (a second `AppState` over the same data) must share one `FakePlaylistStore` instance across both.
 - Setup helpers like `seedTracks()` should reset call counts so assertions
   target the operation under test, not the setup
 

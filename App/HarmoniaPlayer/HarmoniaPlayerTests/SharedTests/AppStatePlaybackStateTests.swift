@@ -31,7 +31,7 @@ final class AppStatePlaybackStateTests: XCTestCase {
         suiteName = "hp-test-\(UUID().uuidString)"
 
         testDefaults = UserDefaults(suiteName: suiteName)!
-        sut = AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider(), userDefaults: testDefaults)
+        sut = AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider(), userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() {

@@ -32,7 +32,7 @@ final class AppStateReplayGainTests: XCTestCase {
                                         tagReader: fakeTagReader,
                                         eqService: fakeEQService)
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() {
@@ -173,7 +173,7 @@ final class AppStateReplayGainTests: XCTestCase {
 
         let provider2 = FakeCoreProvider()
         let iap2 = MockIAPManager(isProUnlocked: false)
-        let sut2 = AppState(iapManager: iap2, provider: provider2, userDefaults: testDefaults)
+        let sut2 = AppState(iapManager: iap2, provider: provider2, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
 
         XCTAssertEqual(sut2.replayGainMode, .album)
     }

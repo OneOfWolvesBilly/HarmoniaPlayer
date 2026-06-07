@@ -31,7 +31,7 @@ final class AppStateVolumeTests: XCTestCase {
         fakePlaybackService = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() {

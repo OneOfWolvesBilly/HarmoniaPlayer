@@ -31,6 +31,7 @@ final class AppStatePlaylistTests: XCTestCase {
 
     private var sut: AppState!
     private var testDefaults: UserDefaults!
+    private var testPlaylistStore: FakePlaylistStore!
     private var suiteName: String!
 
     // MARK: - Lifecycle
@@ -40,15 +41,18 @@ final class AppStatePlaylistTests: XCTestCase {
         suiteName = "hp-test-\(UUID().uuidString)"
 
         testDefaults = UserDefaults(suiteName: suiteName)!
+        testPlaylistStore = FakePlaylistStore()
         sut = AppState(
             iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
-            userDefaults: testDefaults
+            userDefaults: testDefaults,
+            playlistStore: testPlaylistStore
         )
     }
 
     override func tearDown() async throws {
         sut = nil
+        testPlaylistStore = nil
         testDefaults.removePersistentDomain(forName: suiteName)
         testDefaults = nil
         suiteName = nil
@@ -225,7 +229,8 @@ extension AppStatePlaylistTests {
         let restored = AppState(
             iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
-            userDefaults: testDefaults
+            userDefaults: testDefaults,
+            playlistStore: testPlaylistStore
         )
         XCTAssertEqual(restored.playlist.tracks.map { $0.url.lastPathComponent },
                        ["a.mp3", "c.mp3", "b.mp3"],

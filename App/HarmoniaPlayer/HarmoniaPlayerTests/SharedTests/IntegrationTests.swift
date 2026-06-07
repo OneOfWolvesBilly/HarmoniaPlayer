@@ -73,7 +73,7 @@ final class IntegrationTests: XCTestCase {
         testDefaults = UserDefaults(suiteName: suiteName)!
         let provider = HarmoniaCoreProvider()
         let iap = MockIAPManager()
-        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
+        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() async throws {

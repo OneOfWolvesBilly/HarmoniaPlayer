@@ -52,6 +52,7 @@ final class AppStateUndoTests: XCTestCase {
             iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
             userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore(),
             undoManager: um
         )
         return (sut, um)

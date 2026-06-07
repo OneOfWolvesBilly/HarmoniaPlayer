@@ -455,13 +455,14 @@ init(
     iapManager: IAPManager,
     provider: CoreServiceProviding,
     userDefaults: UserDefaults = .standard,
+    playlistStore: PlaylistStore? = nil,
     undoManager: UndoManager? = nil,
     lyricsPreferenceStore: LyricsPreferenceStore? = nil,
     eqCoordinator: EQCoordinator? = nil
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`.
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
 
 ### 3.2 Services (injected)
 
@@ -629,8 +630,8 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 
 | Method | Description |
 |--------|-------------|
-| `saveState()` | Persists playlists, settings to UserDefaults |
-| `restoreState()` | Restores state from UserDefaults; triggers metadata refresh |
+| `saveState()` | Persists playlists via `PlaylistStore` (Application Support file); settings to UserDefaults |
+| `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob; settings from UserDefaults; triggers metadata refresh |
 | `displayName(for:) -> String` | Returns "Title - Artist" or filename |
 | `clearLastError()` | Clears lastError, lastErrorDetail, failedTrackName, showFileNotFoundAlert, skippedInaccessibleNames |
 | `showFileInfo(trackID:)` | Sets fileInfoTrack to signal ContentView to open File Info WindowGroup; no-op if ID not in active playlist |
@@ -1007,6 +1008,27 @@ final class NowPlayingCoordinator {
 **Pull semantics:** the seven service callbacks (`onPlay`, `onPause`, `onTogglePlayPause`, `onNext`, `onPrevious`, `onStop`, `onSeek`) are assigned in the coordinator's `init`, each wrapped in `Task { @MainActor in await … }` so the synchronous service callback signature can drive async AppState action closures.
 
 **AppState ownership:** AppState declares `private(set) var nowPlayingCoordinator: NowPlayingCoordinator!` (rather than `let`) so the seven action closures can capture `[weak self]` after every other stored property is initialised. `EQCoordinator` uses `let` because it has no self-capture requirement; that contrast does not apply here.
+
+---
+
+### 5.10 PlaylistStore
+
+**Location:** `Shared/Services/PlaylistStore.swift`
+
+**Purpose:** Persists the playlist collection outside UserDefaults. Playlists exceed the UserDefaults single-value size limit once a library grows, so they are stored on disk instead. Slice 9-W. `import Foundation` only; does not import HarmoniaCore.
+
+```swift
+protocol PlaylistStore {
+    func save(_ playlists: [Playlist]) throws
+    func load() throws -> [Playlist]?
+}
+
+struct FilePlaylistStore: PlaylistStore {
+    init(directory: URL? = nil)
+}
+```
+
+`FilePlaylistStore` writes a single `playlists.json` (atomic) to the Application Support directory; `directory` is overridable for tests. `load()` returns `nil` when no file exists yet and throws on a corrupt file. `AppState` injects it via the `playlistStore` init parameter (production default `FilePlaylistStore()`), calls `save` from `saveState()`, and reads via `load()` in `restoreState()` with a one-shot migration of the legacy `hp.playlists` UserDefaults blob.
 
 ---
 

@@ -23,6 +23,7 @@ final class AppStatePersistenceTests: XCTestCase {
     private var fakePlaybackService: FakePlaybackService!
     private var fakeTagReader: FakeTagReaderService!
     private var testDefaults: UserDefaults!
+    private var testPlaylistStore: FakePlaylistStore!
     private var suiteName: String!
 
     override func setUp() {
@@ -37,13 +38,16 @@ final class AppStatePersistenceTests: XCTestCase {
             tagReader: fakeTagReader
         )
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
+        testPlaylistStore = FakePlaylistStore()
+        sut = AppState(iapManager: iap, provider: provider,
+                       userDefaults: testDefaults, playlistStore: testPlaylistStore)
     }
 
     override func tearDown() {
         sut = nil
         fakePlaybackService = nil
         fakeTagReader = nil
+        testPlaylistStore = nil
         testDefaults.removePersistentDomain(forName: suiteName)
         testDefaults = nil
         suiteName = nil
@@ -59,7 +63,8 @@ final class AppStatePersistenceTests: XCTestCase {
             tagReader: FakeTagReaderService()
         )
         let iap = MockIAPManager(isProUnlocked: false)
-        return AppState(iapManager: iap, provider: provider, userDefaults: testDefaults)
+        return AppState(iapManager: iap, provider: provider,
+                        userDefaults: testDefaults, playlistStore: testPlaylistStore)
     }
 
     // MARK: - Explicit Save / Restore
@@ -265,5 +270,41 @@ final class AppStatePersistenceTests: XCTestCase {
         let restored = makeRestoredAppState()
         XCTAssertTrue(restored.isShuffled,
                       "isShuffled must be persisted automatically via Combine sink")
+    }
+
+    // MARK: - File-backed playlist store
+
+    func testSaveState_WritesPlaylistsToStore_NotUserDefaults() async {
+        await sut.load(urls: [URL(fileURLWithPath: "/tmp/a.mp3")])
+        XCTAssertEqual(testPlaylistStore.stored?.first?.tracks.count, 1,
+                       "playlists must be written to the PlaylistStore")
+        XCTAssertNil(testDefaults.data(forKey: "hp.playlists"),
+                     "playlists must no longer be written to UserDefaults")
+    }
+
+    func testRestoreState_ReadsPlaylistsFromStore() {
+        testPlaylistStore.stored = [
+            Playlist(name: "Restored",
+                     tracks: [Track(url: URL(fileURLWithPath: "/tmp/x.mp3"), title: "X")])
+        ]
+        sut.restoreState()
+        XCTAssertEqual(sut.playlists.first?.name, "Restored")
+        XCTAssertEqual(sut.playlist.tracks.first?.title, "X")
+    }
+
+    func testRestoreState_MigratesLegacyUserDefaultsPlaylists() throws {
+        let legacy = [
+            Playlist(name: "Legacy",
+                     tracks: [Track(url: URL(fileURLWithPath: "/tmp/old.mp3"), title: "Old")])
+        ]
+        let data = try JSONEncoder().encode(legacy)
+        testDefaults.set(data, forKey: "hp.playlists")
+        testPlaylistStore.stored = nil
+        sut.restoreState()
+        XCTAssertEqual(sut.playlists.first?.name, "Legacy")
+        XCTAssertEqual(testPlaylistStore.stored?.first?.name, "Legacy",
+                       "legacy playlists must be migrated into the store")
+        XCTAssertNil(testDefaults.data(forKey: "hp.playlists"),
+                     "legacy key must be removed after one-shot migration")
     }
 }

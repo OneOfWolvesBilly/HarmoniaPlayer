@@ -39,7 +39,7 @@ final class AppStateTrackSelectionTests: XCTestCase {
         testDefaults = UserDefaults(suiteName: suiteName)!
         fakeProvider = FakeCoreProvider()
         let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(iapManager: iap, provider: fakeProvider, userDefaults: testDefaults)
+        sut = AppState(iapManager: iap, provider: fakeProvider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() {

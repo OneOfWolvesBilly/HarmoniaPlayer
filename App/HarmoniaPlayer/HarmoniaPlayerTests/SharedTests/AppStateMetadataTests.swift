@@ -39,7 +39,7 @@ final class AppStateMetadataTests: XCTestCase {
         testDefaults = UserDefaults(suiteName: suiteName)!
         fakeTagReader = FakeTagReaderService()
         let provider = FakeCoreProvider(tagReader: fakeTagReader)
-        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults)
+        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() async throws {

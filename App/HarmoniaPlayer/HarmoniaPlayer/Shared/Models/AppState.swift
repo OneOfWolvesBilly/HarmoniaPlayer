@@ -55,6 +55,10 @@ final class AppState: ObservableObject {
     /// UserDefaults store used for persistence.
     private let userDefaults: UserDefaults
 
+    /// Durable store for the playlist collection, kept outside UserDefaults
+    /// because playlists exceed the UserDefaults single-value size limit.
+    private let playlistStore: PlaylistStore
+
     /// Feature flags (derived from IAP).
     /// Exposes tier-specific capabilities used by format gating and UI.
     private(set) var featureFlags: CoreFeatureFlags
@@ -432,6 +436,7 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
+        playlistStore: PlaylistStore? = nil,
         undoManager: UndoManager? = nil,
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
@@ -488,6 +493,12 @@ final class AppState: ObservableObject {
 
         // Step 8: Store UserDefaults instance
         self.userDefaults = userDefaults
+
+        // Step 8b: Build the durable playlist store. The parameter defaults to
+        // nil and the real store is constructed here, because a @MainActor
+        // initializer cannot be called from the nonisolated default-argument
+        // context (same constraint as undoManager below).
+        self.playlistStore = playlistStore ?? FilePlaylistStore()
 
         // Step 9: Resolve languageBundle from persisted setting.
         // Fixed at launch so UI strings and system menus change together after restart.
@@ -695,9 +706,7 @@ final class AppState: ObservableObject {
     ///
     /// Called by the app entry point when `NSApplication.willTerminateNotification` fires.
     func saveState() {
-        if let data = try? JSONEncoder().encode(playlists) {
-            userDefaults.set(data, forKey: PersistenceKey.playlists)
-        }
+        try? playlistStore.save(playlists)
         userDefaults.set(activePlaylistIndex, forKey: PersistenceKey.activePlaylistIndex)
         userDefaults.set(allowDuplicateTracks, forKey: PersistenceKey.allowDuplicates)
         userDefaults.set(volume, forKey: PersistenceKey.volume)
@@ -714,31 +723,35 @@ final class AppState: ObservableObject {
     /// Called once in `init` after services are wired.
     /// When no persisted data exists, the default values set in `init` are preserved.
     func restoreState() {
-        if let data = userDefaults.data(forKey: PersistenceKey.playlists) {
-            do {
-                let decoded = try JSONDecoder().decode([Playlist].self, from: data)
-                if !decoded.isEmpty {
-                    playlists = decoded
-                    let savedIndex = userDefaults.integer(forKey: PersistenceKey.activePlaylistIndex)
-                    activePlaylistIndex = max(0, min(savedIndex, playlists.count - 1))
+        // Load playlists from the file-backed store. When the store has nothing
+        // yet, migrate playlists previously kept in UserDefaults and remove the
+        // legacy key so the migration runs only once.
+        var restoredPlaylists = try? playlistStore.load()
+        if restoredPlaylists == nil,
+           let legacyData = userDefaults.data(forKey: PersistenceKey.playlists),
+           let legacy = try? JSONDecoder().decode([Playlist].self, from: legacyData) {
+            restoredPlaylists = legacy
+            try? playlistStore.save(legacy)
+            userDefaults.removeObject(forKey: PersistenceKey.playlists)
+        }
+        if let decoded = restoredPlaylists, !decoded.isEmpty {
+            playlists = decoded
+            let savedIndex = userDefaults.integer(forKey: PersistenceKey.activePlaylistIndex)
+            activePlaylistIndex = max(0, min(savedIndex, playlists.count - 1))
 
-                    // Application Layer accessibility check: mark tracks inaccessible
-                    // if the file no longer exists at its original stored path, or is in Trash.
-                    // Use originalPath (urlPath stored at encode time), not url.path
-                    // which bookmark may have resolved to Trash or another location.
-                    for i in playlists.indices {
-                        for j in playlists[i].tracks.indices {
-                            let path = playlists[i].tracks[j].originalPath
-                            if path.isEmpty
-                                || path.contains("/.Trash/")
-                                || !FileManager.default.fileExists(atPath: path) {
-                                playlists[i].tracks[j].isAccessible = false
-                            }
-                        }
+            // Application Layer accessibility check: mark tracks inaccessible
+            // if the file no longer exists at its original stored path, or is in Trash.
+            // Use originalPath (urlPath stored at encode time), not url.path
+            // which bookmark may have resolved to Trash or another location.
+            for i in playlists.indices {
+                for j in playlists[i].tracks.indices {
+                    let path = playlists[i].tracks[j].originalPath
+                    if path.isEmpty
+                        || path.contains("/.Trash/")
+                        || !FileManager.default.fileExists(atPath: path) {
+                        playlists[i].tracks[j].isAccessible = false
                     }
                 }
-            } catch {
-                // Decode failure is non-fatal; app starts with default empty playlist.
             }
         }
         if userDefaults.object(forKey: PersistenceKey.allowDuplicates) != nil {

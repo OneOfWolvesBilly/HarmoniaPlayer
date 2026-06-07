@@ -101,7 +101,8 @@ final class IAPManagerTests: XCTestCase {
     func testShowPaywallIfNeeded_ReturnsTrueForFreeUser() {
         let appState = AppState(
             iapManager: MockIAPManager(isProUnlocked: false),
-            provider: FakeCoreProvider()
+            provider: FakeCoreProvider(),
+            playlistStore: FakePlaylistStore()
         )
         let result = appState.showPaywallIfNeeded()
         XCTAssertTrue(result,              "should return true for Free user")
@@ -112,7 +113,8 @@ final class IAPManagerTests: XCTestCase {
     func testShowPaywallIfNeeded_ReturnsFalseForProUser() {
         let appState = AppState(
             iapManager: MockIAPManager(isProUnlocked: true),
-            provider: FakeCoreProvider()
+            provider: FakeCoreProvider(),
+            playlistStore: FakePlaylistStore()
         )
         let result = appState.showPaywallIfNeeded()
         XCTAssertFalse(result,              "should return false for Pro user")
@@ -170,7 +172,8 @@ final class IAPManagerTests: XCTestCase {
         let appState = AppState(
             iapManager: mock,
             provider: FakeCoreProvider(),
-            userDefaults: suite
+            userDefaults: suite,
+            playlistStore: FakePlaylistStore()
         )
         XCTAssertFalse(appState.featureFlags.supportsFLAC, "Pre-condition: Free tier")
 

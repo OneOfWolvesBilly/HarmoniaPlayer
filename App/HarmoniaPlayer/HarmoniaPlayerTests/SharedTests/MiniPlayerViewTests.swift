@@ -39,7 +39,8 @@ final class MiniPlayerViewTests: XCTestCase {
         AppState(
             iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
     }
 
@@ -107,7 +108,8 @@ final class MiniPlayerViewTests: XCTestCase {
         let appState = AppState(
             iapManager: MockIAPManager(),
             provider: provider,
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
         appState.newPlaylist(name: "Playlist 2")
 

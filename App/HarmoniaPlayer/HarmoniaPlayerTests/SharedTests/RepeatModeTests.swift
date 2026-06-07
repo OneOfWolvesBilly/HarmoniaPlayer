@@ -29,7 +29,7 @@ final class RepeatModeTests: XCTestCase {
         let name = "hp-test-\(UUID().uuidString)"
         createdSuiteNames.append(name)
         let defaults = UserDefaults(suiteName: name)!
-        return AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider(), userDefaults: defaults)
+        return AppState(iapManager: MockIAPManager(), provider: FakeCoreProvider(), userDefaults: defaults, playlistStore: FakePlaylistStore())
     }
 
     // MARK: - AppState default

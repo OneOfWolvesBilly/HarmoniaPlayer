@@ -38,7 +38,8 @@ final class AppStateDragReorderTests: XCTestCase {
         sut = AppState(
             iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
-            userDefaults: testDefaults
+            userDefaults: testDefaults,
+            playlistStore: FakePlaylistStore()
         )
     }
 

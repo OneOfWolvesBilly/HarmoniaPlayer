@@ -51,7 +51,7 @@ final class AppStateTests: XCTestCase {
     private func makeSUT(isProUnlocked: Bool = false) -> AppState {
         let iap = MockIAPManager(isProUnlocked: isProUnlocked)
         let provider = FakeCoreProvider()
-        return AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
+        return AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
     }
 
     // MARK: - Tests: Free User
@@ -65,7 +65,8 @@ final class AppStateTests: XCTestCase {
         let appState = AppState(
             iapManager: iapManager,
             provider: fakeProvider,
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
 
         // Then: Dependencies are wired
@@ -85,7 +86,7 @@ final class AppStateTests: XCTestCase {
         let fakeProvider = FakeCoreProvider()
 
         // When: Initialize AppState
-        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults())
+        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
         // Then: Provider called with Free configuration
         XCTAssertEqual(fakeProvider.makePlaybackServiceCallCount, 1,
@@ -107,7 +108,8 @@ final class AppStateTests: XCTestCase {
         let appState = AppState(
             iapManager: iapManager,
             provider: fakeProvider,
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
 
         // Then: Dependencies are wired with Pro features
@@ -127,7 +129,7 @@ final class AppStateTests: XCTestCase {
         let fakeProvider = FakeCoreProvider()
 
         // When: Initialize AppState
-        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults())
+        _ = AppState(iapManager: iapManager, provider: fakeProvider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
         // Then: Provider called with Pro configuration
         XCTAssertEqual(fakeProvider.makePlaybackServiceCallCount, 1,
@@ -146,7 +148,8 @@ final class AppStateTests: XCTestCase {
             _ = AppState(
                 iapManager: MockIAPManager(),
                 provider: FakeCoreProvider(),
-                userDefaults: makeIsolatedDefaults()
+                userDefaults: makeIsolatedDefaults(),
+                playlistStore: FakePlaylistStore()
             )
         )
     }
@@ -160,7 +163,8 @@ final class AppStateTests: XCTestCase {
         let appState = AppState(
             iapManager: iapManager,
             provider: fakeProvider,
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
 
         // Then: Services are created but no behavior executed
@@ -178,7 +182,8 @@ final class AppStateTests: XCTestCase {
         let freeAppState = AppState(
             iapManager: freeIAP,
             provider: FakeCoreProvider(),
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
 
         // Then: Feature flags match IAP state
@@ -193,7 +198,8 @@ final class AppStateTests: XCTestCase {
         let proAppState = AppState(
             iapManager: proIAP,
             provider: FakeCoreProvider(),
-            userDefaults: makeIsolatedDefaults()
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
         )
 
         // Then: Feature flags match IAP state
@@ -252,7 +258,7 @@ final class AppStateTests: XCTestCase {
         let provider = FakeCoreProvider()
 
         // When
-        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
+        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
         // Then
         XCTAssertEqual(provider.makeTagReaderServiceCallCount, 1,
@@ -280,7 +286,7 @@ final class AppStateTests: XCTestCase {
         let iap = MockIAPManager(isProUnlocked: false)
 
         // When
-        let sut = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
+        let sut = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
         // Then: AppState holds the exact instance the provider returned
         XCTAssertTrue(
@@ -300,7 +306,7 @@ final class AppStateTests: XCTestCase {
         let iap = MockIAPManager(isProUnlocked: false)
 
         // When
-        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults())
+        _ = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
         // Then: No metadata reads triggered by init
         XCTAssertEqual(knownFake.readMetadataCallCount, 0,

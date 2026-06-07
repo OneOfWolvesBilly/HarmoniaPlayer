@@ -22,7 +22,7 @@ final class AppSettingsTests: XCTestCase {
         testDefaults = UserDefaults(suiteName: suiteName)!
         fakeService = FakePlaybackService()
         let provider = FakeCoreProvider(playbackService: fakeService)
-        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults)
+        sut = AppState(iapManager: MockIAPManager(), provider: provider, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
     }
 
     override func tearDown() {
