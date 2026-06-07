@@ -404,8 +404,11 @@ limit. A file has no such per-value limit.
      Support directory, via `FileManager.url(for: .applicationSupportDirectory…)`).
    - `func load() throws -> [Playlist]?` — read + `JSONDecoder`; missing file →
      `nil`; corrupt file → throws.
-2. `AppState.init` — inject `playlistStore: PlaylistStore = FilePlaylistStore()`
-   (same default-parameter pattern as the other stores).
+2. `AppState.init` — inject `playlistStore: PlaylistStore? = nil`, defaulting to
+   `FilePlaylistStore()` built inside the `@MainActor` init body. The parameter
+   must be optional, **not** `= FilePlaylistStore()`: a `@MainActor` initializer
+   cannot be called from the nonisolated default-argument context (same
+   constraint as `undoManager`).
 3. `saveState` — replace `userDefaults.set(data, forKey: .playlists)` (line 699)
    with `try? playlistStore.save(playlists)`. `activePlaylistIndex`, `sortKey`,
    and the other small keys stay in UserDefaults.
@@ -432,9 +435,9 @@ are unchanged.
 | W5 | `refreshMetadataIfNeeded()` includes an accessible track whose `artworkData == nil` and fills its artwork from the re-read | `AppState` | Extend `AppStateTests.swift` |
 | W6 | `FilePlaylistStore` save → load round-trips a `[Playlist]` (file written, decoded equal) | `FilePlaylistStore` | New `FilePlaylistStoreTests.swift` |
 | W7 | `load()` returns `nil` when no file exists; throws on a corrupt file | `FilePlaylistStore` | New `FilePlaylistStoreTests.swift` |
-| W8 | `saveState` writes playlists via the store and does **not** write the `hp.playlists` UserDefaults key | `AppState` | Extend `AppStateTests.swift` |
-| W9 | `restoreState` loads playlists from the store | `AppState` | Extend `AppStateTests.swift` |
-| W10 | Migration: no file + legacy `hp.playlists` present → playlists restored, then file written and `hp.playlists` key cleared | `AppState` | Extend `AppStateTests.swift` |
+| W8 | `saveState` writes playlists via the store and does **not** write the `hp.playlists` UserDefaults key | `AppState` | Extend `AppStatePersistenceTests.swift` |
+| W9 | `restoreState` loads playlists from the store | `AppState` | Extend `AppStatePersistenceTests.swift` |
+| W10 | Migration: no file + legacy `hp.playlists` present → playlists restored, then file written and `hp.playlists` key cleared | `AppState` | Extend `AppStatePersistenceTests.swift` |
 
 W3 note: `accessBookmark` comes from `url.bookmarkData(.withSecurityScope)`, which
 needs a real file and may not yield a security-scoped bookmark in the unsandboxed
@@ -442,6 +445,17 @@ test host; the test seeds a temp file and asserts the bookmark `encode` produces
 survives the decode (round-trip), not a specific scope. W6–W10 inject a temp
 directory (`FilePlaylistStore`) and a fake `PlaylistStore` + `UserDefaults(suiteName:)`
 (`AppState`).
+
+**Test isolation (critical, do before wiring the store).** Once `AppState`
+defaults `playlistStore` to the real `FilePlaylistStore()`, every test that
+constructs an `AppState` without injecting a store shares the same real
+`playlists.json` and cross-contaminates — one test's saved playlists are
+restored by the next. So before `saveState` / `restoreState` are switched to the
+store, every `AppState`-constructing test (~24 files) must inject its own
+`FakePlaylistStore()`, mirroring how each already injects an isolated
+`UserDefaults(suiteName:)`. Per-test injection is mandatory: a unique temp
+directory per init breaks relaunch round-trips, and a shared temp re-introduces
+contamination, so neither can replace it.
 
 ### Files
 
@@ -452,19 +466,24 @@ directory (`FilePlaylistStore`) and a fake `PlaylistStore` + `UserDefaults(suite
 | Modify | `Shared/Models/AppState.swift` | inject `playlistStore`; `saveState` / `restoreState` use the store; one-shot migration; `refreshMetadataIfNeeded` artwork merge |
 | New | `HarmoniaPlayerTests/SharedTests/FilePlaylistStoreTests.swift` | W6–W7 |
 | Modify | `HarmoniaPlayerTests/SharedTests/TrackTests.swift` | W1–W4 |
-| Modify | `HarmoniaPlayerTests/SharedTests/AppStateTests.swift` | W5, W8–W10 |
+| New | `HarmoniaPlayerTests/FakeInfrastructure/FakePlaylistStore.swift` | in-memory `PlaylistStore` for test isolation |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStateMetadataTests.swift` | W5 |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStatePersistenceTests.swift` | W8–W10 |
+| Modify | ~24 `AppState`-constructing test files | inject isolated `FakePlaylistStore()` |
 | Modify | `docs/api_reference.md` | persistence section: playlists in an Application Support file; artwork/lyrics excluded; one-shot migration |
 
 ### Commit plan
 
 | Order | Type / Scope | Subject |
 | --- | --- | --- |
-| 1 | `fix(slice 9-w)` | exclude artwork and lyrics from track persistence |
-| 2 | `fix(slice 9-w)` | move playlist persistence to an application support file |
+| 1 | `fix(slice 9-w)` | exclude artwork and lyrics from track persistence (Part A) |
+| 2 | `fix(slice 9-w)` | add file-backed playlist store (Part B — store component) |
+| 3 | `fix(slice 9-w)` | persist playlists in a file and migrate from user defaults (Part B — integration + test isolation) |
 
-Part A first (shrinks the blob; artwork restored by the background re-read), then
-Part B (moves it off UserDefaults and migrates the legacy key). Each commit is
-independently green.
+Part A first (shrinks the blob; artwork restored by the background re-read). Part B
+is split: the `PlaylistStore` component and its unit tests land first, then the
+`AppState` integration, one-shot migration, and per-test store isolation land
+together. Each commit is independently green.
 
 ### Doc updates
 
