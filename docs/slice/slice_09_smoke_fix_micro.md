@@ -24,6 +24,9 @@ Classification principle (why these are separate slices, not folded):
 | 9-U | Pause marquee at both ends | Free | ✅ |
 | 9-V | EQ persistence (named-only) + load fallback to Flat + button tint live update | Free | ⬜ |
 | 9-W | Move playlist persistence to an Application Support file + exclude artwork/lyrics (root-fix `hp.playlists` overflow) | Free | ⬜ |
+| 9-X | Remove all selected tracks via the multi-select context menu | Free | ⬜ |
+| 9-Y | Add New / Import to the per-tab playlist context menu | Free | ⬜ |
+| 9-Z | Manual drag-to-reorder for the playlist Table | Free | ⬜ |
 
 Deferred (not a slice): **#5** untracked natural-completion `Task` — see §5.
 Withdrawn: the original 9-T Part B (mini-player browse-only switch) — see 9-T.
@@ -510,6 +513,253 @@ together. Each commit is independently green.
 
 ---
 
+## Slice 9-X: Remove all selected tracks from the context menu
+
+### Problem
+Multi-selecting rows in the playlist Table and choosing "Remove from Playlist"
+removes only one track. Multi-select removal is a v1.0.0 Free function and a
+pre-submission blocker.
+
+### Root cause
+`PlaylistView.tableView`'s `.contextMenu(forSelectionType: Track.ID.self)`
+wraps every action in `if let id = ids.first`, so Remove calls the single-track
+`AppState.removeTrack(_:)` with only the first selected ID. `AppState` has no
+batch-removal method.
+
+### Fix
+1. Add `AppState.removeTracks(_ ids: Set<Track.ID>)` (Application Layer,
+   `AppState+Playlist.swift`): removes every existing ID in the set from
+   `tracks` + `insertionOrder` in one pass; drops removed IDs from
+   `shuffleQueue` and clamps `shuffleQueueIndex`; registers ONE undo (snapshot
+   restore of tracks + insertionOrder + shuffle queue, with redo). No-op when
+   `ids` is empty or matches nothing.
+2. `PlaylistView`: the Remove button acts on the whole `ids` set
+   (`removeTracks(ids)`; `selectedTrackIDs.subtract(ids)`). Play / Play Next /
+   Get Info stay single-track (`ids.first`), unchanged.
+
+### Decisions (frozen as of this spec commit)
+- D1: a batch that includes the now-playing track STOPS playback
+  (`playbackService.stop()`, `currentTrack = nil`, `currentTime = 0`,
+  `playbackState = .stopped`) — mirrors the single-track behaviour proven by
+  `testRemoveTrack_CurrentTrack_StopsPlayback`. Not "advance to next".
+- D2: `removeTracks` is snapshot-based and independent of `removeTrack`'s
+  per-track playback-continuation logic; `removeTrack(_:)` is unchanged.
+- D3: undo restores tracks / insertionOrder / shuffle queue only, not playback
+  (same as `removeTrack`'s undo).
+
+### TDD matrix
+| # | Behaviour under test | SUT | Test File Decision |
+| --- | --- | --- | --- |
+| X1 | All selected removed → playlist empty | `AppState` | Extend `AppStatePlayerlistTests.swift` |
+| X2 | Subset removed, remaining kept in order | `AppState` | Extend `AppStatePlayerlistTests.swift` |
+| X3 | Empty set is a no-op | `AppState` | Extend `AppStatePlayerlistTests.swift` |
+| X4 | Set including `currentTrack` stops playback | `AppState` | Extend `AppStatePlayerlistTests.swift` |
+| X5 | Set excluding `currentTrack` keeps `currentTrack` | `AppState` | Extend `AppStatePlayerlistTests.swift` |
+| X6 | One undo restores the whole batch | `AppState` | Extend `AppStateUndoTests.swift` |
+
+### Out of scope
+- Play / Play Next / Get Info stay single-track (`ids.first`).
+- Multi-select drag → 9-Z.
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `Shared/Models/AppState+Playlist.swift` | Add `removeTracks(_:)` |
+| Modify | `Shared/Views/PlaylistView.swift` | Remove button acts on whole `ids`; subtract from selection |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStatePlayerlistTests.swift` | Tests X1–X5 |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStateUndoTests.swift` | Test X6 |
+| Modify | `docs/api_reference.md` | Add `removeTracks(_:)` to playlist methods table |
+
+### Manual verification
+1. Load ≥3 tracks, multi-select 2+ rows, right-click → Remove from Playlist →
+   all selected rows disappear; ⌘Z restores them all at once.
+2. Multi-select including the playing track → Remove → playback stops.
+
+### Commit plan
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 1 | `fix(slice 9-x)` | remove all selected tracks via removeTracks |
+
+---
+
+## Slice 9-Y: Add New / Import to the per-tab playlist context menu
+
+### Problem
+Right-clicking a playlist tab shows only Rename / Export / Delete. New Playlist /
+Import Playlist… live on the tab-bar empty-area `.contextMenu`, which fires only
+when no tab is under the cursor. When tabs fill the horizontal ScrollView the
+empty area is unreachable, so the right-click path to New / Import is lost (the
+toolbar "+" still works, but the right-click path is inconsistent).
+
+### Root cause
+`PlaylistView.playlistTab(index:playlist:)`'s `.contextMenu` lists only Rename /
+Export / Delete. New / Import are only on the separate `playlistTabBar`
+`.contextMenu`, which child-tab hit testing suppresses whenever a tab is under
+the cursor.
+
+### Fix
+Append a `Divider()` then two buttons to the per-tab `.contextMenu`, reusing the
+exact tab-bar actions and the existing localized strings — no new logic, no new
+strings:
+- `Button(L("ctx_new_playlist"))` → `appState.newPlaylist(name: "")` then
+  `NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)`.
+- `Button(L("ctx_import_playlist"))` → `importPlaylist()`.
+
+### Out of scope
+- De-duplicating the export/import logic shared between `HarmoniaPlayerCommands`
+  and `PlaylistView` → accepted v1.0 tech debt, unchanged (no
+  `PlaylistTransferController` here).
+- The tab-bar empty-area `.contextMenu` stays as-is.
+
+### TDD
+Pure SwiftUI context-menu wiring with no headless assertion (same as 9-U). The
+reused actions `newPlaylist(name:)` and `importPlaylist()` already have
+model-level coverage; no new AppState behaviour. **Verification for v1.0 is
+manual smoke only.**
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| Modify | `Shared/Views/PlaylistView.swift` | Append Divider + New Playlist + Import Playlist… to the per-tab `.contextMenu` |
+
+### Manual verification
+1. Fill the tab bar so tabs overflow the ScrollView (no empty area).
+2. Right-click any tab → Rename / Export / Delete, a divider, then New Playlist /
+   Import Playlist….
+3. New Playlist creates a tab and enters rename; Import Playlist… opens the
+   playlist picker — same as the toolbar "+" / menu-bar paths.
+
+### Commit plan
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 1 | `fix(slice 9-y)` | add new and import to the per-tab playlist context menu |
+
+Doc updates: none (no public API / boundary / shortcut change; reuses documented actions).
+
+---
+
+## Slice 9-Z: Manual drag-to-reorder for the playlist Table
+
+### Problem
+Tracks in the playlist cannot be reordered by dragging. Drag-to-reorder is a
+v1.0.0 Free function and a pre-submission blocker.
+
+### Root cause
+The playlist UI is a SwiftUI `Table`, which has no `.onMove`. The Table is built
+with the value-collection initializer and exposes no per-row hook, so the
+existing, tested `AppState.moveTrack(fromOffsets:toOffset:)` is never reached
+from the UI (wiring lost in the List → Table migration). The only drop
+destination on the Table is `dropDestination(for: AudioFileItem.self)` for
+Finder file imports.
+
+### Prerequisite Investigation (web_search 2026-06-10)
+- `Table` has NO `.onMove` (List-only). Confirmed.
+- Apple's current recommended drag/drop is the Transferable-based
+  `.draggable(_:)` + `.dropDestination(for:action:)`. NSItemProvider-based
+  `.onDrag` / `.itemProvider` have macOS 15.x regressions (item-provider load
+  deferred to drop-exit; `.itemProvider` drag broke in 15.1) — Apple staff
+  steer developers to the Transferable modifiers.
+- Per-row drag/drop on a `Table` attaches to `TableRow` via the rows-builder
+  initializer `Table(of:selection:sortOrder:columnCustomization:columns:rows:)`.
+  `TableRow.draggable(_:)` and `TableRow.dropDestination(for:action:)` are
+  macOS 14.0+ — available at the macOS 15.6 deployment target.
+- There is still no first-class "move row" API on `Table`; reorder is
+  hand-rolled from draggable + dropDestination.
+- `dropDestination` inside list/table containers has historical macOS
+  reliability caveats — treated as a verification risk (see Risk), not a design
+  unknown.
+
+### Fix
+1. New Transferable payload `PlaylistReorderItem` (Model layer) wrapping a single
+   `Track.ID`, with a CUSTOM UTType
+   (`io.github.oneofwolvesbilly.harmoniaplayer.playlist-reorder`) so internal
+   reorder drags are type-distinct from `AudioFileItem` (URL/file types). The two
+   coexist: the whole-Table `dropDestination(for: AudioFileItem.self)` keeps
+   handling Finder file drops.
+2. Convert `tableView` to the rows-builder form: `Table(of: Track.self,
+   selection:, sortOrder:, columnCustomization:) { coreColumns; tagColumns;
+   technicalColumns } rows: { ForEach(tracks) { track in TableRow(track)
+   .draggable(PlaylistReorderItem(id: track.id))
+   .dropDestination(for: PlaylistReorderItem.self) { items, _ in … } } }`.
+   - Drop onto target row R inserts the dragged track before R.
+   - A drop below the last row appends to the end.
+3. New AppState UI-facing entrypoint (Application Layer, `AppState+Playlist.swift`)
+   that owns the index math and delegates to the existing, tested
+   `moveTrack(fromOffsets:toOffset:)`:
+   `func moveTrack(id draggedID: Track.ID, before targetID: Track.ID?)`
+   - Resolves `fromOffsets` from `draggedID` and `toOffset` from `targetID`
+     (or `tracks.count` when `targetID == nil`), then calls
+     `moveTrack(fromOffsets:toOffset:)` (undo / insertionOrder reuse).
+   - GUARD: no-op when `playlists[activePlaylistIndex].sortKey != .none` (a column
+     sort is active → manual reorder disabled). Model authority for the disable
+     rule.
+   - No-op when `draggedID == targetID` or `draggedID` not found.
+4. `PlaylistView` attaches the reorder draggable/dropDestination only when
+   `sortOrder.isEmpty` (UX layer of the same disable rule; defence-in-depth with
+   the AppState guard). The View passes IDs only — no index math in the View
+   (module boundary: AppState owns logic).
+
+### Decisions (frozen as of this spec commit)
+- D1: v1.0 reorder payload is a SINGLE `Track.ID` (drag the row under the
+  cursor). Multi-select drag is DEFERRED to backlog `BL-9Z-02`.
+- D2: manual reorder is DISABLED while a column sort is active
+  (`sortKey != .none`); it re-enables after the user clears the sort.
+- D3: AppState entrypoint is `moveTrack(id:before:)` (`nil` target = append).
+
+### Risk (verification, not design)
+`TableRow.dropDestination` reorder reliability on macOS 15.6 is the main risk
+(documented container drop caveats). If the frozen approach fails manual
+verification, STOP and report per SDD discipline (spec amendment); do NOT
+improvise an alternative mid-implementation. Fallback recorded for reference only
+(AppKit-backed reorder / overlay drop layer) — out of scope unless the primary
+approach fails AC.
+
+### TDD matrix
+| # | Behaviour under test | SUT | Test File Decision |
+| --- | --- | --- | --- |
+| Z1 | `moveTrack(id:before:)` moves the dragged track before the target ([A,B,C], C before A → [C,A,B]) | `AppState` | Extend `AppStateDragReorderTests.swift` |
+| Z2 | `moveTrack(id:before:nil)` appends the dragged track to the end | `AppState` | Extend `AppStateDragReorderTests.swift` |
+| Z3 | After a move, `insertionOrder == tracks.map(\.id)` | `AppState` | Extend `AppStateDragReorderTests.swift` |
+| Z4 | No-op when `sortKey != .none` (order unchanged) | `AppState` | Extend `AppStateDragReorderTests.swift` |
+| Z5 | No-op when `draggedID == targetID` | `AppState` | Extend `AppStateDragReorderTests.swift` |
+| Z6 | One undo restores the pre-move order | `AppState` | Extend `AppStateUndoTests.swift` |
+
+The `TableRow` drag/drop gesture itself has no headless assertion (same precedent
+as 9-U); the AppState entrypoint is fully unit-tested above and the gesture is
+covered by manual smoke.
+
+### Out of scope
+- Reordering while a column sort is active → disabled (D2).
+- Cross-playlist drag (drag a track between tabs) → backlog `BL-9Z-01`, v2.0.
+- Multi-select drag → backlog `BL-9Z-02` (D1).
+
+### Files
+| Status | File | Change |
+| --- | --- | --- |
+| New | `Shared/Models/PlaylistReorderItem.swift` | Transferable payload (Track.ID + custom UTType) |
+| Modify | `Shared/Models/AppState+Playlist.swift` | Add `moveTrack(id:before:)` + sortKey guard |
+| Modify | `Shared/Views/PlaylistView.swift` | Rows-builder Table + per-row draggable/dropDestination; coexist with the AudioFileItem drop |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStateDragReorderTests.swift` | Tests Z1–Z5 |
+| Modify | `HarmoniaPlayerTests/SharedTests/AppStateUndoTests.swift` | Test Z6 |
+| Modify | `docs/api_reference.md` | Add `moveTrack(id:before:)` + `PlaylistReorderItem` |
+| Modify | `docs/module_boundary.md` | Note the reorder Transferable in the Model layer; View passes IDs only |
+| Modify | `docs/development_guide.md` | New file in the project structure |
+
+### Manual verification
+1. Insertion order (no column sort): drag a row up/down → it lands at the drop
+   position; the order persists across relaunch.
+2. With a column sort active: dragging does nothing (reorder disabled); clear the
+   sort → dragging works again.
+3. Finder file drop still imports (the AudioFileItem drop is unaffected).
+
+### Commit plan
+| Order | Type / Scope | Subject |
+| --- | --- | --- |
+| 1 | `fix(slice 9-z)` | add the playlist reorder transferable payload |
+| 2 | `fix(slice 9-z)` | wire table drag-to-reorder to moveTrack |
+
+---
+
 ## 5. Deferred — #5 untracked natural-completion `Task`
 
 `startPolling()` fires `Task { await self.trackDidFinishPlaying() }` as an
@@ -529,4 +779,4 @@ so `stop()` / `play()` can cancel it).
 
 Spec frozen and committed first. Then per slice: red (failing tests) →
 `是請執行` → green (minimum code) + doc updates in the same commit → commit.
-Order: **9-S → 9-T (Part A) → 9-U → 9-V → 9-W.**
+Order: **9-S → 9-T (Part A) → 9-U → 9-V → 9-W → 9-X → 9-Y → 9-Z.**
