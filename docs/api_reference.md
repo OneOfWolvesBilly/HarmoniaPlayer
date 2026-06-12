@@ -580,6 +580,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `load(urls:) async` | Adds tracks; sub-batch save every 5; format gate via `allowedFormats` |
 | `clearPlaylist()` | Removes all tracks, clears undo stack |
 | `removeTrack(_:)` | Removes single track by ID, registers undo |
+| `removeTracks(_:)` | Removes a set of track IDs as one undoable batch; stops playback if the set includes `currentTrack` |
 | `moveTrack(fromOffsets:toOffset:)` | Reorders tracks, registers undo |
 | `playNext(_:)` | Moves track to position after currentTrack |
 | `applySort(_:key:ascending:)` | Applies column sort to playlist |

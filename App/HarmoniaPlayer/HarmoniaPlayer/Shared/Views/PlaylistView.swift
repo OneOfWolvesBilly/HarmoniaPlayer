@@ -302,8 +302,8 @@ struct PlaylistView: View {
                 }
                 Divider()
                 Button(L("ctx_remove"), role: .destructive) {
-                    appState.removeTrack(id)
-                    appState.selectedTrackIDs.remove(id)
+                    appState.removeTracks(ids)
+                    appState.selectedTrackIDs.subtract(ids)
                 }
             }
         } primaryAction: { ids in

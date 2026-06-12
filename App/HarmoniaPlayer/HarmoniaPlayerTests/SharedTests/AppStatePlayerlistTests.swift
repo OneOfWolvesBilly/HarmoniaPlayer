@@ -164,6 +164,57 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertEqual(sut.currentTrack, trackA)
     }
 
+    // MARK: - removeTracks(_:)
+
+    func testRemoveTracks_AllSelected_EmptiesPlaylist() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let allIDs = Set(sut.playlist.tracks.map(\.id))
+
+        sut.removeTracks(allIDs)
+
+        XCTAssertTrue(sut.playlist.isEmpty)
+    }
+
+    func testRemoveTracks_Subset_RemovesOnlySelectedKeepsOrder() async {
+        await sut.load(urls: makeURLs(["a", "b", "c", "d"]))
+        let ids = sut.playlist.tracks.map(\.id)   // [a, b, c, d]
+
+        sut.removeTracks([ids[1], ids[3]])         // remove b and d
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), [ids[0], ids[2]])  // [a, c]
+    }
+
+    /// Design (9-X D1): removing a batch that includes the playing track
+    /// stops playback. currentTrack is cleared asynchronously via Task.
+    func testRemoveTracks_IncludingCurrentTrack_StopsPlayback() async {
+        await sut.load(urls: makeURLs(["a", "b"]))
+        let ids = sut.playlist.tracks.map(\.id)
+        await sut.play(trackID: ids[0])
+        XCTAssertNotNil(sut.currentTrack)           // pre-condition
+
+        sut.removeTracks([ids[0], ids[1]])
+
+        // Allow async stop Task inside removeTracks to complete.
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertTrue(sut.playlist.tracks.isEmpty)
+        XCTAssertNil(sut.currentTrack)
+        XCTAssertEqual(sut.playbackState, .stopped)
+    }
+
+    func testRemoveTracks_ExcludingCurrentTrack_KeepsCurrentTrack() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let tracks = sut.playlist.tracks
+        await sut.play(trackID: tracks[0].id)
+
+        sut.removeTracks([tracks[1].id, tracks[2].id])
+
+        // The two non-playing tracks are gone...
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), [tracks[0].id])
+        // ...and the playing track is kept.
+        XCTAssertEqual(sut.currentTrack, tracks[0])
+    }
+
     // MARK: - moveTrack(fromOffsets:toOffset:)
 
     func testMoveTrack_ValidIndices_Reorders() async {

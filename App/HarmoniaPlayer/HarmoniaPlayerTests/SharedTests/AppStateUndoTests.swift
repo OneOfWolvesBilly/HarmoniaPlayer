@@ -120,6 +120,24 @@ final class AppStateUndoTests: XCTestCase {
         XCTAssertEqual(sut.playlist.tracks.count, 2)
     }
 
+    // MARK: - removeTracks(_:) — undo
+
+    /// Given: playlist seeded with [A, B, C] (undo stack clear)
+    /// When:  removeTracks([A, C]) → undo
+    /// Then:  all three tracks restored by a single undo
+    func testUndoRemoveTracks_ReInsertsWholeBatch() async {
+        let (sut, um) = makeSUT()
+        await seedTracks([url("A"), url("B"), url("C")], into: sut)
+        let toRemove: Set<Track.ID> = [sut.playlist.tracks[0].id, sut.playlist.tracks[2].id]
+
+        sut.removeTracks(toRemove)
+        XCTAssertEqual(sut.playlist.tracks.count, 1, "Precondition: 2 tracks should be removed")
+
+        um.undo()
+
+        XCTAssertEqual(sut.playlist.tracks.count, 3)
+    }
+
     // MARK: - moveTrack(fromOffsets:toOffset:) — undo
 
     /// Given: playlist seeded with [A, B, C] (undo stack clear)

@@ -359,6 +359,85 @@ extension AppState {
         saveState()
     }
 
+    /// Removes every track whose ID is in `ids` from the active playlist
+    /// as a single undoable batch.
+    ///
+    /// Used by the multi-select "Remove from Playlist" context-menu action.
+    /// Only IDs present in the active playlist are removed; unknown IDs are
+    /// ignored. No-op (no undo registered) when no ID in the set matches a
+    /// track in the active playlist.
+    ///
+    /// If the removed set contains `currentTrack`, playback stops — mirroring
+    /// the single-track `removeTrack(_:)` behaviour. The whole batch is one
+    /// undo action that restores `tracks`, `insertionOrder`, and the shuffle
+    /// queue together.
+    ///
+    /// - Parameter ids: The set of track IDs to remove.
+    func removeTracks(_ ids: Set<Track.ID>) {
+        let targetPlaylistIndex = activePlaylistIndex
+
+        // Snapshot before mutation so the whole batch undoes atomically.
+        let beforeTracks = playlists[targetPlaylistIndex].tracks
+        let beforeInsertionOrder = playlists[targetPlaylistIndex].insertionOrder
+        let beforeShuffleQueue = shuffleQueue
+        let beforeShuffleQueueIndex = shuffleQueueIndex
+
+        // Restrict to IDs that actually exist in the active playlist.
+        let removedIDs = Set(beforeTracks.map(\.id).filter { ids.contains($0) })
+        guard !removedIDs.isEmpty else { return }
+
+        let removingCurrentTrack = currentTrack.map { removedIDs.contains($0.id) } ?? false
+
+        // Remove from tracks + insertionOrder in a single pass.
+        playlists[targetPlaylistIndex].tracks.removeAll { removedIDs.contains($0.id) }
+        playlists[targetPlaylistIndex].insertionOrder.removeAll { removedIDs.contains($0) }
+
+        // Drop removed IDs from the shuffle queue and clamp the index.
+        if isShuffled {
+            shuffleQueue.removeAll { removedIDs.contains($0) }
+            shuffleQueueIndex = min(shuffleQueueIndex, max(0, shuffleQueue.count - 1))
+        }
+
+        // If the playing track was removed, stop playback (same as removeTrack).
+        if removingCurrentTrack {
+            Task {
+                await playbackService.stop()
+                currentTrack = nil
+                currentTime = 0
+                playbackState = .stopped
+            }
+        }
+
+        // Snapshot after mutation for redo.
+        let afterTracks = playlists[targetPlaylistIndex].tracks
+        let afterInsertionOrder = playlists[targetPlaylistIndex].insertionOrder
+        let afterShuffleQueue = shuffleQueue
+        let afterShuffleQueueIndex = shuffleQueueIndex
+
+        // Register ONE undo for the whole batch.
+        undoManager.registerUndo(withTarget: self) {
+            [beforeTracks, beforeInsertionOrder, beforeShuffleQueue, beforeShuffleQueueIndex] state in
+            state.playlists[targetPlaylistIndex].tracks = beforeTracks
+            state.playlists[targetPlaylistIndex].insertionOrder = beforeInsertionOrder
+            state.shuffleQueue = beforeShuffleQueue
+            state.shuffleQueueIndex = beforeShuffleQueueIndex
+
+            // Register redo: re-apply the batch removal.
+            state.undoManager.registerUndo(withTarget: state) {
+                [afterTracks, afterInsertionOrder, afterShuffleQueue, afterShuffleQueueIndex] inner in
+                inner.playlists[targetPlaylistIndex].tracks = afterTracks
+                inner.playlists[targetPlaylistIndex].insertionOrder = afterInsertionOrder
+                inner.shuffleQueue = afterShuffleQueue
+                inner.shuffleQueueIndex = afterShuffleQueueIndex
+                inner.saveState()
+            }
+
+            state.saveState()
+        }
+
+        saveState()
+    }
+
     /// Inserts a track immediately after the currently playing track.
     ///
     /// Allows the user to queue a specific track to play next without
