@@ -218,6 +218,12 @@ struct PlaylistView: View {
             Button(L("ctx_delete"), role: .destructive) {
                 appState.deletePlaylist(at: index)
             }
+            Divider()
+            Button(L("ctx_new_playlist")) {
+                appState.newPlaylist(name: "")
+                NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
+            }
+            Button(L("ctx_import_playlist")) { importPlaylist() }
         }
     }
 
