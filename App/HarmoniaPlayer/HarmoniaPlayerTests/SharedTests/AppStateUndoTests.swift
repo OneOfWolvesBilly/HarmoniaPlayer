@@ -157,6 +157,25 @@ final class AppStateUndoTests: XCTestCase {
         XCTAssertEqual(sut.playlist.tracks.map(\.id), originalIDs)
     }
 
+    // MARK: - moveTrack(id:before:) — undo
+
+    /// Given: playlist seeded with [A, B, C] (undo stack clear)
+    /// When:  moveTrack(id: C, before: A) → undo
+    /// Then:  order restored to [A, B, C]
+    func testUndoMoveTrackIDBefore_RestoresOrder() async {
+        let (sut, um) = makeSUT()
+        await seedTracks([url("A"), url("B"), url("C")], into: sut)
+        let originalIDs = sut.playlist.tracks.map(\.id)
+
+        sut.moveTrack(id: originalIDs[2], before: originalIDs[0])   // move C before A
+        XCTAssertNotEqual(sut.playlist.tracks.map(\.id), originalIDs,
+                          "Precondition: order should have changed")
+
+        um.undo()
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), originalIDs)
+    }
+
     // MARK: - redo after undo
 
     /// Given: load([track]) → undo

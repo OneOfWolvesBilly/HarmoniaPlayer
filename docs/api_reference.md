@@ -381,6 +381,19 @@ The sibling extension MUST be declared in the app bundle's `CFBundleDocumentType
 
 Used by `LyricsService` `.lrc` sidecar reads.
 
+### 1.20 PlaylistReorderItem
+
+Slice 9-Z. Transferable payload carrying a dragged `Track.ID` for in-table drag-to-reorder. Transfers the ID as plain text (the UUID string) via `ProxyRepresentation`, so no custom UTType declaration / Info.plist registration is needed. It stays distinct from `AudioFileItem` (which transfers a file URL) by representation kind, so a Finder file drop and an in-app reorder drop do not collide on the playlist Table.
+
+```swift
+struct PlaylistReorderItem: Transferable {
+    let id: Track.ID
+    static var transferRepresentation: some TransferRepresentation
+}
+```
+
+Consumed by `PlaylistView`'s per-row `dropDestination(for: PlaylistReorderItem.self)`, which calls `AppState.moveTrack(id:before:)`. A non-UUID text drop resolves to an unknown id and is a safe no-op.
+
 ---
 
 ## 2. Error Types
@@ -582,6 +595,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `removeTrack(_:)` | Removes single track by ID, registers undo |
 | `removeTracks(_:)` | Removes a set of track IDs as one undoable batch; stops playback if the set includes `currentTrack` |
 | `moveTrack(fromOffsets:toOffset:)` | Reorders tracks, registers undo |
+| `moveTrack(id:before:)` | Drag-to-reorder entry point; moves a track before another (or to the end when target is `nil`); no-op while a column sort is active; delegates to `moveTrack(fromOffsets:toOffset:)` |
 | `playNext(_:)` | Moves track to position after currentTrack |
 | `applySort(_:key:ascending:)` | Applies column sort to playlist |
 | `restoreInsertionOrder()` | Restores original insertion order |

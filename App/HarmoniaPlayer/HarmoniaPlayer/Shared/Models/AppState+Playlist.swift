@@ -546,4 +546,41 @@ extension AppState {
 
         saveState()
     }
+
+    /// Moves the dragged track so it sits immediately before `targetID`,
+    /// or to the end of the playlist when `targetID` is `nil`.
+    ///
+    /// UI-facing entry point for drag-to-reorder: it resolves indices from
+    /// track IDs and delegates to `moveTrack(fromOffsets:toOffset:)`, so undo
+    /// and `insertionOrder` sync reuse the existing path. The View passes IDs
+    /// only and performs no index math (module boundary: AppState owns logic).
+    ///
+    /// No-op when a column sort is active (`sortKey != .none`), when the row is
+    /// dropped onto itself, or when `draggedID` is not in the active playlist.
+    ///
+    /// - Parameters:
+    ///   - draggedID: The track being dragged.
+    ///   - targetID: The row to drop before, or `nil` to append to the end.
+    func moveTrack(id draggedID: Track.ID, before targetID: Track.ID?) {
+        // Manual reorder is disabled while a column sort is active.
+        guard playlists[activePlaylistIndex].sortKey == .none else { return }
+        // Dropping a row onto itself changes nothing.
+        guard draggedID != targetID else { return }
+
+        let tracks = playlists[activePlaylistIndex].tracks
+        guard let fromIndex = tracks.firstIndex(where: { $0.id == draggedID }) else { return }
+
+        // toOffset uses the source-array indexing expected by
+        // moveTrack(fromOffsets:toOffset:): the dragged track is inserted
+        // before the target's current index, or appended when there is no
+        // (resolvable) target.
+        let toOffset: Int
+        if let targetID, let targetIndex = tracks.firstIndex(where: { $0.id == targetID }) {
+            toOffset = targetIndex
+        } else {
+            toOffset = tracks.count
+        }
+
+        moveTrack(fromOffsets: IndexSet(integer: fromIndex), toOffset: toOffset)
+    }
 }

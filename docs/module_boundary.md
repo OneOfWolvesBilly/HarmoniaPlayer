@@ -43,7 +43,7 @@ At a high level, the codebase is divided into the following logical modules.
      `Shared/Models/` parallel to `EQCoordinator` (lifecycle
      participant, not stateless service). Slice 9-L. See §4.5.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
-     `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
+     `PlaylistReorderItem`, `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
      `LyricsResolution`, etc.)
    - App-layer service protocols (`PlaybackService`, `TagReaderService`,

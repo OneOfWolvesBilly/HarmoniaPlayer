@@ -75,4 +75,58 @@ final class AppStateDragReorderTests: XCTestCase {
         let trackIDs = sut.playlist.tracks.map { $0.id }
         XCTAssertEqual(sut.playlist.insertionOrder, trackIDs)
     }
+
+    // MARK: - moveTrack(id:before:) — drag reorder entry point
+
+    /// Move C before A: [A, B, C] → [C, A, B].
+    func testMoveTrackIDBefore_MovesDraggedBeforeTarget() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let ids = sut.playlist.tracks.map(\.id)        // [A, B, C]
+
+        sut.moveTrack(id: ids[2], before: ids[0])      // C before A
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), [ids[2], ids[0], ids[1]])  // [C, A, B]
+    }
+
+    /// A nil target appends the dragged track to the end: [A, B, C] → [B, C, A].
+    func testMoveTrackIDBefore_NilTarget_AppendsToEnd() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let ids = sut.playlist.tracks.map(\.id)        // [A, B, C]
+
+        sut.moveTrack(id: ids[0], before: nil)         // A to the end
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), [ids[1], ids[2], ids[0]])  // [B, C, A]
+    }
+
+    /// insertionOrder follows the new visible order after a drag reorder.
+    func testMoveTrackIDBefore_KeepsInsertionOrderInSync() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let ids = sut.playlist.tracks.map(\.id)        // [A, B, C]
+
+        sut.moveTrack(id: ids[2], before: ids[0])      // C before A
+
+        XCTAssertEqual(sut.playlist.insertionOrder, [ids[2], ids[0], ids[1]])    // [C, A, B]
+        XCTAssertEqual(sut.playlist.insertionOrder, sut.playlist.tracks.map(\.id))
+    }
+
+    /// Disabled while a column sort is active (sortKey != .none): order unchanged.
+    func testMoveTrackIDBefore_NoOpWhenColumnSortActive() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let ids = sut.playlist.tracks.map(\.id)        // [A, B, C]
+        sut.playlists[sut.activePlaylistIndex].sortKey = .title   // a column sort is active
+
+        sut.moveTrack(id: ids[2], before: ids[0])      // attempt C before A
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), ids)        // unchanged
+    }
+
+    /// Dropping a row onto itself is a no-op.
+    func testMoveTrackIDBefore_DropOntoSelf_NoOp() async {
+        await sut.load(urls: makeURLs(["a", "b", "c"]))
+        let ids = sut.playlist.tracks.map(\.id)
+
+        sut.moveTrack(id: ids[1], before: ids[1])      // drop B onto itself
+
+        XCTAssertEqual(sut.playlist.tracks.map(\.id), ids)        // unchanged
+    }
 }

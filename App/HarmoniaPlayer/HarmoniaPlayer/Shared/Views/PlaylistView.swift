@@ -280,13 +280,29 @@ struct PlaylistView: View {
     // column count; grouping into sub-functions restores linear inference.
 
     private var tableView: some View {
-        Table(appState.playlist.tracks,
+        Table(of: Track.self,
               selection: $appState.selectedTrackIDs,
               sortOrder: $sortOrder,
               columnCustomization: $columnCustomization) {
             coreColumns
             tagColumns
             technicalColumns
+        } rows: {
+            ForEach(appState.playlist.tracks) { track in
+                // Manual drag-to-reorder is offered only when no column sort is
+                // active; the AppState guard enforces the same rule in the model.
+                if sortOrder.isEmpty {
+                    TableRow(track)
+                        .draggable(PlaylistReorderItem(id: track.id))
+                        .dropDestination(for: PlaylistReorderItem.self) { items in
+                            if let dragged = items.first {
+                                appState.moveTrack(id: dragged.id, before: track.id)
+                            }
+                        }
+                } else {
+                    TableRow(track)
+                }
+            }
         }
         .tableStyle(.inset(alternatesRowBackgrounds: false))
         .scrollContentBackground(.hidden)

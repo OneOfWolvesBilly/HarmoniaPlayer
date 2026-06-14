@@ -125,7 +125,8 @@ HarmoniaPlayer/
 │       │   │   │   ├── AppState+Playback.swift      # Transport, volume, ReplayGain
 │       │   │   │   ├── AppState+Navigation.swift    # Next/previous, track-finish
 │       │   │   │   ├── AppState+M3U8.swift          # M3U8 import/export
-│       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable
+│       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable (file import)
+│       │   │   │   ├── PlaylistReorderItem.swift    # Drag-and-drop Transferable (row reorder)
 │       │   │   │   ├── CoreFeatureFlags.swift       # Free/Pro feature flags
 │       │   │   │   ├── EQBand.swift                 # Static band config (Slice 9-K)
 │       │   │   │   ├── EQBandState.swift            # Editable per-band state (Slice 9-K)
