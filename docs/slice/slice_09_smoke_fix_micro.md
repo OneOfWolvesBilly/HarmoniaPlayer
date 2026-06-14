@@ -669,13 +669,25 @@ Finder file imports.
   reliability caveats — treated as a verification risk (see Risk), not a design
   unknown.
 
+**Amendment (verification 2026-06-14).** The original design used a custom
+exported UTType for `PlaylistReorderItem`. On a `GENERATE_INFOPLIST_FILE = YES`
+target the type could not be instantiated at drop time
+(`Failed to instantiate a content type from NSPasteboardType(...)` →
+`TransferableSupportError error 0`), and registering an Exported Type
+Identifier did not reliably take effect. Per the Risk clause the custom-UTType
+approach was stopped and replaced (this amendment) with a plain-text transfer
+that needs no registration. See revised Fix step 1.
+
 ### Fix
 1. New Transferable payload `PlaylistReorderItem` (Model layer) wrapping a single
-   `Track.ID`, with a CUSTOM UTType
-   (`io.github.oneofwolvesbilly.harmoniaplayer.playlist-reorder`) so internal
-   reorder drags are type-distinct from `AudioFileItem` (URL/file types). The two
-   coexist: the whole-Table `dropDestination(for: AudioFileItem.self)` keeps
-   handling Finder file drops.
+   `Track.ID`, transferring it as plain text (the UUID string) via
+   `ProxyRepresentation`. Plain text is a system-known content type, so NO custom
+   UTType declaration / Info.plist registration is required. Distinctness from
+   `AudioFileItem` is by representation kind: `AudioFileItem` transfers a file URL
+   (Finder file drops → table-level destination), this transfers text (in-app row
+   drags → row-level destination). A foreign text drop carrying a non-UUID string
+   resolves to an id that matches no track; `moveTrack(id:before:)` treats an
+   unknown id as a no-op, so such drops are harmless.
 2. Convert `tableView` to the rows-builder form: `Table(of: Track.self,
    selection:, sortOrder:, columnCustomization:) { coreColumns; tagColumns;
    technicalColumns } rows: { ForEach(tracks) { track in TableRow(track)
@@ -707,12 +719,15 @@ Finder file imports.
 - D3: AppState entrypoint is `moveTrack(id:before:)` (`nil` target = append).
 
 ### Risk (verification, not design)
-`TableRow.dropDestination` reorder reliability on macOS 15.6 is the main risk
-(documented container drop caveats). If the frozen approach fails manual
-verification, STOP and report per SDD discipline (spec amendment); do NOT
-improvise an alternative mid-implementation. Fallback recorded for reference only
-(AppKit-backed reorder / overlay drop layer) — out of scope unless the primary
-approach fails AC.
+- The custom-UTType registration risk is RESOLVED by the plain-text transfer
+  (this amendment); no Info.plist registration is involved.
+- Remaining: a Finder file drop landing on a row must still route to the
+  table-level `AudioFileItem` import, not be swallowed by the row-level text
+  drop. Verify by dropping an audio file onto an existing row (must add, not
+  no-op). If a file drop is intercepted by the reorder destination, STOP and
+  report per SDD discipline; do NOT improvise.
+- `TableRow.dropDestination` reorder reliability on macOS 15.6 remains a
+  general verification point.
 
 ### TDD matrix
 | # | Behaviour under test | SUT | Test File Decision |
@@ -736,7 +751,7 @@ covered by manual smoke.
 ### Files
 | Status | File | Change |
 | --- | --- | --- |
-| New | `Shared/Models/PlaylistReorderItem.swift` | Transferable payload (Track.ID + custom UTType) |
+| New | `Shared/Models/PlaylistReorderItem.swift` | Transferable payload (Track.ID as plain text; no custom UTType / registration) |
 | Modify | `Shared/Models/AppState+Playlist.swift` | Add `moveTrack(id:before:)` + sortKey guard |
 | Modify | `Shared/Views/PlaylistView.swift` | Rows-builder Table + per-row draggable/dropDestination; coexist with the AudioFileItem drop |
 | Modify | `HarmoniaPlayerTests/SharedTests/AppStateDragReorderTests.swift` | Tests Z1–Z5 |
