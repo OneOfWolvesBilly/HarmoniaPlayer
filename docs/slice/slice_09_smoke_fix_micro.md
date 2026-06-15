@@ -22,11 +22,11 @@ Classification principle (why these are separate slices, not folded):
 | 9-S | Persist repeat and shuffle mode on change | Free | ✅ |
 | 9-T | Resolve natural completion against the playing playlist | Free | ✅ |
 | 9-U | Pause marquee at both ends | Free | ✅ |
-| 9-V | EQ persistence (named-only) + load fallback to Flat + button tint live update | Free | ⬜ |
-| 9-W | Move playlist persistence to an Application Support file + exclude artwork/lyrics (root-fix `hp.playlists` overflow) | Free | ⬜ |
-| 9-X | Remove all selected tracks via the multi-select context menu | Free | ⬜ |
-| 9-Y | Add New / Import to the per-tab playlist context menu | Free | ⬜ |
-| 9-Z | Manual drag-to-reorder for the playlist Table | Free | ⬜ |
+| 9-V | EQ persistence (named-only) + load fallback to Flat + button tint live update | Free | ✅ |
+| 9-W | Move playlist persistence to an Application Support file + exclude artwork/lyrics (root-fix `hp.playlists` overflow) | Free | ✅ |
+| 9-X | Remove all selected tracks via the multi-select context menu | Free | ✅ |
+| 9-Y | Add New / Import to the per-tab playlist context menu | Free | ✅ |
+| 9-Z | Manual drag-to-reorder for the playlist Table | Free | ✅ |
 
 Deferred (not a slice): **#5** untracked natural-completion `Task` — see §5.
 Withdrawn: the original 9-T Part B (mini-player browse-only switch) — see 9-T.
