@@ -419,10 +419,18 @@ Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) cannot use the primary file's 
 
 1. Declare the sibling extension in `Info.plist` `CFBundleDocumentTypes`:
    ```xml
-   <key>CFBundleTypeName</key>      <string>LRC Lyrics File</string>
-   <key>CFBundleTypeExtensions</key> <array><string>lrc</string></array>
-   <key>CFBundleTypeRole</key>      <string>Editor</string>
-   <key>NSIsRelatedItemType</key>   <true/>
+        <key>CFBundleTypeName</key>
+        <string>LRC Lyrics File</string>
+        <key>CFBundleTypeExtensions</key>
+        <array>
+            <string>lrc</string>
+        </array>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>NSIsRelatedItemType</key>
+        <true/>
+        <key>LSHandlerRank</key>
+        <string>Alternate</string>
    ```
    `CFBundleTypeRole = Editor` is mandatory; `None` and `Viewer` cause the sandbox to silently refuse the related-item extension (Apple Developer Forum thread 14718).
 

@@ -17,6 +17,8 @@
 			<string>Editor</string>
 			<key>NSIsRelatedItemType</key>
 			<true/>
+			<key>LSHandlerRank</key>
+            <string>Alternate</string>
 		</dict>
 	</array>
 </dict>
