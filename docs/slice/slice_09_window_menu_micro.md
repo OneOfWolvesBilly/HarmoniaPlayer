@@ -80,17 +80,25 @@ the system does not auto-reopen the main window, and the user is stranded.
    deterministically — same commit, no separate test.
 
 2. **Window-menu reopen item** (`macOS/Free/Views/HarmoniaPlayerCommands.swift`).
-   Add a Main Window item that calls `openWindow(id: "main")`
-   (`@Environment(\.openWindow)` is already declared in the Commands struct). On a
-   singleton `Window`, this focuses the existing window or recreates it if closed.
+   Add a Main Window item whose action, inline, closes the Mini Player window if
+   open, then brings the main window forward (`makeKeyAndOrderFront`), recreating
+   it via `openWindow(id: "main")` only when no instance exists.
+   `@Environment(\.openWindow)` is already declared in the Commands struct.
    (Placement relative to the standard Window items is defined in 9-AB.)
+   *v1.0.0 note:* this reopen logic is duplicated inline again in the Dock handler
+   (step 3); consolidating both into one neutral coordinator — together with the
+   Mini Player button's own inline `orderOut` — is a tracked refactor, not part of
+   this ship build.
 
 3. **Dock-click reopen** (new `macOS/Free/AppDelegate.swift` + adaptor in the App).
    - `final class AppDelegate: NSObject, NSApplicationDelegate` holding
-     `var openWindow: OpenWindowAction?`:
+     `var openWindow: OpenWindowAction?`, with the same inline reopen body:
      ```swift
      func applicationShouldHandleReopen(_ sender: NSApplication,
                                         hasVisibleWindows flag: Bool) -> Bool {
+         sender.windows
+             .filter { $0.identifier?.rawValue == "mini-player" }
+             .forEach { $0.close() }
          if let main = sender.windows.first(where: { $0.identifier?.rawValue == "main" }) {
              main.makeKeyAndOrderFront(self)
          } else {
@@ -110,13 +118,24 @@ the system does not auto-reopen the main window, and the user is stranded.
 ### Decisions (frozen)
 
 - **D1** — Main window is a singleton `Window(id: "main")` (not `WindowGroup`).
-- **D2** — A Main Window item (key `menu_main_window`) reopens it; no custom
-  shortcut (see 9-AB for its placement among the standard Window items).
-- **D3** — Dock reopen via `applicationShouldHandleReopen`: existing "main" window
-  → `makeKeyAndOrderFront`; otherwise `openWindow(id: "main")`; return `false`.
-  **Authorized fallback:** add `applicationWillBecomeActive(_:)` with the same
-  body if reopen does not fire. Anything beyond that → **STOP and report**.
+- **D2** — A Main Window item (key `menu_main_window`) reopens the main window
+  inline (close Mini Player, then bring/recreate main); no custom shortcut (see
+  9-AB for its placement among the standard Window items).
+- **D3** — Dock reopen via `applicationShouldHandleReopen` runs the same inline
+  reopen body and returns `false`. **Authorized fallback:** add
+  `applicationWillBecomeActive(_:)` making the same call if reopen does not fire.
+  Anything beyond that → **STOP and report**.
 - **D4** — Mini Player `orderOut` reliability is a folded consequence of D1.
+- **D5** — The main window and the Mini Player are **mutually exclusive**:
+  showing the main window closes the Mini Player. The converse is **not**
+  implemented — closing the Mini Player does not restore the main window, and a
+  no-window (blank) state is acceptable, recovered only by an explicit reopen
+  (menu or Dock). No window is ever summoned implicitly; the Mini Player appears
+  only when the user opens it, the main window only when the user reopens it.
+- **D6** — For v1.0.0 the reopen logic is duplicated inline in the menu item and
+  the Dock handler, and the Mini Player button keeps its own inline `orderOut`.
+  Consolidating all three into one neutral window coordinator is a tracked
+  refactor (see the working notes), deliberately out of the ship build.
 
 ### TDD / Verification
 
@@ -128,7 +147,7 @@ smoke only** (below). No red-phase unit tests.
 
 | Status | File | Change |
 | --- | --- | --- |
-| New | `macOS/Free/AppDelegate.swift` | `NSApplicationDelegate`: holds `OpenWindowAction?`; `applicationShouldHandleReopen` reopens "main" (+ authorized `applicationWillBecomeActive` fallback) |
+| New | `macOS/Free/AppDelegate.swift` | `NSApplicationDelegate`: holds `OpenWindowAction?`; `applicationShouldHandleReopen` runs the inline reopen (close Mini Player, bring/recreate main) (+ authorized `applicationWillBecomeActive` fallback) |
 | Modify | `macOS/Free/HarmoniaPlayerApp.swift` | main scene → `Window(id: "main")`; add `@NSApplicationDelegateAdaptor` + `openWindow` capture |
 | Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | add the Main Window reopen item (placement per 9-AB) |
 | Modify | `en.lproj/Localizable.strings` | add `"menu_main_window" = "Main Window";` (surgical / Xcode) |
@@ -138,18 +157,22 @@ smoke only** (below). No red-phase unit tests.
 
 ### Manual verification
 
-1. Close the main window (no Mini Player open) → Dock click reopens it; Window →
-   Main Window reopens it.
-2. Open Mini Player so it floats and the main window hides; close the main window
-   → Dock click reopens it; Window → Main Window reopens it.
-3. Invoke reopen repeatedly → always exactly one main window.
-4. ⌘W close, ⌘Q quit, ⌘I File Info, ⌘, Settings unaffected.
+1. Close the main window (no Mini Player open) → no window shows (blank is fine);
+   Dock click reopens it; Window → Main Window reopens it.
+2. Open Mini Player (main hides). Close the Mini Player → the main window stays
+   hidden (blank is fine, **not** auto-restored); Dock click / Window → Main
+   Window brings it back.
+3. Open Mini Player (main hides). Invoke Window → Main Window (or Dock click) →
+   the main window shows **and the Mini Player closes** (never both visible).
+4. Invoke reopen repeatedly → always exactly one main window, never a second.
+5. Closing the main window never makes the Mini Player appear.
+6. ⌘W close, ⌘Q quit, ⌘I File Info, ⌘, Settings unaffected.
 
 ### Commit plan
 
 | Order | Type / Scope | Subject |
 | --- | --- | --- |
-| 1 | `fix(slice 9-aa)` | give the main window a stable id and a reopen menu item |
+| 1 | `fix(slice 9-aa)` | give the main window a stable id and a reopen menu item that closes the mini player |
 | 2 | `fix(slice 9-aa)` | reopen the main window on dock click |
 
 ### Doc updates
@@ -162,6 +185,9 @@ smoke only** (below). No red-phase unit tests.
 
 ### Non-goals
 
+- **Never-blank / auto-restore.** A no-window state after closing the main window
+  (or the Mini Player) is acceptable; the app does not summon a window to avoid a
+  blank state. Closing the Mini Player does not bring the main window back.
 - `.restorationBehavior` / `.defaultLaunchBehavior` tuning for Mini Player / EQ /
   File Info — unchanged.
 - MenuBarExtra — not introduced.

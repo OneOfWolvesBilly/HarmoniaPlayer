@@ -329,6 +329,8 @@ or **日本語**. Changing the language requires a restart.
 | `⌘,` | Open Settings |
 | `⌘Q` | Quit |
 
+The **Window → Main Window** menu item reopens the main window if it has been closed.
+
 ---
 
 ## Troubleshooting
