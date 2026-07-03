@@ -133,6 +133,8 @@
 
 "help_reset_columns" = "列レイアウトをリセット";
 
+"menu_main_window" = "メインウィンドウ";
+
 // Slice 8-B: Mini Player
 "menu_mini_player" = "ミニプレーヤー";
 "menu_upgrade_to_pro" = "Pro にアップグレード…";

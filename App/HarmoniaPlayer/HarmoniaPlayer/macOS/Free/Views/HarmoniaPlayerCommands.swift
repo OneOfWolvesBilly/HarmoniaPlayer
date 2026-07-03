@@ -98,16 +98,29 @@ struct HarmoniaPlayerCommands: Commands {
 
         // Window menu — Mini Player toggle (⌘M) + Equalizer (⌘⌥E).
         CommandGroup(replacing: .windowArrangement) {
+            Button(L("menu_main_window")) {
+                NSApp.windows
+                    .filter { windowMatchesScene($0, id: "mini-player") }
+                    .forEach { $0.close() }
+                if let main = NSApp.windows.first(where: { windowMatchesScene($0, id: "main") }) {
+                    main.makeKeyAndOrderFront(nil)
+                } else {
+                    openWindow(id: "main")
+                }
+            }
+
             Button(L("menu_mini_player")) {
                 openWindow(id: "mini-player")
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     NSApp.windows
-                        .filter { $0.identifier?.rawValue == "main" }
+                        .filter { windowMatchesScene($0, id: "main") }
                         .first?
-                        .orderOut(nil)
+                        .close()
                 }
             }
             .keyboardShortcut("m", modifiers: .command)
+
+            Divider()
 
             Button(L("menu_equalizer")) {
                 openWindow(id: "equalizer-window")
@@ -354,4 +367,12 @@ struct HarmoniaPlayerCommands: Commands {
             }
         }
     }
+}
+
+/// SwiftUI derives the AppKit window identifier from the scene id as
+/// "{id}-AppWindow-{n}", so scene-window matching must accept both the bare
+/// id and the derived form.
+private func windowMatchesScene(_ window: NSWindow, id: String) -> Bool {
+    guard let raw = window.identifier?.rawValue else { return false }
+    return raw == id || raw.hasPrefix(id + "-")
 }

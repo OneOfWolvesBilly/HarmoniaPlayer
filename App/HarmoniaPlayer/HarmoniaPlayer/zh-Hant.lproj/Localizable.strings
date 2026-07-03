@@ -133,6 +133,8 @@
 
 "help_reset_columns" = "重置欄位配置";
 
+"menu_main_window" = "主視窗";
+
 // Slice 8-B: Mini Player
 "menu_mini_player" = "迷你播放器";
 "menu_upgrade_to_pro" = "升級至 Pro…";

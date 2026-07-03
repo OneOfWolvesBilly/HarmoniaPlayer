@@ -133,6 +133,8 @@
 
 "help_reset_columns" = "Reset column layout";
 
+"menu_main_window" = "Main Window";
+
 // Slice 8-B: Mini Player
 "menu_mini_player" = "Mini Player";
 "menu_upgrade_to_pro" = "Upgrade to Pro…";
