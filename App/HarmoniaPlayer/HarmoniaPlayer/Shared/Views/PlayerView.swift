@@ -119,12 +119,6 @@ struct PlayerView: View {
                 Menu {
                     Button {
                         openWindow(id: "mini-player")
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            NSApp.windows
-                                .filter { $0.identifier?.rawValue == "main" }
-                                .first?
-                                .orderOut(nil)
-                        }
                     } label: {
                         Label(L("menu_mini_player"), systemImage: "rectangle.compress.vertical")
                     }

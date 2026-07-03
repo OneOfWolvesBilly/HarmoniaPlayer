@@ -111,12 +111,6 @@ struct HarmoniaPlayerCommands: Commands {
 
             Button(L("menu_mini_player")) {
                 openWindow(id: "mini-player")
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    NSApp.windows
-                        .filter { windowMatchesScene($0, id: "main") }
-                        .first?
-                        .close()
-                }
             }
             .keyboardShortcut("m", modifiers: .command)
 

@@ -45,15 +45,16 @@ struct HarmoniaPlayerApp: App {
                 .close()
         }
 
-        // Window-menu hygiene and exclusivity, enforced at the window level.
+        // Exclusivity, enforced at the window level in both directions: the
+        // main window and the Mini Player are two modes of one player
+        // surface, so whichever of the two becomes key closes the other.
+        // Entry points (Window menu, player toolbar ⋯ menu, Dock) therefore
+        // only ever open a window — the closing rule lives here, once, and
+        // every current or future entry point obeys it automatically.
         //
-        // 1. The app's own Window-menu items are the canonical controls for
-        //    the main window, the Mini Player, and the Equalizer, so those
-        //    windows are excluded from the system-populated windows list —
-        //    otherwise the menu shows duplicate entries for the same window.
-        // 2. The main window and the Mini Player are two modes of one player
-        //    surface: whenever the main window becomes key — via the menu
-        //    item, a Dock reopen, or window cycling — the Mini Player closes.
+        // Duplicate Window-menu entries are removed declaratively by
+        // .commandsRemoved() on each Window scene (build time), not here, so
+        // the menu never renders them and there is no flicker.
         NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification,
             object: nil,
@@ -61,15 +62,15 @@ struct HarmoniaPlayerApp: App {
         ) { notification in
             guard let window = notification.object as? NSWindow else { return }
 
-            if ["main", "mini-player", "equalizer-window"]
-                .contains(where: { windowMatchesScene(window, id: $0) }) {
-                window.isExcludedFromWindowsMenu = true
+            if windowMatchesScene(window, id: "main") {
+                NSApp.windows
+                    .filter { windowMatchesScene($0, id: "mini-player") }
+                    .forEach { $0.close() }
+            } else if windowMatchesScene(window, id: "mini-player") {
+                NSApp.windows
+                    .filter { windowMatchesScene($0, id: "main") }
+                    .forEach { $0.close() }
             }
-
-            guard windowMatchesScene(window, id: "main") else { return }
-            NSApp.windows
-                .filter { windowMatchesScene($0, id: "mini-player") }
-                .forEach { $0.close() }
         }
     }
 
