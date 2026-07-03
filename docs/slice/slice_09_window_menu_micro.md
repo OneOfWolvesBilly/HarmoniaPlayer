@@ -47,7 +47,12 @@ the system does not auto-reopen the main window, and the user is stranded.
 4. Latent: the Mini Player command filters `NSApp.windows` for
    `identifier?.rawValue == "main"`, but with no scene `id` that identifier is
    not reliably set.
-5. Each `Window` scene auto-generates its own menu command (named after the
+5. The player toolbar's ⋯ menu is a second Mini Player entry point whose
+   action still ran the pre-slice behaviour — hiding (`orderOut`) the main
+   window instead of closing it — so the two entry points for the same
+   feature diverged. Per-entry-point closing logic invites exactly this
+   drift; the closing rule belongs at the window level, once.
+6. Each `Window` scene auto-generates its own menu command (named after the
    window title: "Harmonia Player", "Mini Player", "Equalizer"). These appear
    as a second, duplicate group above the app's own Window-menu items and carry
    default behaviour that ignores the main/Mini exclusivity. They are scene
@@ -133,13 +138,18 @@ never participates in the exclusivity, and does not affect the matrix.
 
    Window-level exclusivity is enforced separately by a
    `NSWindow.didBecomeKeyNotification` observer in `init` (beside the existing
-   restoration observer):
+   restoration observer), **in both directions**: whichever of the two player
+   surfaces becomes key closes the other. Entry points (Window menu, player
+   toolbar ⋯ menu, Dock) therefore only ever call `openWindow`; no entry point
+   carries its own closing logic, so every current or future entry point obeys
+   the rule automatically.
    - When the window with identifier "main" becomes key, closes every window
-     with identifier "mini-player". This enforces D5 at the point where the
-     event happens, covering every path that can bring the main window forward
-     — the Window-menu item, Dock reopen, and window cycling — including paths
-     the app does not own. The inline close in the menu item (step 2) is
-     redundant safety and stays as shipped for v1.0.0.
+     with identifier "mini-player"; when the "mini-player" window becomes key,
+     closes every "main" window. This enforces D5 at the point where the event
+     happens, covering every path in either direction — the Window-menu items,
+     the player toolbar ⋯ menu, Dock reopen, and window cycling — including
+     paths the app does not own. The inline close in the Main Window menu item
+     (step 2) is redundant safety and stays as shipped for v1.0.0.
 
 5. **Closing the Mini Player returns to the main window**
    (`macOS/Free/AppDelegate.swift`). The Mini Player and the main window are two
@@ -151,11 +161,15 @@ never participates in the exclusivity, and does not affect the matrix.
    `applicationShouldTerminate` so quitting with the Mini Player open does not
    resurrect the main window during termination.
 
-6. **Opening the Mini Player closes the main window** (matrix row 1-1,
-   `macOS/Free/Views/HarmoniaPlayerCommands.swift`). The Mini Player button's
-   deferred `orderOut(nil)` on the main window becomes `close()`: in mini mode
-   the main window is closed, not hidden, so the two modes are symmetric —
-   entering mini mode closes main, leaving mini mode recreates main (step 5).
+6. **Mini Player entry points only open the window** (matrix row 1-1,
+   `macOS/Free/Views/HarmoniaPlayerCommands.swift` and
+   `Shared/Views/PlayerView.swift`). Both Mini Player entry points — the Window
+   menu item and the player toolbar ⋯ menu — reduce to a bare
+   `openWindow(id: "mini-player")`. Closing the main window is handled by the
+   window-level rule (step 4), so in mini mode the main window is closed, not
+   hidden, from every entry point, and the deferred `orderOut`/`close` hacks
+   are deleted. `PlayerView` (Shared) no longer touches `NSApp`/AppKit window
+   management.
 
 ### Decisions (frozen)
 
@@ -174,9 +188,11 @@ never participates in the exclusivity, and does not affect the matrix.
 - **D5** — The main window and the Mini Player are two modes of **one player
   surface**, never visible together. Opening the Mini Player **closes** the main
   window (matrix 1-1); **closing the Mini Player returns to the main window**,
-  recreating it. Exclusivity is additionally enforced at the **window level**
-  (main window becoming key closes the Mini Player), so every reopen path obeys
-  it — the menu item, Dock reopen, and window cycling. Closing the **main**
+  recreating it. Exclusivity is enforced at the **window level in both
+  directions** (whichever of the two becomes key closes the other), so every
+  entry point in either direction obeys it — the Window-menu items, the player
+  toolbar ⋯ menu, Dock reopen, and window cycling — and entry points only ever
+  open a window. Closing the **main**
   window dismisses the player surface without summoning anything: a no-window
   (blank) state is acceptable and is recovered only by an explicit reopen (menu
   or Dock).
@@ -211,8 +227,9 @@ smoke only** (below). No red-phase unit tests.
 | Status | File | Change |
 | --- | --- | --- |
 | New | `macOS/Free/AppDelegate.swift` | `NSApplicationDelegate`: holds `OpenWindowAction?`; Dock reopen closes the Mini Player and shows/recreates the main window; closing the Mini Player returns to the main window (termination-guarded via `applicationShouldTerminate`) |
-| Modify | `macOS/Free/HarmoniaPlayerApp.swift` | main scene → `Window(id: "main")`; add `@NSApplicationDelegateAdaptor` + `openWindow` capture; `.commandsRemoved()` on main/Mini/EQ scenes to drop auto scene commands; key-window observer closes Mini Player when main becomes key |
-| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | add the Main Window reopen item (placement per 9-AB); Mini Player button closes the main window instead of hiding it; separator between the player-surface items and the Equalizer |
+| Modify | `macOS/Free/HarmoniaPlayerApp.swift` | main scene → `Window(id: "main")`; add `@NSApplicationDelegateAdaptor` + `openWindow` capture; `.commandsRemoved()` on main/Mini/EQ scenes to drop auto scene commands; key-window observer enforces exclusivity in both directions (main↔mini) |
+| Modify | `Shared/Views/PlayerView.swift` | toolbar ⋯ Mini Player action reduced to `openWindow` only; AppKit window handling removed from the Shared layer |
+| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | add the Main Window reopen item (placement per 9-AB); Mini Player button reduced to `openWindow` only; separator between the player-surface items and the Equalizer |
 | Modify | `en.lproj/Localizable.strings` | add `"menu_main_window" = "Main Window";` (surgical / Xcode) |
 | Modify | `ja.lproj/Localizable.strings` | add `"menu_main_window" = "メインウィンドウ";` |
 | Modify | `zh-Hant.lproj/Localizable.strings` | add `"menu_main_window" = "主視窗";` |
@@ -222,8 +239,10 @@ smoke only** (below). No red-phase unit tests.
 
 Follow the matrix, one cell at a time:
 
-1. **1-1** Main open, Mini closed → menu Mini Player → Mini opens **and the main
-   window closes** (not just hides).
+1. **1-1** Main open, Mini closed → open Mini from **both** entry points (in
+   separate runs): Window → Mini Player, and the player toolbar **⋯ → Mini
+   Player** → Mini opens **and the main window closes** (not just hides) from
+   either entry.
 2. **1-2** Main open → Dock click → nothing changes (main stays, no Mini).
 3. **1-3** Main open → Window → Main Window → nothing changes (still exactly one
    main window).
@@ -245,7 +264,12 @@ Follow the matrix, one cell at a time:
     Front, and File Info entries when File Info windows are open.
 12. **Quit guard** Open Mini Player, then ⌘Q → the app quits cleanly; the main
     window does not flash open during termination; playlist state is saved.
-13. **Regression** Closing the main window never makes the Mini Player appear;
+13. **Window-placement commands** With the **main** window focused (playing or
+    not), the Window menu shows the system placement items (Minimize / Zoom /
+    Fill / Center / Move & Resize) — playback must not change them. With the
+    **Mini Player** focused, the system hides the placement items for the
+    floating panel; that reduction is expected macOS behaviour, not a defect.
+14. **Regression** Closing the main window never makes the Mini Player appear;
     Equalizer opens/closes independently in both modes; ⌘W, ⌘I File Info, ⌘,
     Settings unaffected; the standard App menu (About / Quit) and the Edit menu
     remain present after `.commandsRemoved()`.
