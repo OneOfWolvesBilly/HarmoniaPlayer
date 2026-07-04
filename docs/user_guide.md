@@ -122,8 +122,8 @@ duplicates in **Settings → Playlist** if you prefer.
 | ▶ / ⏸ | Play / Pause | `Space` |
 | ⏹ | Stop | `⌘.` |
 | ⏭ | Next track | `⌘→` |
-| — | Seek forward 5 s | `→` |
-| — | Seek backward 5 s | `←` |
+| — | Seek forward 5 s | `⌥⌘→` |
+| — | Seek backward 5 s | `⌥⌘←` |
 
 When a track ends, behaviour depends on the current repeat mode.
 
@@ -259,7 +259,7 @@ each window with **`⌘W`** or the window's close button.
 ## Mini Player
 
 Open a compact floating player window via **Window → Mini Player**
-(**`⌘M`**). The Mini Player:
+(**`⇧⌘M`**). The Mini Player:
 
 - Shows the current track title and artist with a marquee scroll for long names
 - Provides previous / play / pause / next controls
@@ -325,7 +325,8 @@ or **日本語**. Changing the language requires a restart.
 
 | Shortcut | Action |
 |----------|--------|
-| `⌘M` | Open Mini Player |
+| `⌘M` | Minimize |
+| `⇧⌘M` | Open Mini Player |
 | `⌘,` | Open Settings |
 | `⌘Q` | Quit |
 

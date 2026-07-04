@@ -301,90 +301,105 @@ Follow the matrix, one cell at a time:
 
 ---
 
-## Slice 9-AB: Standard Window-menu items and macOS-conventional playback shortcuts
+## Slice 9-AB: macOS-conventional playback and Mini Player shortcuts
 
 ### Requirement and rationale
 
-Bring menu and keyboard behaviour into line with macOS conventions and the native
-Music app's shortcut map (macOS HIG; Review Guidelines §4):
+Align the keyboard map with macOS conventions and the native Music app
+(macOS HIG; Review Guidelines §4):
 
-- `⌘M` is the system-standard **Minimize** shortcut; the app currently binds it to
-  the Mini Player, shadowing Minimize.
-- The standard Window-menu items **Minimize** and **Zoom** were dropped when
-  `.windowArrangement` was replaced wholesale.
-- **Seek** is bound to **bare arrow keys**. A menu key equivalent is evaluated
-  before the focused responder, so bare ←/→ pre-empt arrow-key navigation in the
+- `⌘M` is the system-standard Minimize and already behaves as such in the
+  released build: the Mini Player item's own `⌘M` equivalent never fires
+  because the system Minimize item resolves first, so the binding is dead
+  code — and `user_guide.md` documents `⌘M` as "Open Mini Player", which does
+  not match the actual behaviour. The Mini Player therefore has no working
+  shortcut at all.
+- Seek is bound to bare arrow keys. A menu key equivalent is evaluated before
+  the focused responder, so bare ←/→ pre-empt arrow-key navigation in the
   playlist table.
 
 ### Root cause
 
-Menu key equivalents are global and take precedence over the first responder, so
-bare keys (←/→) and system-reserved combos (⌘M) override the behaviour the
-focused control should provide; and replacing the whole `.windowArrangement`
-group removed Minimize/Zoom.
+Menu key equivalents are global and take precedence over the first responder
+(bare ←/→ steal table navigation), and duplicate equivalents resolve to the
+menu-order-first item (the system Minimize precedes the app's Window group, so
+the Mini Player's `⌘M` never fires).
 
 ### Fix (`macOS/Free/Views/HarmoniaPlayerCommands.swift`)
 
-1. **Restore `⌘M` to Minimize.** Do not bind a custom command to `⌘M`. Move the
-   Mini Player command to **`⌥⌘M`**.
-2. **Keep the standard Window-menu items.** Instead of replacing the whole
-   `.windowArrangement` group, keep Minimize and Zoom and **add** the 9-AA Main
-   Window item (and the existing Mini Player / Equalizer items) alongside them.
-3. **Move Seek to `⌥⌘←` / `⌥⌘→`** (Music parity). This frees the bare arrow keys
-   for playlist-table navigation.
-4. **Leave Previous / Next at `⌘←` / `⌘→`** — already matches Music; no change.
-5. **Play / Pause stays Space**, implemented so a focused text field consumes
-   Space first (handled at the responder level, not as a hard global menu key
-   equivalent that pre-empts typing).
+1. **Mini Player → `⇧⌘M`.** Remove the dead `⌘M` equivalent and assign
+   `⇧⌘M` — Music's "Switch to MiniPlayer" binding, which matches this app's
+   exclusive mode-switch semantics. `⌥⌘M` is not used: it is the system's
+   Minimize All variant, and Music reserves it for its non-exclusive
+   "Mini Player" item, which this app does not have.
+2. **Seek → `⌥⌘←` / `⌥⌘→`** (Music parity). Frees the bare arrow keys for
+   playlist-table navigation.
+3. **Previous / Next unchanged** at `⌘←` / `⌘→` — already Music parity.
+4. **Play / Pause unchanged** as the bare-Space menu equivalent. Verification
+   includes the rename-field check (a focused text field must consume Space);
+   if the field does not win, stop and report — no responder-chain rework
+   inside this slice.
+5. **No Window-menu structural change.** Minimize / Zoom are provided by the
+   system outside the replaced `.windowArrangement` group and are already
+   present; 9-AA settled the Window-menu composition.
 
 ### Decisions (frozen)
 
-- **D9** — `⌘M` = Minimize (system standard); Mini Player = `⌥⌘M`.
-- **D10** — Window menu keeps Minimize + Zoom; the Main Window item is added, the
-  standard group is not wholesale-replaced.
-- **D11** — Seek = `⌥⌘←` / `⌥⌘→`; bare arrow keys are reserved for table navigation.
-- **D12** — Previous / Next unchanged (`⌘←` / `⌘→`); Equalizer unchanged (`⌘⌥E`);
-  Play / Pause stays Space, handled at the responder level.
+- **D9** — Mini Player = `⇧⌘M` (Switch-to-MiniPlayer parity); the dead `⌘M`
+  equivalent is removed; `⌘M` remains the system Minimize. `⌥⌘M` is avoided
+  (system Minimize All variant).
+- **D10** — Seek = `⌥⌘←` / `⌥⌘→`; bare arrow keys are reserved for table
+  navigation.
+- **D11** — Previous / Next unchanged (`⌘←` / `⌘→`); Equalizer unchanged
+  (`⌥⌘E`); Stop unchanged (`⌘.`).
+- **D12** — Play / Pause stays the bare-Space menu equivalent. The first
+  manual test must confirm a focused rename field consumes Space; if it does
+  not, stop and report before any further change.
 
 ### TDD / Verification
 
-Menu / keyboard glue with no meaningful headless assertion (precedent 9-U / 9-Y).
-**Manual smoke only**, and it **must** include the table-navigation check below.
+Menu / keyboard glue with no meaningful headless assertion (precedent 9-U /
+9-Y). Manual smoke only, and it must include the table-navigation check.
 
 ### Files
 
 | Status | File | Change |
 | --- | --- | --- |
-| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | restore standard Window items + `⌘M` Minimize; Mini Player → `⌥⌘M`; Seek → `⌥⌘`+arrow; Space handled at responder level |
-| Modify | `docs/user_guide.md` | update the Window / Playback shortcut tables |
+| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | Mini Player equivalent `⌘M` → `⇧⌘M`; Seek `←`/`→` → `⌥⌘←`/`⌥⌘→` |
+| Modify | `docs/user_guide.md` | correct the Window / Playback shortcut tables (`⌘M` = Minimize, Mini Player `⇧⌘M`, Seek `⌥⌘`+arrow) |
 
 ### Manual verification
 
-1. **Minimize.** `⌘M` minimises the main window; the Window menu shows Minimize +
-   Zoom; Mini Player opens on `⌥⌘M`.
-2. **Table navigation (critical).** Focus the playlist table, press `←` / `→` →
-   selection moves; it does **not** seek.
-3. **Seek.** `⌥⌘←` / `⌥⌘→` seek backward / forward.
-4. **Transport.** Space toggles play/pause; while renaming a playlist, Space types
-   a space (the field wins). `⌘←` / `⌘→` change track.
+1. **Minimize.** `⌘M` minimises the focused window (main and Mini Player) —
+   unchanged system behaviour.
+2. **Mini Player shortcut.** `⇧⌘M` opens the Mini Player and the main window
+   closes (exclusivity from 9-AA).
+3. **Table navigation (critical).** Focus the playlist table, press `←` / `→`
+   → selection moves; it does **not** seek.
+4. **Seek.** `⌥⌘←` / `⌥⌘→` seek backward / forward 5 s.
+5. **Transport.** Space toggles play/pause; while renaming a playlist, Space
+   types a space (the field wins — D12 gate). `⌘←` / `⌘→` change track; `⌘.`
+   stops; `⌥⌘E` opens the Equalizer.
 
 ### Commit plan
 
 | Order | Type / Scope | Subject |
 | --- | --- | --- |
-| 1 | `fix(slice 9-ab)` | restore standard window menu items and the minimize shortcut |
-| 2 | `fix(slice 9-ab)` | align playback shortcuts with the macOS music conventions |
+| 1 | `docs(slice 9-ab)` | revise the shortcut spec to the released-build behaviour and correct the user guide tables |
+| 2 | `fix(slice 9-ab)` | align the mini player and seek shortcuts with the macos music conventions |
 
 ### Doc updates
 
-- `user_guide.md` — Window / Playback shortcut tables: `⌘M` Minimize, Mini Player
-  `⌥⌘M`, Seek `⌥⌘`+arrow.
+- `user_guide.md` — Window / Playback shortcut tables: `⌘M` Minimize, Mini
+  Player `⇧⌘M`, Seek `⌥⌘`+arrow (ships with commit 1).
+- No `api_reference.md` / `module_boundary.md` / `architecture.md` change.
 
 ### Non-goals
 
-- Restoring Cut / Copy / Paste / Select All in the Edit menu — Apple permits
-  removing default commands that do not apply; this is polish, deferred.
+- Restoring Cut / Copy / Paste / Select All in the Edit menu — polish, deferred.
 - Volume shortcuts (`⌘↑` / `⌘↓`) — not in this slice.
+- Removing the legacy `MainWindowIdentitySetter` — tracked in the working
+  notes for the coordinator refactor.
 
 ---
 
