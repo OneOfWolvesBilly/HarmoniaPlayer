@@ -110,9 +110,20 @@ struct HarmoniaPlayerCommands: Commands {
             }
 
             Button(L("menu_mini_player")) {
-                openWindow(id: "mini-player")
+                let miniIsOnscreen = NSApp.windows.contains {
+                    windowMatchesScene($0, id: "mini-player") && $0.isVisible
+                }
+                if miniIsOnscreen {
+                    openWindow(id: "main")
+                } else if let minimizedMain = NSApp.windows.first(where: {
+                    windowMatchesScene($0, id: "main") && $0.isMiniaturized
+                }) {
+                    minimizedMain.deminiaturize(nil)
+                } else {
+                    openWindow(id: "mini-player")
+                }
             }
-            .keyboardShortcut("m", modifiers: .command)
+            .keyboardShortcut("m", modifiers: [.command, .shift])
 
             Divider()
 
@@ -221,7 +232,7 @@ struct HarmoniaPlayerCommands: Commands {
                     await state.seek(to: min(state.duration, state.currentTime + 5))
                 }
             }
-            .keyboardShortcut(.rightArrow, modifiers: [])
+            .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
             .disabled(needsActiveTrack)
 
             Button(L("menu_seek_backward")) {
@@ -230,7 +241,7 @@ struct HarmoniaPlayerCommands: Commands {
                     await state.seek(to: max(0, state.currentTime - 5))
                 }
             }
-            .keyboardShortcut(.leftArrow, modifiers: [])
+            .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
             .disabled(needsActiveTrack)
 
             Divider()
