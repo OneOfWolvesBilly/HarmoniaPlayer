@@ -259,7 +259,7 @@ each window with **`⌘W`** or the window's close button.
 ## Mini Player
 
 Open a compact floating player window via **Window → Mini Player**
-(**`⇧⌘M`**). The Mini Player:
+(**`⇧⌘M`** — press again to switch back to the main window). The Mini Player:
 
 - Shows the current track title and artist with a marquee scroll for long names
 - Provides previous / play / pause / next controls
@@ -326,7 +326,7 @@ or **日本語**. Changing the language requires a restart.
 | Shortcut | Action |
 |----------|--------|
 | `⌘M` | Minimize |
-| `⇧⌘M` | Open Mini Player |
+| `⇧⌘M` | Switch between main window and Mini Player |
 | `⌘,` | Open Settings |
 | `⌘Q` | Quit |
 

@@ -71,7 +71,7 @@ Equalizer. Each Window scene's auto-generated menu command is removed with
 | State | Menu → Mini Player | Dock click | Menu → Main Window |
 | --- | --- | --- | --- |
 | 1. Main open, Mini closed | close main, open Mini (1-1) | main already there — nothing (1-2) | main already there — nothing (1-3) |
-| 2. Main closed, Mini open | Mini already there — nothing (2-1) | Mini already there — nothing (2-2) | close Mini, open main (2-3) |
+| 2. Main closed, Mini open | switch back — open main, Mini closes (2-1) | Mini already there — nothing (2-2) | close Mini, open main (2-3) |
 | 3. Main closed, Mini closed | open Mini (3-1) | open main (3-2) | open main (3-3) |
 
 Additionally, **closing the Mini Player itself returns to the main window**
@@ -246,7 +246,8 @@ Follow the matrix, one cell at a time:
 2. **1-2** Main open → Dock click → nothing changes (main stays, no Mini).
 3. **1-3** Main open → Window → Main Window → nothing changes (still exactly one
    main window).
-4. **2-1** Mini open, main closed → menu Mini Player → nothing changes.
+4. **2-1** Mini open, main closed → menu Mini Player / `⇧⌘M` → **switches back:
+   main opens, Mini closes** (toggle).
 5. **2-2** Mini open, main closed → Dock click → **nothing changes** (Mini
    stays; no main window appears).
 6. **2-3** Mini open, main closed → Window → Main Window → **Mini closes, main
@@ -327,11 +328,15 @@ the Mini Player's `⌘M` never fires).
 
 ### Fix (`macOS/Free/Views/HarmoniaPlayerCommands.swift`)
 
-1. **Mini Player → `⇧⌘M`.** Remove the dead `⌘M` equivalent and assign
-   `⇧⌘M` — Music's "Switch to MiniPlayer" binding, which matches this app's
-   exclusive mode-switch semantics. `⌥⌘M` is not used: it is the system's
-   Minimize All variant, and Music reserves it for its non-exclusive
-   "Mini Player" item, which this app does not have.
+1. **Mini Player → `⇧⌘M`, as a two-way switch.** Remove the dead `⌘M`
+   equivalent and assign `⇧⌘M` — Music's "Switch to MiniPlayer" binding, which
+   matches this app's exclusive mode-switch semantics, including the return
+   direction: the menu action opens whichever player surface is currently
+   absent (main open → opens the Mini Player; Mini open → opens the main
+   window), and the window-level exclusivity rule closes the other. The
+   entry point still only opens a window; no closing logic is added. `⌥⌘M`
+   is not used: it is the system's Minimize All variant, and Music reserves
+   it for its non-exclusive "Mini Player" item, which this app does not have.
 2. **Seek → `⌥⌘←` / `⌥⌘→`** (Music parity). Frees the bare arrow keys for
    playlist-table navigation.
 3. **Previous / Next unchanged** at `⌘←` / `⌘→` — already Music parity.
@@ -345,9 +350,10 @@ the Mini Player's `⌘M` never fires).
 
 ### Decisions (frozen)
 
-- **D9** — Mini Player = `⇧⌘M` (Switch-to-MiniPlayer parity); the dead `⌘M`
-  equivalent is removed; `⌘M` remains the system Minimize. `⌥⌘M` is avoided
-  (system Minimize All variant).
+- **D9** — Mini Player = `⇧⌘M`, a two-way switch between the main window and
+  the Mini Player (Switch-to-MiniPlayer parity, matrix rows 1-1 / 2-1 / 3-1);
+  the dead `⌘M` equivalent is removed; `⌘M` remains the system Minimize.
+  `⌥⌘M` is avoided (system Minimize All variant).
 - **D10** — Seek = `⌥⌘←` / `⌥⌘→`; bare arrow keys are reserved for table
   navigation.
 - **D11** — Previous / Next unchanged (`⌘←` / `⌘→`); Equalizer unchanged
@@ -365,15 +371,16 @@ Menu / keyboard glue with no meaningful headless assertion (precedent 9-U /
 
 | Status | File | Change |
 | --- | --- | --- |
-| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | Mini Player equivalent `⌘M` → `⇧⌘M`; Seek `←`/`→` → `⌥⌘←`/`⌥⌘→` |
+| Modify | `macOS/Free/Views/HarmoniaPlayerCommands.swift` | Mini Player equivalent `⌘M` → `⇧⌘M` acting as a two-way switch; Seek `←`/`→` → `⌥⌘←`/`⌥⌘→` |
 | Modify | `docs/user_guide.md` | correct the Window / Playback shortcut tables (`⌘M` = Minimize, Mini Player `⇧⌘M`, Seek `⌥⌘`+arrow) |
 
 ### Manual verification
 
 1. **Minimize.** `⌘M` minimises the focused window (main and Mini Player) —
    unchanged system behaviour.
-2. **Mini Player shortcut.** `⇧⌘M` opens the Mini Player and the main window
-   closes (exclusivity from 9-AA).
+2. **Mini Player switch (both directions).** From the main window, `⇧⌘M`
+   opens the Mini Player and the main window closes; pressing `⇧⌘M` again
+   opens the main window and the Mini Player closes.
 3. **Table navigation (critical).** Focus the playlist table, press `←` / `→`
    → selection moves; it does **not** seek.
 4. **Seek.** `⌥⌘←` / `⌥⌘→` seek backward / forward 5 s.
