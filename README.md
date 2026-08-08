@@ -51,9 +51,11 @@ HarmoniaPlayer exists for listeners who keep their own audio files instead of re
 
 ## Download
 
-HarmoniaPlayer v1.0.0 (Free) is being prepared for release on the Mac App Store. A download link will appear here once it is live.
+HarmoniaPlayer v1.0.0 (Free) is available on the Mac App Store:
 
-The official App Store version will offer optional Pro features through In-App Purchase.
+**[Download Harmonia Player on the Mac App Store](https://apps.apple.com/tw/app/harmonia-player/id6781963866?mt=12)**
+
+The App Store version will offer optional Pro features through In-App Purchase in a future release.
 
 ## Build from Source
 
