@@ -180,6 +180,8 @@ Right-click a playlist tab for:
 - **Export Playlist…** — save this playlist as an M3U8 file; a checkbox
   offers relative paths (useful for sharing or USB drives)
 - **Delete** — remove this playlist
+- **New Playlist** — create a new playlist and immediately start renaming it
+- **Import Playlist…** — open an M3U8 file as a new playlist tab
 
 Right-clicking a non-active tab still targets that tab — for example,
 Export Playlist… exports the tab you clicked, not the currently active one.
@@ -200,9 +202,8 @@ Right-click a track for the context menu:
 - **Get Info** — open the File Info panel (⌘I)
 - **Remove from Playlist** — delete the track from this playlist
 
-Or use keyboard:
+Or use the mouse:
 
-- **`Delete`** — remove selected tracks
 - **Drag** rows to reorder
 
 ### Sorting columns
@@ -246,7 +247,7 @@ File Info window, showing:
 - **Technical info:** bitrate, sample rate, channel count, file size,
   file format
 - **Source URLs:** files downloaded from the web have their
-  `kMDItemWhereFroms` source URL shown; you can edit or clear this
+  `kMDItemWhereFroms` source URL shown (read-only)
 
 File Info is a standalone window: it is resizable, draggable, and does
 not block the main window, so you can keep playing music and continue
@@ -306,8 +307,8 @@ or **日本語**. Changing the language requires a restart.
 | `⌘.` | Stop |
 | `⌘→` | Next track |
 | `⌘←` | Previous track |
-| `→` | Seek forward 5 s |
-| `←` | Seek backward 5 s |
+| `⌥⌘→` | Seek forward 5 s |
+| `⌥⌘←` | Seek backward 5 s |
 | `⌘R` | Cycle repeat mode |
 | `⌘S` | Toggle shuffle |
 
@@ -317,7 +318,6 @@ or **日本語**. Changing the language requires a restart.
 |----------|--------|
 | `⌘O` | Add files |
 | `⌘I` | Show File Info for selected track |
-| `Delete` | Remove selected tracks |
 | `⌘Z` | Undo |
 | `⌘⇧Z` | Redo |
 
@@ -327,6 +327,7 @@ or **日本語**. Changing the language requires a restart.
 |----------|--------|
 | `⌘M` | Minimize |
 | `⇧⌘M` | Switch between main window and Mini Player |
+| `⌥⌘E` | Open Equalizer |
 | `⌘,` | Open Settings |
 | `⌘Q` | Quit |
 
@@ -428,8 +429,9 @@ Not in v1.0.0. Gapless playback is planned for v2.0.0 (Pro).
 No. HarmoniaPlayer plays local files only.
 
 **Where does HarmoniaPlayer store my data?**
-Playlists, settings, language, volume, and similar preferences are stored
-in macOS UserDefaults (standard app preferences storage). Audio files
+Playlists are stored as a `playlists.json` file in the app's Application
+Support directory. Settings, language, volume, and similar preferences are
+stored in macOS UserDefaults (standard app preferences storage). Audio files
 themselves stay wherever you put them — HarmoniaPlayer just remembers
 where they are via macOS security-scoped bookmarks.
 

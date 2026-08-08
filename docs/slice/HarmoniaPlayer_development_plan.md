@@ -1,6 +1,6 @@
 # HarmoniaPlayer Development Plan
 
-> **Last Updated:** 2026-03-25
+> **Last Updated:** 2026-08-09
 >
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
@@ -829,8 +829,8 @@ Slice 6, the gate moved twice as scope expanded:
   infrastructure, EQ, lyrics display, Now Playing integration, App
   Sandbox, App Store ship preparation). The v1.0.0 gate moved to Slice 9.
 - **Slice 10** — Pro tier (FLAC / DSD playback + Tag Editor) for v2.0.0.
-  Spec lives in `docs/slice/slice_10_micro_draft.md` (draft until
-  Slice 10 officially opens).
+  Spec will live in `docs/slice/slice_10_micro.md` (not yet written; the
+  draft is created when Slice 10 officially opens).
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -843,7 +843,7 @@ Slice 6, the gate moved twice as scope expanded:
 | 7-C | M3U8 playlist import / export (absolute + relative paths) | ✅ |
 | 7-D | Drag-to-reorder tracks in PlaylistView | ✅ |
 | 7-E | Persistence via UserDefaults (playlists, settings, volume) | ✅ |
-| 7-F | UI localisation — 24 languages including Arabic RTL | ✅ |
+| 7-F | UI localisation — English, Japanese, Traditional Chinese | ✅ |
 | 7-G | Column customization + sort; Track model expansion (Groups A–E) | ✅ |
 | 7-H | File Info Panel (read-only technical info + editable source URL) | ✅ |
 
@@ -857,7 +857,7 @@ layer (not AppState).
 
 | Sub-slice | Content | Status |
 |---|---|---|
-| 8-A | Menu bar UX fixes + UndoManager (⌘Z / ⌘Y) | ✅ |
+| 8-A | Menu bar UX fixes + UndoManager (⌘Z / ⌘⇧Z) | ✅ |
 | 8-B | Mini Player floating window (⌘M, always on top) | ✅ |
 | 8-C | ReplayGain volume normalisation (off / track / album mode) | ✅ |
 
@@ -889,13 +889,25 @@ Store submission.
 | 9-N | HarmoniaCore cleanup: `MonotonicTimePort` rename + `FileAccessPort` deletion | ✅ |
 | 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menus | ✅ |
 | 9-P | v1.0.0 ship close-out: version number alignment + scheme migration | ✅ |
+| 9-Q | Mac App Store ship blockers: FreeTierIAPManager swap + release-ready docs | ✅ |
+| 9-R | Main-window stable identifier + lyrics button always visible (disabled when no track) | ✅ |
+| 9-S | Persist repeat and shuffle mode on change | ✅ |
+| 9-T | Natural completion resolved against the playing playlist | ✅ |
+| 9-U | Mini Player marquee pauses at both ends before looping | ✅ |
+| 9-V | EQ persistence: named presets only + flat-preset fallback on load | ✅ |
+| 9-W | File-backed playlist store (`playlists.json`) + artwork/lyrics excluded from persistence | ✅ |
+| 9-X | Remove all selected tracks via `removeTracks` (multi-select batch) | ✅ |
+| 9-Y | New / Import added to the per-tab playlist context menu | ✅ |
+| 9-Z | Playlist table drag-to-reorder (plain-text transfer) | ✅ |
+| 9-AA | Main window reopenable + mutually exclusive with Mini Player | ✅ |
+| 9-AB | Mini Player / seek shortcuts aligned with macOS conventions (⇧⌘M, ⌥⌘←/→) | ✅ |
 
 **Pro feature gating** for FLAC and DSD playback is implemented in
 `AppState.play(trackID:)`. StoreKit 2 infrastructure is wired and the
 Paywall UI is built; both are hidden in v1.0.0. Activating the real Pro
 purchase flow and exposing the Paywall is v2.0.0 work (Slice 10).
 
-**v1.0.0 gate:** Slice 9 complete (including ship close-out 9-O and 9-P).
+**v1.0.0 gate:** Slice 9 complete (through the post-close-out fix sub-slices, 9-Q…9-AB).
 
 ### 11.5 Version Targets
 

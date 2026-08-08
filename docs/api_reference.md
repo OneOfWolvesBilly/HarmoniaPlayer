@@ -1172,11 +1172,14 @@ extension Notification.Name {
 
 ## 8. Persistence
 
-Persisted via `UserDefaults` with `hp.` prefix keys.
+Playlists are persisted as a `playlists.json` file in the app's Application
+Support directory, written by `saveState()` through `FilePlaylistStore`
+(see `PlaylistStore.swift`). Everything else is persisted via `UserDefaults`
+with `hp.` prefix keys.
 
 | Key | Type | Persisted by |
 |-----|------|-------------|
-| `hp.playlists` | `[Playlist]` (JSON) | `saveState()` |
+| `hp.playlists` | `[Playlist]` (JSON) | **Legacy** — no longer written; `restoreState()` reads it once to migrate into `playlists.json`, then deletes the key |
 | `hp.activePlaylistIndex` | `Int` | `saveState()` |
 | `hp.allowDuplicateTracks` | `Bool` | `saveState()` |
 | `hp.volume` | `Float` | `saveState()` |
@@ -1192,6 +1195,10 @@ Persisted via `UserDefaults` with `hp.` prefix keys.
 | `hp.eq.currentPresetName` | `String?` | `EQPersistenceStore.save(_:)` |
 | `hp.eq.customPresets` | `Data` (JSON `[EQPreset]`) | `EQPersistenceStore.save(_:)` |
 | `hp.lyrics.prefs.<absolute-file-path>[#track=<n>]` | `Data` (JSON `LyricsPreference`) | `DefaultLyricsPreferenceStore.save(_:for:)` |
+| `hp.hiddenColumns` | `String` (comma-joined column ids) | `@AppStorage` (`PlaylistView`) |
+| `hp.marqueeSpeed` | `Double` (pt/s, default 40) | `@AppStorage` (`SettingsView` / `MarqueeText`) |
+| `hp.marqueePause` | `Double` (seconds, default 1.0) | `@AppStorage` (`SettingsView` / `MarqueeText`) |
+| `hp.miniPlayerAlwaysOnTop` | `Bool` (default `true`) | `@AppStorage` (`SettingsView` / `MiniPlayerView`) |
 
 **EQ schema versioning (Slice 9-K).** The `hp.eq.*` keys are managed by `EQPersistenceStore` (see §5.6), independent of `AppState.saveState()`. Current schema version is `1`. On `load()`, an absent `hp.eq.schemaVersion` indicates a fresh install — the store stamps version 1 and returns `EQPersistedState.defaults`. A present version is decoded and lifted to the current version via `EQSchemaMigrator.migrate(...)` (see §5.7). Future slices (per-track EQ, user-adjustable Q) bump the version; older builds reading a newer version fall back to defaults rather than corrupting state.
 

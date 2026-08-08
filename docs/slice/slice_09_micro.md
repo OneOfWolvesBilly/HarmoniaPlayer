@@ -43,7 +43,7 @@ for v1.0.0 Free release, and prepares infrastructure for the v2.0.0 Tag Editor.
 | 9-O | v1.0.0 ship close-out: PrivacyInfo + Info.plist build phase + tab bar context menu | Free | ✅ |
 | 9-P | v1.0.0 ship close-out: version number alignment + scheme migration (MARKETING_VERSION + label normalisation + dev-plan facts + v0.x → v1.x migration) | All | ✅ |
 | 9-Q | v1.0.0 Mac App Store ship blockers: FreeTierIAPManager swap + .storekit / dangling-dep removal + INFOPLIST_KEY display name / category / copyright + README / user_guide release-ready + .gitignore cleanup | Free | ✅ |
-| 9-R | Post-rename cleanup + main-window identification + lyrics button visibility: App Name Definition (Harmonia Player) + post-rename config (TEST_HOST + shared scheme) + identify main window by `main` identifier (not display title) + lyrics toggle button always visible, disabled when no track (supersedes 9-J `hasAny`-gating) | Free | ⬜ |
+| 9-R | Post-rename cleanup + main-window identification + lyrics button visibility: App Name Definition (Harmonia Player) + post-rename config (TEST_HOST + shared scheme) + identify main window by `main` identifier (not display title) + lyrics toggle button always visible, disabled when no track (supersedes 9-J `hasAny`-gating) | Free | ✅ |
 
 ### Goals (v1.0.0)
 
@@ -2167,7 +2167,7 @@ changes warrant deeper automated testing).
   Linux repo.
 ---
 
-## Slice 9-M: Re-Enable App Sandbox via Related Items ⬜
+## Slice 9-M: Re-Enable App Sandbox via Related Items ✅
 
 ### Goal
 
@@ -2880,7 +2880,7 @@ release archive installed to `/Applications`:**
 
 ---
 
-## Slice 9-N: HarmoniaCore Cleanup — ClockPort Rename + FileAccessPort Deletion ⬜
+## Slice 9-N: HarmoniaCore Cleanup — ClockPort Rename + FileAccessPort Deletion ✅
 
 **Tier:** All (HC SDK surface cleanup; HP consumer alignment)
 **Repo scope:** HarmoniaCore-Swift (primary) + HarmoniaPlayer (consumer)
@@ -3574,7 +3574,7 @@ embedded `.storekit`, and without the dangling dependency.
 | 2 | HP | `docs(slice 9-q)` | mark v1.0.0 release-ready and clarify static-vs-sync lyrics in README and user_guide |
 | 3 | HP | `chore(slice 9-q)` | clean .gitignore of shell here-doc fragments left in since slice 1a |
 
-## Slice 9-R: Post-Rename Cleanup, Main-Window Identification + Lyrics Button Visibility ⬜
+## Slice 9-R: Post-Rename Cleanup, Main-Window Identification + Lyrics Button Visibility ✅
 
 **Tier:** Free (all v1.0.0 builds)
 **Repo scope:** HarmoniaPlayer only — no HarmoniaCore change

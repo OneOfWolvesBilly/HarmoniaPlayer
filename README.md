@@ -80,7 +80,7 @@ See the [User Guide](docs/user_guide.md) for the full walkthrough.
 
 ## Technology Stack
 
-HarmoniaPlayer is a Swift 6 and SwiftUI application for macOS. It delivers multi-playlist management with drag-and-drop reordering and M3U8 import/export, ReplayGain volume normalization, state that persists across launches, and full localization in English, Traditional Chinese, and Japanese.
+HarmoniaPlayer is a Swift and SwiftUI application for macOS, built with the Swift 6 toolchain. It delivers multi-playlist management with drag-and-drop reordering and M3U8 import/export, ReplayGain volume normalization, state that persists across launches, and full localization in English, Traditional Chinese, and Japanese.
 
 Audio playback and processing are provided by [HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift), a reusable Swift audio framework designed to back more than one application. HarmoniaPlayer is the primary reference application for HarmoniaCore and demonstrates how the framework can be used to build a complete desktop music player.
 
@@ -102,7 +102,7 @@ HarmoniaPlayer follows an open-core model. The full application source is public
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
+Contributions are welcome — please open an issue to discuss before submitting a pull request.
 
 ## License
 

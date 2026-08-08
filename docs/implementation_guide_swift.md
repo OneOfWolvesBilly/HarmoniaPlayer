@@ -321,7 +321,7 @@ final class HarmoniaEQAdapter: EQService {
     func setPreamp(_ db: Float)         { setPreampHook(db) }
     func setBandGains(_ gains: [Float]) { setBandGainsHook(gains) }
 
-    // Xcode 26 beta workaround — see development_guide.md §8.6.
+    // Xcode 26 beta workaround — see development_guide.md §9.6.
     nonisolated deinit { }
 }
 ```
@@ -340,7 +340,7 @@ final class HarmoniaEQAdapter: EQService {
   deinit on an inferred-`@MainActor` class that fires the bug, and only the
   explicit `nonisolated deinit { }` forces deallocation down the synchronous
   ARC path. The same pattern is applied to `EQCoordinator`, `AppState`, and
-  the test-side `FakeEQService` — see `development_guide.md` §8.6 for the
+  the test-side `FakeEQService` — see `development_guide.md` §9.6 for the
   full rationale and inventory.
 
 ### 2.6 MPNowPlayingAdapter (Integration Layer, imports MediaPlayer)
@@ -538,7 +538,7 @@ final class AppState: ObservableObject {
         )
     }
 
-    // Xcode 26 beta workaround — see development_guide.md §8.6.
+    // Xcode 26 beta workaround — see development_guide.md §9.6.
     nonisolated deinit {}
 }
 ```

@@ -1,7 +1,7 @@
 # HarmoniaPlayer Development Guide
 
 > **Platform:** macOS 15.6+
-> **Language:** Swift 6
+> **Language:** Swift (project `SWIFT_VERSION = 6.0`; the app and test targets currently override to the Swift 5 language mode)
 > **Framework:** SwiftUI, HarmoniaCore-Swift (SPM)
 >
 > This guide walks a new contributor through setting up the development
@@ -149,11 +149,14 @@ HarmoniaPlayer/
 │       │   │   ├── Services/
 │       │   │   │   ├── CoreFactory.swift                     # (App Layer) factory
 │       │   │   │   ├── CoreServiceProviding.swift            # (App Layer) provider protocol
+│       │   │   │   ├── DarwinFileOriginAdapter.swift         # kMDItemWhereFroms via xattr (Slice 9-B)
 │       │   │   │   ├── EQPersistenceStore.swift              # (App Layer) UserDefaults EQ store (Slice 9-K)
 │       │   │   │   ├── EQSchemaMigrator.swift                # (App Layer) EQ schema versioning (Slice 9-K)
 │       │   │   │   ├── EQService.swift                       # (App Layer) EQ protocol (Slice 9-K)
+│       │   │   │   ├── ErrorReportService.swift              # mailto: issue-report URL builder
 │       │   │   │   ├── ExtendedAttributeService.swift        # xattr for kMDItemWhereFroms
 │       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
+│       │   │   │   ├── FileOriginService.swift               # (App Layer) file-origin protocol (Slice 9-B)
 │       │   │   │   ├── FreeTierIAPManager.swift              # Stub IAP (Free tier)
 │       │   │   │   ├── HarmoniaCoreProvider.swift            # ⚠ Integration Layer
 │       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import) (Slice 9-K)
@@ -166,6 +169,8 @@ HarmoniaPlayer/
 │       │   │   │   ├── MPNowPlayingAdapter.swift             # Integration Layer (imports MediaPlayer, not HarmoniaCore) (Slice 9-L)
 │       │   │   │   ├── NowPlayingService.swift               # (App Layer) NowPlaying protocol (Slice 9-L)
 │       │   │   │   ├── PlaybackService.swift                 # App-layer protocol (async)
+│       │   │   │   ├── PlaylistStore.swift                   # playlists.json store (Slice 9-W)
+│       │   │   │   ├── SiblingFilePresenter.swift            # Related-items .lrc access (Slice 9-J)
 │       │   │   │   ├── StoreKitIAPManager.swift              # StoreKit 2 implementation
 │       │   │   │   └── TagReaderService.swift                # App-layer protocol (async)
 │       │   │   └── Views/
@@ -180,6 +185,7 @@ HarmoniaPlayer/
 │       │   │       └── PlaylistView.swift                    # Playlist table + tab bar
 │       │   ├── macOS/
 │       │   │   └── Free/
+│       │   │       ├── AppDelegate.swift                     # Dock-click reopen (Slice 9-AA)
 │       │   │       ├── HarmoniaPlayerApp.swift               # @main entry
 │       │   │       └── Views/
 │       │   │           ├── HarmoniaPlayerCommands.swift
@@ -193,7 +199,9 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayerTests/
 │       │   ├── FakeInfrastructure/
 │       │   │   ├── FakeCoreProvider.swift                    # CoreServiceProviding double
+│       │   │   ├── FakeFileOriginService.swift               # FileOriginService double (Slice 9-B)
 │       │   │   ├── FakeNowPlayingService.swift               # NowPlayingService double (Slice 9-L)
+│       │   │   ├── FakePlaylistStore.swift                   # PlaylistStore double (Slice 9-W)
 │       │   │   ├── FakeTagReaderService.swift                # TagReaderService double
 │       │   │   └── MockIAPManager.swift                      # IAPManager double
 │       │   └── SharedTests/                                  # Unit tests (one per SUT)
@@ -413,7 +421,7 @@ The user grants access by selecting an audio file via `NSOpenPanel` or drag-drop
 
 Legacy `.minimalBookmark` data (in case any made it to a development build) fails to resolve under `[.withSecurityScope]`; the decode path falls through to `urlPath` with `isAccessible = false`. No migration tool is shipped — v1.0.0 is HarmoniaPlayer's first public release.
 
-### 8.2 Sibling files: Related Items + NSFileCoordinator
+### 7.2 Sibling files: Related Items + NSFileCoordinator
 
 Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) cannot use the primary file's bookmark — `startAccessingSecurityScopedResource` does not extend access to siblings. Apple's first-class mechanism for this topology is **Related Items**:
 
@@ -457,14 +465,14 @@ Sibling reads (e.g. `Foo.lrc` next to `Foo.flac`) cannot use the primary file's 
 
 `SiblingFilePresenter` (`Shared/Services/SiblingFilePresenter.swift`) is a minimal `NSFilePresenter` conformance with three properties and a constructor — no behavioural callbacks. Each sibling extension that needs Related Items access requires its own `CFBundleDocumentTypes` entry with `NSIsRelatedItemType=YES` and `CFBundleTypeRole=Editor`.
 
-### 8.3 What does NOT work
+### 7.3 What does NOT work
 
 - **`Data(contentsOf: lrcURL)`** without coordinated read — fails with `NSCocoaErrorDomain Code=257` regardless of bookmarks.
 - **Calling `startAccessingSecurityScopedResource` on the sibling URL** — this only works for security-scoped URLs (i.e. those resolved from a bookmark). Sibling URLs are not security-scoped; the call returns `false` and the read still fails.
 - **`NSFileCoordinator` without an `NSFilePresenter` registered** — the sandbox refuses to issue a related-item extension; the system log prints `NSFileSandboxingRequestRelatedItemExtension: Failed to issue extension`.
 - **`NSFileCoordinator` with `CFBundleTypeRole = None` or `Viewer`** — `addFilePresenter` silently fails; subsequent reads still error with Code=257 and no diagnostic output.
 
-### 8.4 Error categorisation
+### 7.4 Error categorisation
 
 `LyricsPanel`'s error UI uses the free function `lyricsErrorMessageKey(for: Error)` to map errors to user-facing messages. `Code=257` surfaces as `lyrics_file_inaccessible` ("Lyrics file is not accessible. Try removing and re-adding the track."); `LyricsServiceError.decodingFailed` and any other unrecognised error fall back to `lyrics_decode_failed`.
 
@@ -569,21 +577,21 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 
 ---
 
-## 8. Coding Conventions
+## 9. Coding Conventions
 
-### 8.1 Swift 6 requirements
+### 9.1 Swift 6 requirements
 
 - `@MainActor` on `AppState`, all test classes that use AppState, and any
   UI-facing types
 - `nonisolated deinit {}` on every inferred-`@MainActor` `final class`
   (Xcode 26 beta workaround for the `swift_task_deinitOnExecutorImpl` /
   `TaskLocal::StopLookupScope` crash). Applies to long-lived production
-  classes too, not just test-deallocated ones — see §8.6 for the full
+  classes too, not just test-deallocated ones — see §9.6 for the full
   rationale and inventory.
 - `Sendable` on all models crossing actor boundaries (`Track`, `Playlist`,
   `PlaybackState`, `PlaybackError`, `ViewPreferences`, `CoreFeatureFlags`)
 
-### 8.2 Access control
+### 9.2 Access control
 
 - Services on AppState are `let` (internal), not `private let` — Views
   access AppState, not the services directly, but the boundary is
@@ -591,7 +599,7 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 - `@Published` properties are `var` by default; use `private(set)` only
   when the View should never write (e.g. `isProUnlocked`)
 
-### 8.3 SwiftUI patterns
+### 9.3 SwiftUI patterns
 
 - Views use `@EnvironmentObject private var appState: AppState`
 - Button handlers wrap async AppState calls: `Task { await appState.play() }`
@@ -609,7 +617,7 @@ struct PlayerView: View {
 }
 ```
 
-### 8.4 Error handling
+### 9.4 Error handling
 
 The boundary does the mapping. AppState only sees `PlaybackError`:
 
@@ -647,13 +655,13 @@ func mapToPlaybackError(_ error: Error) -> PlaybackError {
 No `String` payload crosses the module boundary. `PlaybackError` cases
 are all pure typed codes.
 
-### 8.5 Language rules
+### 9.5 Language rules
 
 - Explanations, chat discussion: Traditional Chinese
 - All Swift code, comments, commit messages, documentation: **English only**
 - No competitor brand names anywhere in docs
 
-### 8.6 `nonisolated deinit` pattern (Xcode 26 beta workaround)
+### 9.6 `nonisolated deinit` pattern (Xcode 26 beta workaround)
 
 The HarmoniaPlayer module is built with
 `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, which causes every `final class`
@@ -707,7 +715,7 @@ When the upstream fix lands, this workaround can be removed in one sweep.
 Until then, every new `@MainActor` `final class` added to the codebase
 should ship with `nonisolated deinit { }` from the first commit.
 
-### 8.7 App identity and window identification
+### 9.7 App identity and window identification
 
 The produced application is named **Harmonia Player**. This naming is canonical
 and frozen.
@@ -737,12 +745,12 @@ The main `WindowGroup` has no `id:`, so `ContentView` attaches a
 
 ---
 
-## 9. Workflow
+## 10. Workflow
 
 The project follows SDD → TDD red → confirm → TDD green → commit. The
 detailed workflow and commit atomicity rules are in [Workflow](workflow.md).
 
-### 9.1 Adding a feature (summary)
+### 10.1 Adding a feature (summary)
 
 1. **Write the spec first** — `docs/slice/slice_NN_micro.md` with Goal,
    Scope, Files, API, TDD plan, Commit plan
@@ -756,7 +764,7 @@ detailed workflow and commit atomicity rules are in [Workflow](workflow.md).
 
 Spec and code commits are always separate. One logical change per commit.
 
-### 9.2 Debugging
+### 10.2 Debugging
 
 - Logs: `OSLogAdapter` in HarmoniaCore emits to OSLog subsystem
   `HarmoniaPlayer` / category `Playback`. View in Console.app or Xcode Console.
@@ -765,7 +773,7 @@ Spec and code commits are always separate. One logical change per commit.
 - StoreKit: use `HarmoniaPlayer.storekit` configuration file for local IAP
   testing (Scheme → Edit Scheme → Run → Options → StoreKit Configuration)
 
-### 9.3 Common issues
+### 10.3 Common issues
 
 | Symptom | Likely cause |
 |---------|--------------|
@@ -777,7 +785,7 @@ Spec and code commits are always separate. One logical change per commit.
 
 ---
 
-## 10. Documentation References
+## 11. Documentation References
 
 ### HarmoniaPlayer (this repo)
 
@@ -804,7 +812,7 @@ Spec and code commits are always separate. One logical change per commit.
 
 ---
 
-## 11. App Store Review Considerations
+## 12. App Store Review Considerations
 
 | Phase | Recommendation |
 |-------|----------------|
@@ -814,7 +822,7 @@ Spec and code commits are always separate. One logical change per commit.
 
 ---
 
-## 12. Contact
+## 13. Contact
 
 For questions about HarmoniaPlayer development or the Harmonia Suite:
 

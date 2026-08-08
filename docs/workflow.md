@@ -167,7 +167,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
 }
 ```
 
-See [Development Guide](development_guide.md) §7 for the full test
+See [Development Guide](development_guide.md) §8 for the full test
 template including `UserDefaults(suiteName:)` isolation.
 
 ---

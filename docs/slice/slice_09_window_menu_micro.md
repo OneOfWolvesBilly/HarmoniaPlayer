@@ -19,8 +19,8 @@ Identifier and `PRODUCT_NAME` are unchanged.
 
 | Slice | Title | Tier | Status |
 | --- | --- | --- | --- |
-| 9-AA | Main window is reopenable after it is closed | Free | ⬜ |
-| 9-AB | Standard Window-menu items and macOS-conventional playback shortcuts | Free | ⬜ |
+| 9-AA | Main window is reopenable after it is closed | Free | ✅ |
+| 9-AB | Standard Window-menu items and macOS-conventional playback shortcuts | Free | ✅ |
 
 ---
 
