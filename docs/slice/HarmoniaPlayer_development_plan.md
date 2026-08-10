@@ -828,9 +828,19 @@ Slice 6, the gate moved twice as scope expanded:
   during execution into the v1.0.0 close-out (StoreKit 2 IAP
   infrastructure, EQ, lyrics display, Now Playing integration, App
   Sandbox, App Store ship preparation). The v1.0.0 gate moved to Slice 9.
-- **Slice 10** — Pro tier (FLAC / DSD playback + Tag Editor) for v2.0.0.
-  Spec will live in `docs/slice/slice_10_micro.md` (not yet written; the
-  draft is created when Slice 10 officially opens).
+- **Pro tier** (FLAC / DSD playback + Tag Editor) for v2.0.0 — not yet
+  numbered. Slice numbers are assigned when a slice opens, taking the next
+  free number at that moment; reserving numbers for future work is no
+  longer done. Slice 9's growth to 28 sub-slices (9-A…9-AB) came from
+  bundling distinct concerns into one slice — each concern now gets its
+  own numbered slice instead.
+- **AppState decomposition refactor (v1.1.0)** — the program that precedes
+  the Pro tier. Design authority: `docs/slice/appstate_refactor_plan.md`.
+  Opened stages: Slice 10 (token cleanup), Slice 11 (strict-concurrency
+  baseline), Slice 12 (AlertCenter extraction); later stages are numbered
+  as they open. The v1.1.0 Free minor also carries further candidate
+  slices outside this program (window-menu declarative semantics, lyrics
+  expansion backlog, …) — likewise numbered when they open.
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -905,13 +915,57 @@ Store submission.
 **Pro feature gating** for FLAC and DSD playback is implemented in
 `AppState.play(trackID:)`. StoreKit 2 infrastructure is wired and the
 Paywall UI is built; both are hidden in v1.0.0. Activating the real Pro
-purchase flow and exposing the Paywall is v2.0.0 work (Slice 10).
+purchase flow and exposing the Paywall is v2.0.0 work (the Pro tier slice,
+numbered when it opens).
 
 **v1.0.0 gate:** Slice 9 complete (through the post-close-out fix sub-slices, 9-Q…9-AB).
 
-### 11.5 Version Targets
+### 11.5 Slice 10: Slice/Version Token Cleanup (v1.1.0; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_10_micro.md`
+
+First stage of the AppState decomposition refactor program (design
+authority: `docs/slice/appstate_refactor_plan.md`). Strips forbidden
+slice/version tokens from the Swift sources the refactor will **not**
+touch: 44 HarmoniaPlayer files + 1 HarmoniaCore file.
+
+| Slice | Content | Status |
+|---|---|---|
+| 10 | Slice/version token cleanup outside the refactor-touched set | ⬜ |
+
+### 11.6 Slice 11: Strict-Concurrency Warning Baseline (v1.1.0; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_11_micro.md`
+
+Second stage of the AppState decomposition refactor program. Enables
+`SWIFT_STRICT_CONCURRENCY = complete` on the app, test, and UITest targets
+while keeping the Swift 5 language mode, and records the warning baseline
+that later stages burn down.
+
+| Slice | Content | Status |
+|---|---|---|
+| 11 | Complete strict-concurrency checking + warning baseline | ⬜ |
+
+### 11.7 Slice 12: Extract AlertCenter (v1.1.0; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_12_micro.md`
+
+Third stage of the AppState decomposition refactor program: the first
+store extraction (`@MainActor @Observable AlertCenter` behind the AppState
+strangler facade); serves as the structural template for the later store
+extractions. Remaining program stages (LyricsStore, SettingsStore,
+PlaybackController, PlaylistCollection, Swift 6 language-mode switch) are
+numbered and given their own sections when they open — scope freezes live
+in `appstate_refactor_plan.md` §7.
+
+| Slice | Content | Status |
+|---|---|---|
+| 12 | AlertCenter extraction + @Environment view migration + test migration | ⬜ |
+
+### 11.8 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
 | v1.0.0 | Slice 9 complete | Free tier feature complete; first public release |
-| v2.0.0 | Slice 10 complete | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
+| v1.1.0 | Slices 10–12 + remaining AppState-refactor stages complete (numbered at open); further v1.1.0 candidate slices numbered at open | Free minor: AppState decomposition refactor (five @Observable stores, Swift 6 language mode) + Free-tier candidate slices (window-menu declarative semantics, lyrics expansion backlog, …) |
+| v2.0.0 | Pro tier slice complete (numbered when it opens) | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
