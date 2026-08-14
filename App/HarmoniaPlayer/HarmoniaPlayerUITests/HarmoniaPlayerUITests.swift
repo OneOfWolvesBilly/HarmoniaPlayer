@@ -6,7 +6,7 @@
 //
 //  PURPOSE
 //  -------
-//  XCUITest suite for Slice 6-B. Verifies that all required UI elements are
+//  XCUITest suite. Verifies that all required UI elements are
 //  accessible after app launch. These tests do not exercise playback — they
 //  confirm that the view hierarchy is correctly assembled and that all
 //  accessibility identifiers required by future interaction tests are present.
@@ -107,7 +107,7 @@ final class HarmoniaPlayerUITests: XCTestCase {
         XCTAssertTrue(app.buttons["add-files-button"].waitForExistence(timeout: 5),
                       "add-files-button must exist in PlaylistView toolbar")
     }
-    // MARK: - Slice 6-C: Settings
+    // MARK: - Settings
 
     /// Opens Settings via the app menu bar.
     ///

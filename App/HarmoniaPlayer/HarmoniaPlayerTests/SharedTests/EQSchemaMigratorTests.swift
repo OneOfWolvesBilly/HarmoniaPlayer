@@ -2,7 +2,7 @@
 //  EQSchemaMigratorTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-K: schema migrator, version-1 identity branch.
+//  Schema migrator, version-1 identity branch.
 //
 
 import XCTest

@@ -3,7 +3,6 @@
 //  HarmoniaPlayerTests
 //
 //  Created on 2026-02-25.
-//  Moved from SharedTests/ to FakeInfrastructure/ in Slice 3-A.
 //
 
 import Foundation
@@ -12,11 +11,11 @@ import Foundation
 /// Fake TagReaderService for deterministic test setups.
 ///
 /// Supports per-URL metadata stubs and error stubs, enabling
-/// Slice 3-B and 3-C tests to control exactly what metadata is returned
+/// tests to control exactly what metadata is returned
 /// or what error is thrown for each URL.
 ///
 /// **Default behaviour (no stub configured):**
-/// Returns `Track(url:)` — a URL-derived placeholder, same as Slice 1 baseline.
+/// Returns `Track(url:)` — a URL-derived placeholder.
 ///
 /// **Stub priority:**
 /// `stubbedErrors` takes precedence over `stubbedMetadata`. If both are set

@@ -18,12 +18,12 @@ import Foundation
 /// - `source`: which source the user last selected (`.embedded` or `.lrc`).
 /// - `encoding`: IANA charset name, or `"auto"` for automatic detection.
 /// - `languageCode`: ISO 639-2 code; `nil` means auto (system locale match).
-/// - `customPath`: reserved for v0.15 custom file selection; always `nil` in 9-J.
+/// - `customPath`: reserved for custom file selection; always `nil`.
 struct LyricsPreference: Codable, Equatable {
     var source: LyricsSource
     var encoding: String        // IANA charset name; "auto" = auto-detect
     var languageCode: String?   // ISO 639-2; nil = auto (locale match)
-    var customPath: String?     // reserved for v0.15, always nil in 9-J
+    var customPath: String?     // reserved for custom file selection, always nil
 
     init(
         source: LyricsSource,

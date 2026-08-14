@@ -2,7 +2,7 @@
 //  EQServiceTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-K (commit 5): EQService protocol + HarmoniaEQAdapter +
+//  EQService protocol + HarmoniaEQAdapter +
 //  CoreFactory wire.
 //
 //  TEST SCOPE

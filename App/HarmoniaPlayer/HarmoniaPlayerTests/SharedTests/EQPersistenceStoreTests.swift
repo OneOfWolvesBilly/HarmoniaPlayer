@@ -2,7 +2,7 @@
 //  EQPersistenceStoreTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-K: EQ state persistence + schema versioning.
+//  EQ state persistence + schema versioning.
 //
 
 import XCTest

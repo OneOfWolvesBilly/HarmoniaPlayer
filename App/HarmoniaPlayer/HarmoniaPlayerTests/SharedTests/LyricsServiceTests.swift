@@ -2,7 +2,7 @@
 //  LyricsServiceTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Tests for DefaultLyricsService (Slice 9-J).
+//  Tests for DefaultLyricsService.
 //  Uses a temp directory for sidecar .lrc file tests.
 //
 
@@ -254,9 +254,8 @@ final class LyricsServiceTests: XCTestCase {
         XCTAssertEqual(content, "測試歌詞")
     }
 
-    // MARK: - Slice 9-M Layer 3: lyricsErrorMessageKey categorisation
+    // MARK: - lyricsErrorMessageKey categorisation
 
-    /// 9-M red driving test #11.
     /// Verifies that NSCocoaErrorDomain Code=257 (sandbox permission denied
     /// when reading sibling `.lrc` without related-item entitlement) maps to
     /// the `lyrics_file_inaccessible` localisation key. Fails on red-phase
@@ -274,7 +273,6 @@ final class LyricsServiceTests: XCTestCase {
             + "fallback.")
     }
 
-    /// 9-M red driving test #12.
     /// Verifies that explicit `LyricsServiceError.decodingFailed` (genuine
     /// text-encoding failure) maps to the `lyrics_decode_failed` key. Fails
     /// on red stub returning ""; passes on green code returning the correct
@@ -284,10 +282,9 @@ final class LyricsServiceTests: XCTestCase {
         XCTAssertEqual(key, "lyrics_decode_failed",
             "LyricsServiceError.decodingFailed must surface as the encoding "
             + "fallback message, the genuine reason for that string now that "
-            + "9-M has separated permission errors out.")
+            + "permission errors are separated out.")
     }
 
-    /// 9-M red driving test #13.
     /// Verifies that any unrecognised error falls back to
     /// `lyrics_decode_failed`. Fails on red stub returning ""; passes on
     /// green code that uses decode-failed as the catch-all default for
@@ -301,9 +298,9 @@ final class LyricsServiceTests: XCTestCase {
             + "rather than empty string or a missing localisation lookup.")
     }
 
-    // MARK: - Slice 9-M Layer 1: NSFileCoordinator sibling-read (green-phase)
+    // MARK: - NSFileCoordinator sibling-read
 
-    /// 9-M green-phase regression test.
+    /// Regression test.
     /// Verifies that the `.lrc` source path of `resolveContent` returns the
     /// expected sidecar text content after the green-phase implementation
     /// switches from `Data(contentsOf:)` to `NSFileCoordinator` +

@@ -6,7 +6,7 @@
 import XCTest
 @testable import Harmonia_Player
 
-/// Unit tests for `FilePlaylistStore` (Slice 9-W Part B).
+/// Unit tests for `FilePlaylistStore`.
 ///
 /// Validates that the file-backed store round-trips playlists, reports an
 /// absent file as `nil`, and surfaces a corrupt file as a thrown error.

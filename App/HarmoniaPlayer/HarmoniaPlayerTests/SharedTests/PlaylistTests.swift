@@ -4,7 +4,7 @@
 //
 //  Created on 2026-02-20.
 //
-//  Slice 2-B: Playlist Model
+//  Playlist Model
 //
 
 import XCTest
@@ -18,7 +18,7 @@ import XCTest
 /// - Stores and mutates fields correctly
 /// - Computes isEmpty and count correctly
 ///
-/// **Design constraints (Slice 2-B):**
+/// **Design constraints:**
 /// - No HarmoniaCore dependency
 /// - No UIKit / AppKit dependency
 /// - Pure value type tests

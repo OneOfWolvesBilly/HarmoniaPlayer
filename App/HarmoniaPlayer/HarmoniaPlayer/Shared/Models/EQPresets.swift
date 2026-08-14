@@ -4,13 +4,13 @@
 //
 //  PURPOSE
 //  -------
-//  Built-in EQ presets. Defined statically as Swift constants
-//  (per spec §9-K Built-in Presets). 8 presets in 9-K:
+//  Built-in EQ presets. Defined statically as Swift constants.
+//  8 presets:
 //  Flat, Rock, Pop, Jazz, Classical, Vocal, Bass Boost, Treble Boost.
 //
 //  All band gains are within ±12 dB. Preamp is 0 dB for every
-//  built-in preset (users adjust preamp manually). Each band uses the
-//  fixed Q = 0.7071 from spec §9-K.
+//  built-in preset (users adjust preamp manually). Each band uses a
+//  fixed Q = 0.7071.
 //
 //  Band order (low → high):
 //    [0] 32 Hz   [1] 64 Hz   [2] 125 Hz  [3] 250 Hz  [4] 500 Hz
@@ -21,7 +21,7 @@ import Foundation
 
 enum EQPresets {
 
-    /// Fixed Q factor across all bands in 9-K (Butterworth).
+    /// Fixed Q factor across all bands (Butterworth).
     private static let q: Float = 0.7071
 
     /// Builds an EQBandState array from a 10-element gain array.

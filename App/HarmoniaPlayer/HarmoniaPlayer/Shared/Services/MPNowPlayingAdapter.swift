@@ -4,7 +4,7 @@
 //
 //  SPDX-License-Identifier: MIT
 //
-//  Slice 9-L: production NowPlayingService implementation.
+//  Production NowPlayingService implementation.
 //
 //  Bridges NowPlayingService (Application Layer abstraction) to the
 //  system Now Playing surface — Control Center widget, lock screen,
@@ -163,7 +163,7 @@ final class MPNowPlayingAdapter: NowPlayingService {
         }
     }
 
-    /// Per spec 9-L Non-goals: keep the system widget UI clean by
+    /// Keeps the system widget UI clean by
     /// disabling commands the app does not implement, so the system
     /// does not render buttons that would do nothing if pressed.
     private func disableUnsupportedCommands() {

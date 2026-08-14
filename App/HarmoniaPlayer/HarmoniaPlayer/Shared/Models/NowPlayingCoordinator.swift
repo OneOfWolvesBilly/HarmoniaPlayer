@@ -6,8 +6,8 @@
 //
 //  PURPOSE
 //  -------
-//  @MainActor final class that owns all NowPlaying-related wiring
-//  for Slice 9-L. Coordinates between two boundaries:
+//  @MainActor final class that owns all NowPlaying-related wiring.
+//  Coordinates between two boundaries:
 //
 //    - NowPlayingService      — Application Layer abstraction over
 //                               the system Now Playing surface
@@ -29,7 +29,7 @@
 //  properties, observation logic, or callback assignment — only the
 //  coordinator construction in `init` and one
 //  `nowPlayingCoordinator.notifySeekCompleted(at:)` call inside
-//  `seek(to:)` after a successful seek (spec §9-L).
+//  `seek(to:)` after a successful seek.
 //
 //  WIRING DIRECTION
 //  ----------------

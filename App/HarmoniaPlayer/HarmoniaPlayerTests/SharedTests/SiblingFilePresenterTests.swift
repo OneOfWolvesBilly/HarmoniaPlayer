@@ -21,9 +21,9 @@ import XCTest
 /// and verified end-to-end via manual QA per spec §Layer 1.
 final class SiblingFilePresenterTests: XCTestCase {
 
-    // MARK: - Slice 9-M Layer 1: SiblingFilePresenter contract
+    // MARK: - SiblingFilePresenter contract
 
-    /// 9-M green-phase contract test.
+    /// Contract test.
     /// Verifies that constructor stores both URLs in the correct
     /// properties.
     func testSiblingFilePresenter_StoresURLPair() {
@@ -42,7 +42,7 @@ final class SiblingFilePresenterTests: XCTestCase {
             "presentedItemURL must equal the sibling URL passed to init.")
     }
 
-    /// 9-M green-phase contract test.
+    /// Contract test.
     /// Verifies that `presentedItemOperationQueue` defaults to `.main`.
     /// The class deliberately does not expose an init parameter for this
     /// — the small file sizes expected (typical `.lrc` < 16 KB) and the

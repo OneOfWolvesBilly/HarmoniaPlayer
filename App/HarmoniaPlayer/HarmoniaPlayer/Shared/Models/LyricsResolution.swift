@@ -12,7 +12,7 @@ import Foundation
 
 /// Describes what lyrics are available for a track and which is selected.
 ///
-/// **β strategy (9-J):** `resolveAvailability` fills everything except
+/// **Lazy-content strategy:** `resolveAvailability` fills everything except
 /// `content`, which is `nil` until the user opens `LyricsPanel`. At that
 /// point `resolveContent` is called and AppState stores the loaded content
 /// in an updated `LyricsResolution`.
@@ -42,7 +42,7 @@ struct LyricsResolution {
     /// The currently selected language code, or `nil` when not applicable.
     ///
     /// `nil` is valid when:
-    /// - source is `.lrc` (no language variants in 9-J), or
+    /// - source is `.lrc` (LRC sidecars carry no language variants), or
     /// - source is `.embedded` with a single variant whose `languageCode` is `nil`.
     let currentLanguage: String?
 

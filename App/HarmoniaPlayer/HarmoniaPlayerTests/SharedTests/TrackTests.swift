@@ -163,7 +163,7 @@ final class TrackTests: XCTestCase {
         XCTAssertTrue(restored.isAccessible)
     }
 
-    // MARK: - Tests: Group A defaults (Slice 7-G TDD matrix)
+    // MARK: - Tests: Group A defaults
 
     func testTrack_DefaultGenre_IsEmpty() {
         let track = Track(url: sampleURL)
@@ -353,7 +353,7 @@ final class TrackTests: XCTestCase {
         XCTAssertEqual(track.codec,       "")
         XCTAssertEqual(track.encoding,    "")
     }
-    // MARK: - Lyrics field (Slice 9-J)
+    // MARK: - Lyrics field
 
     func testTrack_DefaultLyrics_IsNil() {
         // Given / When
@@ -363,7 +363,7 @@ final class TrackTests: XCTestCase {
         XCTAssertNil(track.lyrics)
     }
 
-    // MARK: - Slice 9-M temp directory helper
+    // MARK: - Temp directory helper
 
     /// Create an isolated temporary directory for tests that need real on-disk
     /// files (bookmark roundtrip, security-scope verification). Cleaned up by
@@ -383,9 +383,8 @@ final class TrackTests: XCTestCase {
         return url
     }
 
-    // MARK: - Slice 9-M Layer 2: security-scoped bookmark roundtrip
+    // MARK: - Security-scoped bookmark roundtrip
 
-    /// 9-M red driving test #1.
     /// Verifies that a Track encoded → decoded preserves the URL via a
     /// security-scoped bookmark such that the decoded URL accepts
     /// `startAccessingSecurityScopedResource()`. Fails on current code that
@@ -412,9 +411,8 @@ final class TrackTests: XCTestCase {
             + ".minimalBookmark fails this; .withSecurityScope passes.")
     }
 
-    // MARK: - Slice 9-M Layer 2: stale bookmark refresh
+    // MARK: - Stale bookmark refresh
 
-    /// 9-M red driving test #2.
     /// Verifies that decoding a Track whose underlying file has been atomically
     /// replaced refreshes the persisted bookmark. Fails on current code which
     /// captures the stale flag but never acts on it, passes on green code that
@@ -446,11 +444,10 @@ final class TrackTests: XCTestCase {
             + "green code regenerates the bookmark from the resolved URL.")
     }
 
-    // MARK: - Slice 9-M Layer 2: legacy minimalBookmark decode
+    // MARK: - Legacy minimalBookmark decode
 
-    /// 9-M red driving test #3.
     /// Verifies that legacy `.minimalBookmark` data (in case any made it to a
-    /// TestFlight build during 9-A → 9-I) decodes as inaccessible rather than
+    /// pre-release TestFlight build) decodes as inaccessible rather than
     /// crashing. Fails on current code which still uses `.minimalBookmark` for
     /// resolve and so accepts the legacy bytes (isAccessible=true), passes on
     /// green code that resolves with `[.withSecurityScope]` and treats
@@ -465,7 +462,7 @@ final class TrackTests: XCTestCase {
                                                    includingResourceValuesForKeys: nil,
                                                    relativeTo: nil)
 
-        // Hand-craft a Track-shape JSON that mirrors what 9-A → 9-I encoded.
+        // Hand-craft a Track-shape JSON that mirrors the legacy encoding.
         // Track's CodingKeys uses urlPath + accessBookmark (Data → base64 in JSON).
         let id = UUID().uuidString
         let json = """
@@ -488,9 +485,9 @@ final class TrackTests: XCTestCase {
             + "the Track inaccessible without crashing.")
     }
 
-    // MARK: - Slice 9-M Layer 2: isAccessible behaviour contract (green-phase)
+    // MARK: - isAccessible behaviour contract
 
-    /// 9-M green-phase contract test.
+    /// Contract test.
     /// Verifies that decoding a Track whose underlying file exists yields
     /// `isAccessible == true` after the security-scoped resource start
     /// succeeds. Behaviour-contract: green-phase implementation must
@@ -509,7 +506,7 @@ final class TrackTests: XCTestCase {
             + "yield isAccessible = true after decode.")
     }
 
-    /// 9-M green-phase contract test.
+    /// Contract test.
     /// Verifies that a Track whose bookmark target was deleted between
     /// encode and decode yields `isAccessible == false`. Behaviour-
     /// contract: green-phase implementation must set false when the
@@ -535,7 +532,7 @@ final class TrackTests: XCTestCase {
             + "fall through to urlPath path with isAccessible = false).")
     }
 
-    // MARK: - Tests: 9-W Part A — artwork / lyrics excluded from persistence
+    // MARK: - Tests: artwork / lyrics excluded from persistence
 
     /// W1: encoded output must not contain the `artworkData` key.
     func testTrack_Encode_OmitsArtworkData() throws {
@@ -546,7 +543,7 @@ final class TrackTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         XCTAssertNil(json?["artworkData"],
-            "9-W Part A: artworkData must not be written to persistence")
+            "artworkData must not be written to persistence")
     }
 
     /// W2: encoded output must not contain the `lyrics` key.
@@ -558,7 +555,7 @@ final class TrackTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         XCTAssertNil(json?["lyrics"],
-            "9-W Part A: lyrics must not be written to persistence")
+            "lyrics must not be written to persistence")
     }
 
     /// W3: metadata fields and the security-scoped bookmark survive the

@@ -2,7 +2,7 @@
 //  LyricsPreferenceStoreTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Tests for DefaultLyricsPreferenceStore (Slice 9-J).
+//  Tests for DefaultLyricsPreferenceStore.
 //
 
 import XCTest

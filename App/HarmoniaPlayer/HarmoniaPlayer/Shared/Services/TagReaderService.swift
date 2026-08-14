@@ -11,10 +11,6 @@ import Foundation
 ///
 /// Abstracts metadata extraction from audio files.
 /// Implementations may use HarmoniaCore-Swift tag ports or OS-level APIs.
-///
-/// **Slice 1 Note:**
-/// In Foundation slice, this interface is defined but full metadata
-/// extraction is implemented in later slices.
 protocol TagReaderService: AnyObject {
     
     /// Read metadata from audio file

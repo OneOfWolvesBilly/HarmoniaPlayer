@@ -24,5 +24,5 @@ enum PlaybackState: Equatable, Sendable {
     case playing
     case paused
     case stopped
-    case error(PlaybackError)   // Slice 1-E
+    case error(PlaybackError)
 }

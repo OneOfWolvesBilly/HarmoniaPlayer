@@ -2,7 +2,7 @@
 //  ViewPreferencesTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 1-E: Error Types and UI Preferences
+//  Error Types and UI Preferences
 //
 
 import XCTest

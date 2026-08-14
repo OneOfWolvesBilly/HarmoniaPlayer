@@ -2,8 +2,8 @@
 //  PlaybackStateTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 1-E: Error Types and UI Preferences
-//  Tests the new `error(PlaybackError)` case added to PlaybackState.
+//  Error Types and UI Preferences
+//  Tests the `error(PlaybackError)` case of PlaybackState.
 //
 
 import XCTest

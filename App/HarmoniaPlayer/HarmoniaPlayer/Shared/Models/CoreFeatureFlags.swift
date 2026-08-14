@@ -65,19 +65,16 @@ struct CoreFeatureFlags: Sendable {
     /// Gapless playback support (Pro only)
     ///
     /// Enables seamless transitions between tracks without silence.
-    /// Planned for v0.4.
     let supportsGaplessPlayback: Bool
     
     /// Metadata editing support (Pro only)
     ///
     /// Allows editing track tags (title, artist, album, etc.).
-    /// Planned for v0.2.
     let supportsMetadataEditing: Bool
     
     /// Bit-perfect audio output support (Pro only)
     ///
     /// Bypasses system audio processing for purist playback.
-    /// Planned for v0.2.
     let supportsBitPerfectOutput: Bool
     
     // MARK: - Initialization

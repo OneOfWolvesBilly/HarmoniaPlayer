@@ -78,7 +78,7 @@ struct CoreFactory {
 
     /// Create lyrics service
     ///
-    /// Lyrics display is available in both Free and Pro tiers (v0.1).
+    /// Lyrics display is available in both Free and Pro tiers.
     ///
     /// - Returns: LyricsService instance
     func makeLyricsService() -> LyricsService {
@@ -87,7 +87,7 @@ struct CoreFactory {
 
     /// Create EQ service
     ///
-    /// EQ is available in both Free and Pro tiers (Slice 9-K, v0.1).
+    /// EQ is available in both Free and Pro tiers.
     /// In production the returned service shares its underlying
     /// HarmoniaCore.PlaybackService instance with the one returned by
     /// `makePlaybackService()` so EQ control acts on the live audio chain.
@@ -101,7 +101,7 @@ struct CoreFactory {
     ///
     /// Bridges AppState to the system Now Playing surface (Control
     /// Center widget, lock screen, AirPods, media keys, Siri).
-    /// Available in both Free and Pro tiers (Slice 9-L, v0.1).
+    /// Available in both Free and Pro tiers.
     ///
     /// - Returns: NowPlayingService instance
     func makeNowPlayingService() -> NowPlayingService {

@@ -2,16 +2,16 @@
 //  FakePlaybackServiceTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 4-A: Verify FakePlaybackService call recording and stub behaviour.
+//  Verify FakePlaybackService call recording and stub behaviour.
 //
 
 import XCTest
 @testable import Harmonia_Player
 
-/// Unit tests for the upgraded FakePlaybackService (Slice 4-A).
+/// Unit tests for the upgraded FakePlaybackService.
 ///
 /// Verifies call recording, state transitions, and error stubs so that
-/// Slice 4-B/C/D tests can rely on this fake with confidence.
+/// dependent tests can rely on this fake with confidence.
 ///
 /// **Swift 6 / Xcode 26 note:**
 /// `@MainActor` is required because `FakePlaybackService.state` is of type
@@ -25,7 +25,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         URL(fileURLWithPath: "/tmp/\(filename).mp3")
     }
 
-    // MARK: - Slice 4-A: load() — Call Recording
+    // MARK: - load() — Call Recording
 
     /// testFake_Load_RecordsURL
     ///
@@ -82,7 +82,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Slice 4-A: play() — Call Recording
+    // MARK: - play() — Call Recording
 
     /// testFake_Play_RecordsCall
     ///
@@ -123,7 +123,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Slice 4-A: pause() — Call Recording
+    // MARK: - pause() — Call Recording
 
     /// testFake_Pause_RecordsCall
     ///
@@ -141,7 +141,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         XCTAssertEqual(fake.pauseCallCount, 1)
     }
 
-    // MARK: - Slice 4-A: stop() — Call Recording
+    // MARK: - stop() — Call Recording
 
     /// testFake_Stop_RecordsCall
     ///
@@ -159,7 +159,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         XCTAssertEqual(fake.stopCallCount, 1)
     }
 
-    // MARK: - Slice 4-A: seek() — Call Recording
+    // MARK: - seek() — Call Recording
 
     /// testFake_Seek_RecordsSeconds
     ///
@@ -201,7 +201,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Slice 4-A: Query Stubs
+    // MARK: - Query Stubs
 
     /// testFake_Duration_ReturnsStubbedValue
     ///
@@ -237,7 +237,7 @@ final class FakePlaybackServiceTests: XCTestCase {
         XCTAssertEqual(result, 45.5)
     }
 
-    // MARK: - Slice 4-A: Initial State
+    // MARK: - Initial State
 
     /// testFake_InitialState_IsIdle
     ///

@@ -68,7 +68,7 @@ final class CoreFactoryTests: XCTestCase {
                        "Should call provider once")
     }
 
-    // MARK: - Tests: Slice 1-F — TagReader Wiring Verification
+    // MARK: - Tests: TagReader Wiring Verification
 
     func testCoreFactory_CallsMakeTagReaderService_Once() {
         // Given

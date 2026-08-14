@@ -19,8 +19,8 @@
 //    The isProUser flag is forwarded to support that future extension point,
 //    but the current implementation uses the same AVFoundation adapter for both.
 //
-//  SLICE 9-K (commit 5) — sharedCore cache rationale
-//  -------------------------------------------------
+//  SHARED CORE — sharedCore cache rationale
+//  ----------------------------------------
 //  `makePlaybackService(isProUser:)` and `makeEQService()` must operate on
 //  the SAME underlying HarmoniaCore.PlaybackService instance: the EQ node
 //  that DefaultPlaybackService inserts into the audio chain at construction

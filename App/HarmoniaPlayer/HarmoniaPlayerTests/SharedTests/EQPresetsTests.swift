@@ -2,7 +2,7 @@
 //  EQPresetsTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-K: built-in EQ presets contract.
+//  Built-in EQ presets contract.
 //
 //  RED PHASE
 //  ---------
@@ -26,7 +26,7 @@ final class EQPresetsTests: XCTestCase {
     // MARK: - Shape
 
     /// `Rock` preset must boost low and high frequencies and scoop the
-    /// mids (per spec §9-K Built-in Presets textual description).
+    /// mids.
     /// The exact dB values are an implementation choice; this test
     /// asserts only the qualitative shape.
     func testEQPresets_RockHasExpectedShape() {

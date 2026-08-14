@@ -7,8 +7,8 @@
 //  PURPOSE
 //  -------
 //  Per-track persistence for lyrics preferences (source / encoding / language).
-//  Backed by UserDefaults; keyed by absolute file path with optional
-//  `#track=<n>` suffix for CUE virtual tracks (latent in 9-J, activated v0.15).
+//  Backed by UserDefaults; keyed by absolute file path. A `#track=<n>`
+//  suffix is reserved for CUE virtual tracks (latent, not yet generated).
 //
 //  KEY FORMAT
 //  ----------
@@ -17,8 +17,8 @@
 //  - CUE virtual track:  hp.lyrics.prefs.<absolute-file-path>#track=<n>
 //      e.g. "hp.lyrics.prefs./Music/Album.flac#track=3"
 //
-//  Track does not yet carry a `cueTrackNumber` field in 9-J — the key
-//  generator handles non-CUE only. v0.15 adds the suffix branch.
+//  Track does not carry a `cueTrackNumber` field — the key
+//  generator handles non-CUE only.
 //
 //  SCOPE
 //  -----
@@ -62,8 +62,8 @@ final class DefaultLyricsPreferenceStore: LyricsPreferenceStore {
 
     func key(for track: Track) -> String {
         // Use track.url.path (decoded absolute file path).
-        // CUE suffix branch (v0.15): when Track gains cueTrackNumber, append
-        // "#track=<n>" here. 9-J ships without the suffix.
+        // Reserved CUE suffix branch: when Track gains cueTrackNumber, append
+        // "#track=<n>" here. The suffix is not currently generated.
         return "\(Self.keyPrefix)\(track.url.path)"
     }
 

@@ -2,7 +2,7 @@
 //  NowPlayingService.swift
 //  HarmoniaPlayer / Shared / Services
 //
-//  Slice 9-L: macOS Now Playing widget + system media keys integration.
+//  macOS Now Playing widget + system media keys integration.
 //
 //  Application-layer protocol describing the contract between AppState
 //  and the system Now Playing surface (Control Center widget, lock

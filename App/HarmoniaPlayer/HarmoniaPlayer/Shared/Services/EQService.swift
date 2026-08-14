@@ -7,7 +7,7 @@
 //  PURPOSE
 //  -------
 //  Application Layer abstraction over the HarmoniaCore EQ control surface.
-//  AppState (and EQCoordinator in Slice 9-K commit 6) depend solely on this
+//  AppState and EQCoordinator depend solely on this
 //  protocol so they never need to know about HarmoniaCore types.
 //
 //  DESIGN NOTES
@@ -48,7 +48,7 @@ protocol EQService: AnyObject {
     func setPreamp(_ db: Float)
 
     /// Sets per-band EQ gains in dB.
-    /// Length must match the implementation's band count (Slice 9-K: 10).
+    /// Length must match the implementation's band count (currently 10).
     /// Out-of-range values are clamped (±12 dB per band) downstream.
     func setBandGains(_ gains: [Float])
 }

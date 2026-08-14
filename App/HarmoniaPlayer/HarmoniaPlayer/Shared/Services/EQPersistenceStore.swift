@@ -13,7 +13,7 @@
 //
 //  KEY LAYOUT
 //  ----------
-//  - hp.eq.schemaVersion:     Int    (9-K = 1)
+//  - hp.eq.schemaVersion:     Int    (currently 1)
 //  - hp.eq.enabled:           Bool
 //  - hp.eq.preamp:            Float (dB)
 //  - hp.eq.bands:             Data  (JSON [Float], 10 elements)

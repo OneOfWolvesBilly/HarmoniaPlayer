@@ -18,7 +18,7 @@ import Foundation
 /// - **Group B** – Replay Gain: replayGainTrack, replayGainAlbum
 /// - **Group C** – Comment: comment
 /// - **Group D** – Technical info: bitrate, sampleRate, channels, fileSize, fileFormat
-/// - **Group E** – Playback statistics (reserved, no UI until Slice 8):
+/// - **Group E** – Playback statistics (reserved; not surfaced in UI):
 ///   playCount, lastPlayedAt, rating
 struct Track: Identifiable, Equatable, Sendable, Codable {
 
@@ -63,7 +63,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var codec: String = ""
     var encoding: String = ""
 
-    // MARK: - Group F: Lyrics (Slice 9-J)
+    // MARK: - Group F: Lyrics
 
     /// USLT embedded lyrics variants, one per language.
     ///
@@ -73,7 +73,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     /// and are NOT stored here.
     var lyrics: [LyricsLanguageVariant]? = nil
 
-    // MARK: - Group E: Playback statistics (reserved — no UI in Slice 7)
+    // MARK: - Group E: Playback statistics (reserved — not surfaced in UI)
 
     var playCount: Int = 0
     var lastPlayedAt: Date? = nil
@@ -89,9 +89,9 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     /// fields are populated without requiring the user to re-add files.
     ///
     /// History:
-    /// - 0: legacy (Slices 1–6; no Groups A–E)
-    /// - 1: Groups A–D + technical info added (Slice 7-G / Split B)
-    /// - 2: codec and encoding added (Slice 9-C)
+    /// - 0: legacy (no Groups A–E)
+    /// - 1: Groups A–D + technical info added
+    /// - 2: codec and encoding added
     var metadataVersion: Int = 0
 
     // MARK: - Runtime-only fields (not persisted)
@@ -212,8 +212,8 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id,       forKey: .id)
         try c.encode(url.path, forKey: .urlPath)
-        // Slice 9-M Layer 2: use security-scoped bookmarks so persisted URLs
-        // can be re-resolved across cold-launch under the App Sandbox.
+        // Use security-scoped bookmarks so persisted URLs can be re-resolved
+        // across cold-launch under the App Sandbox.
         // Caller (AppState.load(urls:)) is responsible for having an active
         // sandbox extension on `url` at encode time so that the bookmark can
         // capture security scope.
@@ -263,12 +263,11 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
 
         // Resolve URL: bookmark → urlPath → legacy url key
         //
-        // Slice 9-M Layer 2:
+        // Security-scoped bookmark resolution:
         // - resolve under [.withSecurityScope] (matches encode-side options);
-        //   legacy `.minimalBookmark` bytes from any pre-9-M build will fail
-        //   this path and fall through to `urlPath` with isAccessible = false
-        //   (no migration tooling: v0.1 is HarmoniaPlayer's first public
-        //   release per project memory).
+        //   legacy `.minimalBookmark` bytes from builds that predate
+        //   security-scoped bookmarks fail this path and fall through to
+        //   `urlPath` with isAccessible = false (no migration tooling).
         // - isAccessible = true requires bookmark resolution AND
         //   startAccessingSecurityScopedResource() returning true. The flag is
         //   read-on-demand by UI for greying-out unavailable rows.
@@ -285,7 +284,7 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
                 bookmarkDataIsStale: &stale
             ) {
                 url = resolved
-                // Slice 9-M Layer 2: hold security-scoped extension for the URL's
+                // Hold the security-scoped extension for the URL's
                 // lifetime instead of stopping after verification. macOS sandbox
                 // requires an active extension at every read; calling
                 // stopAccessingSecurityScopedResource immediately releases the

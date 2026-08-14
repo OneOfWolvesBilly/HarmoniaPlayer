@@ -2,13 +2,13 @@
 //  FakeNowPlayingService.swift
 //  HarmoniaPlayerTests / FakeInfrastructure
 //
-//  Slice 9-L: test fake for AppState wiring assertions.
+//  Test fake for AppState wiring assertions.
 //
 //  Records every push call (updateCurrentTrack / updatePlaybackState /
 //  updateElapsedTime / clear) for verification, and exposes the same
 //  pull-direction callbacks (`onPlay`, `onPause`, `onTogglePlayPause`,
 //  `onNext`, `onPrevious`, `onStop`, `onSeek`) that the production
-//  `MPNowPlayingAdapter` will eventually own.
+//  `MPNowPlayingAdapter` owns.
 //
 //  Tests assert on call counts and last-argument captures rather than
 //  hooking the real `MPNowPlayingInfoCenter` — that boundary is the

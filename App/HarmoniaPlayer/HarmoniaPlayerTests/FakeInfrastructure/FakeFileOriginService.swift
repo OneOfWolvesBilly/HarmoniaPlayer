@@ -2,7 +2,7 @@
 //  FakeFileOriginService.swift
 //  HarmoniaPlayerTests
 //
-//  Created on 2026-04-17 (Slice 9-B).
+//  Created on 2026-04-17.
 //
 
 import Foundation

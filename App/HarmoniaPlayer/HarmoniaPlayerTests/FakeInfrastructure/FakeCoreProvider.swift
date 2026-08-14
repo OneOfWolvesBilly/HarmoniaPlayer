@@ -31,7 +31,7 @@ import Foundation
 /// XCTAssertTrue(sut.tagReaderService === knownFake)
 /// ```
 ///
-/// **Usage — playback service stub access (Slice 4):**
+/// **Usage — playback service stub access:**
 /// ```swift
 /// let fakeService = FakePlaybackService()
 /// let provider = FakeCoreProvider(playbackService: fakeService)
@@ -40,7 +40,7 @@ import Foundation
 /// XCTAssertEqual(fakeService.playCallCount, 1)
 /// ```
 ///
-/// **Usage — EQ service stub access (Slice 9-K):**
+/// **Usage — EQ service stub access:**
 /// ```swift
 /// let knownFake = FakeEQService()
 /// let provider = FakeCoreProvider(eqService: knownFake)
@@ -144,7 +144,7 @@ final class FakeCoreProvider: CoreServiceProviding {
 /// Fake PlaybackService for deterministic test setups.
 ///
 /// Records all method calls and supports configurable error stubs,
-/// enabling Slice 4 tests to verify exactly which service methods
+/// enabling tests to verify exactly which service methods
 /// are called and simulate failure scenarios deterministically.
 ///
 /// **Call recording:**

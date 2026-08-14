@@ -2,7 +2,7 @@
 //  LRCStripTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Tests for DefaultLyricsService.stripLRCTimestamps (Slice 9-J).
+//  Tests for DefaultLyricsService.stripLRCTimestamps.
 //
 
 import XCTest

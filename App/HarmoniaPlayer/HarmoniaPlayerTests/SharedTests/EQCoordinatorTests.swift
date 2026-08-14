@@ -2,7 +2,7 @@
 //  EQCoordinatorTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-K (commit 6): EQCoordinator owns all EQ-related observable
+//  EQCoordinator owns all EQ-related observable
 //  state and coordinates between EQService (Core control surface) and
 //  EQPersistenceStore (UserDefaults).
 //

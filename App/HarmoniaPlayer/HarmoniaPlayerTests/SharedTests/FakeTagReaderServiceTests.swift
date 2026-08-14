@@ -2,16 +2,16 @@
 //  FakeTagReaderServiceTests.swift
 //  HarmoniaPlayerTests
 //
-//  Slice 3-A: Verify FakeTagReaderService stub behaviour and call recording.
+//  Verify FakeTagReaderService stub behaviour and call recording.
 //
 
 import XCTest
 @testable import Harmonia_Player
 
-/// Unit tests for the upgraded FakeTagReaderService (Slice 3-A).
+/// Unit tests for the upgraded FakeTagReaderService.
 ///
 /// Verifies stub behaviour, error simulation, and call recording
-/// so that Slice 3-B and 3-C tests can rely on this fake with confidence.
+/// so that dependent tests can rely on this fake with confidence.
 ///
 /// **Swift 6 / Xcode 26 note:**
 /// `@MainActor` is required because test methods access `Track` properties
@@ -27,7 +27,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
         URL(fileURLWithPath: "/tmp/\(filename).mp3")
     }
 
-    // MARK: - Slice 3-A: Default Behaviour
+    // MARK: - Default Behaviour
 
     /// testFake_DefaultBehaviour
     ///
@@ -54,7 +54,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
                      "Default behaviour should default duration to 0")
     }
 
-    // MARK: - Slice 3-A: Stubbed Metadata
+    // MARK: - Stubbed Metadata
 
     /// testFake_StubbedMetadata
     ///
@@ -86,7 +86,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
         XCTAssertEqual(track.duration, 180.0)
     }
 
-    // MARK: - Slice 3-A: Stubbed Error
+    // MARK: - Stubbed Error
 
     /// testFake_StubbedError
     ///
@@ -136,7 +136,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
         }
     }
 
-    // MARK: - Slice 3-A: Call Recording — Count
+    // MARK: - Call Recording — Count
 
     /// testFake_RecordsCallCount
     ///
@@ -169,7 +169,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
                        "callCount should be 0 before any calls")
     }
 
-    // MARK: - Slice 3-A: Call Recording — URLs
+    // MARK: - Call Recording — URLs
 
     /// testFake_RecordsURLs
     ///
@@ -223,7 +223,7 @@ final class FakeTagReaderServiceTests: XCTestCase {
                        "callCount should be 1 even when an error is thrown")
     }
 
-    // MARK: - Slice 3-A: Isolation Between URLs
+    // MARK: - Isolation Between URLs
 
     /// testFake_StubIsolation_DifferentURLs
     ///

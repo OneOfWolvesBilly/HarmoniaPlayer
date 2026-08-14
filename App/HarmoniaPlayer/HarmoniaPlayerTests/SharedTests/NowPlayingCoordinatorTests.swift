@@ -2,7 +2,7 @@
 //  NowPlayingCoordinatorTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Slice 9-L: NowPlayingCoordinator wiring tests.
+//  NowPlayingCoordinator wiring tests.
 //
 //  TEST STRATEGY
 //  -------------

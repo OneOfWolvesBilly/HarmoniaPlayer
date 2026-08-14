@@ -2,7 +2,7 @@
 //  EncodingDetectionTests.swift
 //  HarmoniaPlayerTests / SharedTests
 //
-//  Tests for DefaultLyricsService.detectEncoding (Slice 9-J).
+//  Tests for DefaultLyricsService.detectEncoding.
 //
 //  NOTE: GB18030 and Big5 detection is best-effort. Both encodings accept
 //  many of the same byte sequences. The tests use carefully constructed data:

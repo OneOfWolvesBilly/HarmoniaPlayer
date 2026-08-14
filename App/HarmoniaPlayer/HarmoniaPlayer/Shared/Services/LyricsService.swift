@@ -16,9 +16,9 @@
 //    production default: `Locale.current.languageCode ?? ""`.
 //  - Sidecar search and FileManager access are encapsulated here; no FM calls
 //    in AppState or Views.
-//  - Extension point (v0.15): sidecar candidate URLs are listed inline
-//    inside findSidecarURL(for:); v0.15 appends entries without touching
-//    other callers.
+//  - Extension point: sidecar candidate URLs are listed inline
+//    inside findSidecarURL(for:); new entries can be appended without
+//    touching other callers.
 //  - GB18030 / Big5 are not public Swift.Encoding constants; they are
 //    constructed once as static helpers via CFStringConvertEncodingToNSStringEncoding.
 //
@@ -159,7 +159,7 @@ final class DefaultLyricsService: LyricsService {
                 throw LyricsServiceError.sidecarNotFound
             }
 
-            // Slice 9-M Layer 1: sibling read via Related Items.
+            // Sibling read via Related Items.
             //
             // Plain `Data(contentsOf: lrcURL)` fails under the App Sandbox
             // with NSCocoaErrorDomain Code=257 because the security-scoped
@@ -175,7 +175,7 @@ final class DefaultLyricsService: LyricsService {
             // add/remove pairing is enforced by manual code review:
             // NSFileCoordinator does not expose a public API to enumerate
             // registered presenters, so unit testing the symmetry is not
-            // possible (see spec v1.2 §Layer 1).
+            // possible.
             let presenter = SiblingFilePresenter(
                 primaryItemURL: track.url,
                 presentedItemURL: lrcURL
@@ -291,7 +291,7 @@ final class DefaultLyricsService: LyricsService {
     ///   3. `<dir>/Lyrics/<name>.lrc`
     ///   4. `<dir>/lyrics/<name>.lrc`
     ///
-    /// **v0.15 extension point**: append additional candidate URLs here
+    /// **Extension point**: append additional candidate URLs here
     /// (e.g. `<artist> - <title>.lrc`, `.txt` extension) without changing
     /// callers.
     private func findSidecarURL(for track: Track) -> URL? {
@@ -396,7 +396,7 @@ final class DefaultLyricsService: LyricsService {
     }
 }
 
-// MARK: - Slice 9-M Layer 3 helper
+// MARK: - Error message key helper
 
 /// View-layer-facing helper that maps any error from `LyricsService` to a
 /// `Localizable.strings` key for `LyricsPanel` to display.
