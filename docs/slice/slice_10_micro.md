@@ -44,6 +44,14 @@ twice.
 ### Constraints
 
 - Comment/doc-comment edits only; no executable statement may change.
+  - **Exception (execution finding, 2026-08-13):** three XCTAssert
+    failure-message string literals carry slice tokens
+    (`LyricsServiceTests` 1 line, `TrackTests` 2 lines). A failure
+    message renders only in test-failure output and changes no runtime
+    or test-pass/fail behaviour, but the skill forbids slice IDs in
+    string literals too — so these three lines are rewritten, and AC3's
+    comment-only inspection treats these message-string-only hunks as
+    allowed. No other executable line may change.
 - Allowed matches stay: format names (`ID3v2.3`, `ID3v2.4`) and
   programmatic version semantics (`Track.metadataVersion` value docs, EQ
   schema `version` field docs) — minus any slice IDs riding on those
@@ -95,7 +103,9 @@ In-scope files (44):
 2. AC2: full ⌘U suite green; `func test` count unchanged from the
    pre-slice count recorded at execution.
 3. AC3: `git diff` for this sub-slice touches only comment/doc-comment
-   lines (inspection: no diff hunk changes an executable line).
+   lines (inspection: no diff hunk changes an executable line), except
+   the three XCTAssert failure-message string literals listed in
+   Constraints, whose hunks change message text only.
 4. AC4: app launches and plays one track (smoke check).
 
 ### Out of Scope
