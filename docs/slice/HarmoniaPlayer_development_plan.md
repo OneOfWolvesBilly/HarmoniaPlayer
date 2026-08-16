@@ -931,7 +931,7 @@ touch: 44 HarmoniaPlayer files + 1 HarmoniaCore file.
 
 | Slice | Content | Status |
 |---|---|---|
-| 10 | Slice/version token cleanup outside the refactor-touched set | ⬜ |
+| 10 | Slice/version token cleanup outside the refactor-touched set | ✅ |
 
 ### 11.6 Slice 11: Strict-Concurrency Warning Baseline (v1.1.0; AppState Refactor Program)
 

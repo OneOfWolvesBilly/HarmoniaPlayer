@@ -16,8 +16,8 @@ twice.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 10-A | HarmoniaPlayer token cleanup (44 files) | — | ⬜ |
-| 10-B | HarmoniaCore token cleanup (1 file) | — | ⬜ |
+| 10-A | HarmoniaPlayer token cleanup (44 files) | — | ✅ |
+| 10-B | HarmoniaCore token cleanup (1 file) | — | ✅ |
 
 ### Goals
 
@@ -65,7 +65,7 @@ twice.
 
 ---
 
-## Slice 10-A: HarmoniaPlayer Token Cleanup ⬜
+## Slice 10-A: HarmoniaPlayer Token Cleanup ✅
 
 ### Goal
 
@@ -131,7 +131,7 @@ comment-only diff, smoke check).
 
 ---
 
-## Slice 10-B: HarmoniaCore Token Cleanup ⬜
+## Slice 10-B: HarmoniaCore Token Cleanup ✅
 
 ### Goal
 
