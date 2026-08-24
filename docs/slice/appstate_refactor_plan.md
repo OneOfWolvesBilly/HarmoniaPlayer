@@ -24,8 +24,8 @@ test targets from the Swift 5 language mode to Swift 6.
   | Stage | Slice | Spec |
   | --- | --- | --- |
   | Token cleanup | **10** | `slice_10_micro.md` |
-  | Strict-concurrency warning baseline | **11** | `slice_11_micro.md` |
-  | Extract AlertCenter | **12** | `slice_12_micro.md` |
+  | Strict-concurrency warning baseline | **12** | `slice_12_micro.md` |
+  | Extract AlertCenter | **13** | `slice_13_micro.md` |
   | Extract LyricsStore | — (numbered at open) | §6.1 scope freeze |
   | Extract SettingsStore | — | §6.2 scope freeze |
   | Extract PlaybackController | — | §6.3 scope freeze |
@@ -174,7 +174,7 @@ final class <Store> {
   (`Task { @MainActor in … }`, awaited service calls); no store spawns
   detached tasks.
 - New store code is written Swift-6-ready: it must build **warning-free**
-  under the Slice 11 `SWIFT_STRICT_CONCURRENCY = complete` baseline, and
+  under the Slice 12 `SWIFT_STRICT_CONCURRENCY = complete` baseline, and
   each extraction slice clears the baseline warnings of the code it moves.
 
 ### Observation-migration behavioral constraints (verified)
@@ -210,11 +210,11 @@ committed). They are design constraints, not assumptions:
   UI-facing state (Apple DTS); no known macro/actor incompatibility. The
   app target's existing `SWIFT_APPROACHABLE_CONCURRENCY = YES` +
   `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` + Swift 5 mode matches the
-  Xcode 26 recommended migration posture, which Slices 11 and the final
+  Xcode 26 recommended migration posture, which Slice 12 and the final
   language-mode slice build on.
 - **C8** `SWIFT_STRICT_CONCURRENCY = complete` under the Swift 5 language
   mode surfaces Swift-6-level diagnostics as **warnings**, not errors —
-  Slice 11 cannot break the build.
+  Slice 12 cannot break the build.
 
 ## 5. Combine replacement map
 
@@ -257,7 +257,7 @@ Each extraction slice performs, in order, all green at every step:
    `<Store>Tests.swift` (placement fix per unit-test-core Rule 1); tests
    exercising cross-store orchestration stay on AppState and keep passing
    through the facade. The slice's TDD matrix lists every moved test.
-5. **Concurrency**: the moved code builds warning-free under the Slice 11
+5. **Concurrency**: the moved code builds warning-free under the Slice 12
    baseline; the slice records which baseline warnings it retired.
 6. **Docs**: per the Doc Update Table (AppState init/property changes →
    `api_reference.md`, `implementation_guide_swift.md`; new type →
@@ -319,8 +319,8 @@ placement of today's 21 `AppState*Tests` files + known misplaced tests:
 | --- | --- |
 | `AppStateTests` (init/wiring rows) | stays (composition-root contract) |
 | `AppStateTests` (error/preference initial-state rows) | AlertCenterTests / SettingsStoreTests |
-| `AppStateErrorHandlingTests`, `AppStateFileInfoTests` | split: pure alert-state rows → AlertCenterTests (Slice 12); load/play flow rows → PlaybackControllerTests / PlaylistCollectionTests |
-| `IAPManagerTests`' `showPaywallIfNeeded` rows (misplaced) | AppStateTests via facade (Slice 12); final home decided at the SettingsStore stage |
+| `AppStateErrorHandlingTests`, `AppStateFileInfoTests` | split: pure alert-state rows → AlertCenterTests (Slice 13); load/play flow rows → PlaybackControllerTests / PlaylistCollectionTests |
+| `IAPManagerTests`' `showPaywallIfNeeded` rows (misplaced) | AppStateTests via facade (Slice 13); final home decided at the SettingsStore stage |
 | `AppStateLyricsTests` | LyricsStoreTests |
 | `AppSettingsTests`, `AppStateVolumeTests` (settings rows) | SettingsStoreTests / PlaybackControllerTests (volume) |
 | `AppStatePlayback*`, `AppStatePolling`, `AppStateReplayGain`, `AppStateShuffle`, `AppStateNavigationTests`, `AppStateTrackSelectionTests` | PlaybackControllerTests family |
@@ -333,9 +333,9 @@ splitting by slice is not.
 
 ### 6.3 Language-mode three-stage plan
 
-1. **Slice 11**: `SWIFT_STRICT_CONCURRENCY = complete` on app + test +
+1. **Slice 12**: `SWIFT_STRICT_CONCURRENCY = complete` on app + test +
    UITest targets, Swift 5 mode kept → warning baseline recorded in
-   `slice_11_micro.md`.
+   `slice_12_micro.md`.
 2. **Extraction stages**: new store code warning-free; each slice retires
    the baseline warnings of the code it moves.
 3. **Close-out slice**: remove the per-target `SWIFT_VERSION = 5.0`
@@ -347,7 +347,7 @@ splitting by slice is not.
 ## 7. Scope freezes for unopened stages
 
 Numbered and fully specified (own `slice_NN_micro.md`, structural template =
-`slice_12_micro.md`) when each opens.
+`slice_13_micro.md`) when each opens.
 
 ### 7.1 LyricsStore
 `showLyrics`, `lyricsResolution`; owns `lyricsService` +
@@ -381,7 +381,7 @@ straggler.
 
 ### 7.5 Swift 6 language-mode switch + close-out
 Remove `SWIFT_VERSION = 5.0` overrides and `SWIFT_STRICT_CONCURRENCY`
-lines; zero-warning gate against the Slice 11 baseline; delete residual
+lines; zero-warning gate against the Slice 12 baseline; delete residual
 facade surface; final doc realignment (`development_guide.md` language
 narrative, `README.md`, `architecture.md` — the latter triggers the HC
 5-area audit). Exit criterion closes the program.

@@ -32,7 +32,7 @@ twice.
   files, and the test-migration set (all 21 `AppState*Tests` +
   `AppSettingsTests`, `IntegrationTests`, `IAPManagerTests`,
   `MiniPlayerViewTests`) → cleaned inside the refactor stages that
-  reorganize them (Slice 12 and later program stages).
+  reorganize them (Slice 13 and later program stages).
 - Token sweeps over `.md` docs → not a violation; specs and plans are
   where slice/version history belongs (skill "Where development history
   belongs" table).
@@ -61,7 +61,7 @@ twice.
 
 ### Dependencies
 
-- None. This is the program's first stage; Slices 11 and 12 depend on it.
+- None. This is the program's first stage; Slices 12 and 13 depend on it.
 
 ---
 
@@ -111,7 +111,7 @@ In-scope files (44):
 ### Out of Scope
 
 - Everything listed in the slice-level Out of Scope (refactor-touched
-  files) → Slice 12 and later program stages.
+  files) → Slice 13 and later program stages.
 
 ### Deferred Backlog
 
