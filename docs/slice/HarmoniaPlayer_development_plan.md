@@ -934,7 +934,30 @@ touch: 44 HarmoniaPlayer files + 1 HarmoniaCore file.
 |---|---|---|
 | 10 | Slice/version token cleanup outside the refactor-touched set | ✅ |
 
-### 11.6 Slice 12: Strict-Concurrency Warning Baseline (v1.1.0; AppState Refactor Program)
+### 11.6 Slice 11: Sleep/Wake Playback Recovery (v1.0.1)
+
+**Spec:** `docs/slice/slice_11_micro.md`
+
+Patch release against shipped v1.0.0, and not part of the AppState
+decomposition refactor program that surrounds it. After a system sleep/wake
+cycle playback never resumes, yet `AppState.playbackState` stays
+`.playing`, so the window, Control Center and the lock screen all report
+playing with no audio. Scheduled ahead of the remaining v1.1.0 program
+stages so the later `PlaybackController` extraction moves corrected
+behaviour rather than carrying the defect through five store extractions.
+
+| Sub-slice | Content | Status |
+|---|---|---|
+| 11-A | Sleep/wake auto-resume + polling state reflection + SPM pin bump | ⬜ |
+
+The audio-pipeline half of this defect is a HarmoniaCore concern, specified
+and implemented in that repository under its own `docs/specs/` structure.
+Slice 11 states only the behavioural contract HarmoniaPlayer depends on
+(spec §Dependencies, HC-1 / HC-2 / HC-3) and takes the satisfying revision
+as an SPM pin — it does not specify HarmoniaCore ports, adapters or
+services.
+
+### 11.7 Slice 12: Strict-Concurrency Warning Baseline (v1.1.0; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_12_micro.md`
 
@@ -947,7 +970,7 @@ that later stages burn down.
 |---|---|---|
 | 12 | Complete strict-concurrency checking + warning baseline | ⬜ |
 
-### 11.7 Slice 13: Extract AlertCenter (v1.1.0; AppState Refactor Program)
+### 11.8 Slice 13: Extract AlertCenter (v1.1.0; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_13_micro.md`
 
@@ -963,10 +986,11 @@ in `appstate_refactor_plan.md` §7.
 |---|---|---|
 | 13 | AlertCenter extraction + @Environment view migration + test migration | ⬜ |
 
-### 11.8 Version Targets
+### 11.9 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
 | v1.0.0 | Slice 9 complete | Free tier feature complete; first public release |
+| v1.0.1 | Slice 11 complete | Free patch: sleep/wake playback recovery (auto-resume after the Mac wakes) |
 | v1.1.0 | Slices 10, 12, 13 + remaining AppState-refactor stages complete (numbered at open); further v1.1.0 candidate slices numbered at open | Free minor: AppState decomposition refactor (five @Observable stores, Swift 6 language mode) + Free-tier candidate slices (window-menu declarative semantics, lyrics expansion backlog, …) |
 | v2.0.0 | Pro tier slice complete (numbered when it opens) | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
