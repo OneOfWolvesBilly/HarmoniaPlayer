@@ -186,8 +186,12 @@ Now Playing surface can never disagree with actual playback again.
    three Integration Layer files already permitted to `import HarmoniaCore`.
 9. AC9: All pre-existing `HarmoniaPlayerTests` pass; no test is deleted
    without its assertion being reproduced elsewhere.
-10. AC10: `grep -nE "Slice [0-9]|v[0-9]+\.[0-9]" ` over every touched
-    `.swift` file returns no forbidden match.
+10. AC10: content added or modified by this slice carries no forbidden
+    token — `grep -nE "Slice [0-9]|v[0-9]+\.[0-9]"` over the slice's
+    `.swift` diff hunks returns no forbidden match. Pre-existing tokens
+    elsewhere in the touched files are out of this slice's scope: those
+    files belong to the refactor set that Slice 10 deferred to the
+    decomposition program, and they are cleaned there.
 11. AC11: Every doc listed under Scope → Docs has been read in full and
     cross-checked against source, not grep-patched.
 
@@ -221,7 +225,8 @@ Now Playing surface can never disagree with actual playback again.
 **Tests**
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStatePlaybackStateTests.swift` (modify)
 - `App/HarmoniaPlayer/HarmoniaPlayerTests/SharedTests/AppStatePollingTests.swift` (modify)
-- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakePlaybackService.swift` (modify)
+- `App/HarmoniaPlayer/HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` —
+  home of `FakePlaybackService`; no change needed (see TDD matrix)
 
 **Docs** — as listed under Scope → Docs.
 
@@ -237,7 +242,7 @@ Now Playing surface can never disagree with actual playback again.
 | `testPollingReflectsServicePaused` | app `.playing`, service `.paused` | one polling tick | `playbackState == .paused`, polling cancelled | Extend `AppStatePollingTests.swift` |
 | `testPollingReflectsServiceError` | app `.playing`, service `.error` | one polling tick | `playbackState == .error`, `lastError` set | Extend `AppStatePollingTests.swift` |
 | `testPollingStillDetectsStopped` | app `.playing`, service `.stopped` | one polling tick | existing completion behaviour unchanged | Extend `AppStatePollingTests.swift` |
-| `FakePlaybackService` gains a settable `state` so `.paused` / `.error` can be staged | — | — | — | Extend `FakePlaybackService.swift` |
+| `FakePlaybackService.state` is already a settable `var`, so `.paused` / `.error` can be staged directly | — | — | — | Already satisfied — no change to `FakeCoreProvider.swift` |
 
 ### Implementation notes
 
