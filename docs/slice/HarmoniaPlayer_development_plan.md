@@ -829,7 +829,12 @@ Slice 6, the gate moved twice as scope expanded:
   infrastructure, EQ, lyrics display, Now Playing integration, App
   Sandbox, App Store ship preparation). The v1.0.0 gate moved to Slice 9.
 - **Pro tier** (FLAC / DSD playback + Tag Editor) for v2.0.0 — not yet
-  numbered. Slice numbers are assigned when a slice opens, taking the next
+  numbered. It was once planned as Slice 10, with sub-slices 10-C
+  (multi-artwork sibling reads) and 10-D (lyrics write-back); Slice 10 was
+  later reassigned to the slice/version token cleanup and the Pro features
+  went back to being unnumbered. Documents written before that reassignment
+  still carry the old identifiers and are annotated in place rather than
+  rewritten. Slice numbers are assigned when a slice opens, taking the next
   free number at that moment; reserving numbers for future work is no
   longer done. Slice 9's growth to 28 sub-slices (9-A…9-AB) came from
   bundling distinct concerns into one slice — each concern now gets its

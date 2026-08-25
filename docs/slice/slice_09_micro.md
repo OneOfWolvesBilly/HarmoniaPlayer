@@ -2169,6 +2169,13 @@ changes warrant deeper automated testing).
 
 ## Slice 9-M: Re-Enable App Sandbox via Related Items ✅
 
+> **Numbering note.** "Slice 10-C" and "Slice 10-D" below are the Pro Tag
+> Editor sub-slices under the numbering in force when this slice was
+> written. Slice 10 was later reassigned to the v1.1.0 slice/version token
+> cleanup (`slice_10_micro.md`), and the Pro features are currently
+> unnumbered — they take the next free number when they open. The text
+> below is left as written; see development plan §11.1.
+
 ### Goal
 
 Restore `ENABLE_APP_SANDBOX = YES` for both Debug and Release while keeping

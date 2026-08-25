@@ -427,10 +427,10 @@ to use directly, exactly the same way it uses `FileManager`,
 **Reuse plan.** `SiblingFilePresenter` is the single reuse point for
 all future sibling-file features:
 
-- Slice 10-C (Pro): cover-art `.jpg` / `.png` / `.bmp` siblings —
+- Cover-art slice (Pro): `.jpg` / `.png` / `.bmp` siblings —
   each extension adds its own `CFBundleDocumentTypes` entry in its
   own slice; the presenter class is shared.
-- Slice 10-D (Pro): lyrics write-back — same presenter, but uses
+- Lyrics write-back slice (Pro): same presenter, but uses
   `NSFileCoordinator.coordinate(writingItemAt:)`.
 - CUE sheet slice (Pro): `.cue` siblings — same pattern.
 
