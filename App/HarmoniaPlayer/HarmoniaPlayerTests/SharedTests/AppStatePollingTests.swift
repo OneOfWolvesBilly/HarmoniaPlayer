@@ -90,4 +90,64 @@ final class AppStatePollingTests: XCTestCase {
 
         XCTAssertTrue(task?.isCancelled ?? false, "task should be cancelled after external cancel()")
     }
+
+    // MARK: - Service State Reflection
+
+    /// `testPollingReflectsServicePaused`
+    ///
+    /// Given the app believes it is playing while the service reports
+    /// `.paused`,
+    /// when a polling tick runs,
+    /// then `playbackState` becomes `.paused` and polling is cancelled.
+    func testPollingReflectsServicePaused() async throws {
+        await loadAndPlay()
+        fakePlaybackService.state = .paused
+
+        try await Task.sleep(nanoseconds: 600_000_000) // ≥ one 0.25s tick
+
+        XCTAssertEqual(sut.playbackState, .paused,
+                       "polling should reflect the service's paused state")
+        XCTAssertNil(sut.pollingTask,
+                     "polling should stop once the paused state is reflected")
+    }
+
+    /// `testPollingReflectsServiceError`
+    ///
+    /// Given the app believes it is playing while the service reports
+    /// `.error`,
+    /// when a polling tick runs,
+    /// then `playbackState` becomes that error, `lastError` is set, and
+    /// polling is cancelled.
+    func testPollingReflectsServiceError() async throws {
+        await loadAndPlay()
+        fakePlaybackService.state = .error(.outputError)
+
+        try await Task.sleep(nanoseconds: 600_000_000) // ≥ one 0.25s tick
+
+        XCTAssertEqual(sut.playbackState, .error(.outputError),
+                       "polling should reflect the service's error state")
+        XCTAssertEqual(sut.lastError, .outputError,
+                       "lastError should carry the service's error")
+        XCTAssertNil(sut.pollingTask,
+                     "polling should stop once the error state is reflected")
+    }
+
+    /// `testPollingStillDetectsStopped`
+    ///
+    /// Given the app believes it is playing while the service reports
+    /// `.stopped` (natural completion of the last track),
+    /// when a polling tick runs,
+    /// then the existing completion behaviour is unchanged: playback
+    /// stops and `currentTrack` is cleared.
+    func testPollingStillDetectsStopped() async throws {
+        await loadAndPlay()
+        fakePlaybackService.state = .stopped
+
+        try await Task.sleep(nanoseconds: 600_000_000) // ≥ one 0.25s tick
+
+        XCTAssertEqual(sut.playbackState, .stopped,
+                       "natural completion should still be detected")
+        XCTAssertNil(sut.currentTrack,
+                     "completion of the last track should clear currentTrack")
+    }
 }

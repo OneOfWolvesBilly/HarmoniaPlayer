@@ -24,6 +24,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// window is brought forward directly without this action.
     var openWindow: OpenWindowAction?
 
+    /// Assigned by HarmoniaPlayerApp (same injection pattern as
+    /// `openWindow`). Receives the system sleep/wake notifications
+    /// forwarded below. Weak: the delegate must not extend the lifetime
+    /// of the app's state container.
+    weak var appState: AppState?
+
     /// Set as soon as the user quits, so windows closing during termination
     /// do not trigger the "return to the main window" behaviour below.
     private var isTerminating = false
@@ -48,6 +54,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async {
                 guard !self.isTerminating else { return }
                 self.showMainWindow()
+            }
+        }
+
+        // Sleep/wake observation: record the pre-sleep playback state and
+        // resume after wake. Registered on NSWorkspace's own notification
+        // center — system power notifications are not delivered through
+        // NotificationCenter.default.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willSleepNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.appState?.handleSystemWillSleep()
+            }
+        }
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                await self?.appState?.handleSystemDidWake()
             }
         }
     }

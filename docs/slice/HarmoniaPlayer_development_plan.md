@@ -948,7 +948,7 @@ behaviour rather than carrying the defect through five store extractions.
 
 | Sub-slice | Content | Status |
 |---|---|---|
-| 11-A | Sleep/wake auto-resume + polling state reflection + SPM pin bump | ⬜ |
+| 11-A | Sleep/wake auto-resume + polling state reflection + SPM pin bump | ✅ |
 
 The audio-pipeline half of this defect is a HarmoniaCore concern, specified
 and implemented in that repository under its own `docs/specs/` structure.

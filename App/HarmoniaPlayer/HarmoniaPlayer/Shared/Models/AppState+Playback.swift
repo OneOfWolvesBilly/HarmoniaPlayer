@@ -321,6 +321,20 @@ extension AppState {
                         self.playbackState = .stopped
                         Task { await self.trackDidFinishPlaying() }
                     }
+                    // Reflect a service-side pause the app did not initiate
+                    // (e.g. the audio output was invalidated during system
+                    // sleep and the service retained the position).
+                    if case .paused = serviceState, self.playbackState == .playing {
+                        self.playbackState = .paused
+                        self.stopPolling()
+                    }
+                    // Reflect a service-side error the app has not observed
+                    // through a thrown call.
+                    if case .error(let serviceError) = serviceState, self.playbackState == .playing {
+                        self.playbackState = .error(serviceError)
+                        self.lastError = serviceError
+                        self.stopPolling()
+                    }
                 }
                 // Only break out of polling when truly stopped (not buffering/draining).
                 if case .stopped = serviceState { break }

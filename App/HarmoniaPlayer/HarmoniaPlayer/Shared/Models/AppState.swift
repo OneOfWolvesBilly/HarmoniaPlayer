@@ -406,6 +406,41 @@ final class AppState: ObservableObject {
     /// Provides crash safety for large imports without saving on every track.
     static let saveBatchSize = 5
 
+    // MARK: - Sleep/Wake
+
+    /// Whether playback was active at the moment the system began sleeping.
+    ///
+    /// Recorded by `handleSystemWillSleep()` and consumed (then cleared) by
+    /// `handleSystemDidWake()` to decide whether playback resumes
+    /// automatically after the Mac wakes. Captured at the will-sleep
+    /// notification rather than inferred from the polling loop, because the
+    /// ordering of the did-wake notification against a polling tick is
+    /// undefined.
+    private(set) var wasPlayingBeforeSleep: Bool = false
+
+    /// Records whether playback is active at the moment the system sleeps.
+    ///
+    /// Called by `AppDelegate` when `NSWorkspace.willSleepNotification`
+    /// fires.
+    func handleSystemWillSleep() {
+        wasPlayingBeforeSleep = (playbackState == .playing)
+    }
+
+    /// Resumes playback after the system wakes if it was playing before
+    /// sleep.
+    ///
+    /// Called by `AppDelegate` when `NSWorkspace.didWakeNotification`
+    /// fires. Clears `wasPlayingBeforeSleep` in all cases; when it was
+    /// `true`, calls `play()` — re-preparation of the audio pipeline
+    /// happens inside the playback service, so no further call is needed.
+    func handleSystemDidWake() async {
+        let shouldResume = wasPlayingBeforeSleep
+        wasPlayingBeforeSleep = false
+        if shouldResume {
+            await play()
+        }
+    }
+
     // MARK: - Polling
 
     /// Task that polls playback state and currentTime while playing.

@@ -34,9 +34,9 @@ HarmoniaPlayer is designed to work together with the following repositories:
   * Contains both the Swift (`apple-swift/`) and C++ (`linux-cpp/`, deferred) implementations side by side.
   * Provides the cross-platform architecture and contracts for:
 
-    * Ports (DecoderPort, AudioOutputPort, TagReaderPort, TagWriterPort, MonotonicTimePort, LoggerPort, EQPort)
+    * Ports (DecoderPort, AudioOutputPort, AudioRoutePort, TagReaderPort, TagWriterPort, MonotonicTimePort, LoggerPort, EQPort)
     * Services (PlaybackService)
-    * Models (TagBundle, CoreError, StreamInfo, LyricsLanguageVariant)
+    * Models (TagBundle, CoreError, StreamInfo, LyricsLanguageVariant, AudioOutputDevice)
 
 **Important:** HarmoniaPlayer never bypasses HarmoniaCore. All audio playback, decoding, metadata reading, and error behavior is delegated to HarmoniaCore-Swift.
 
@@ -157,12 +157,14 @@ not HarmoniaCore]
       service[DefaultPlaybackService]
       ports[Ports
 DecoderPort, AudioOutputPort,
+AudioRoutePort,
 TagReaderPort, TagWriterPort,
 MonotonicTimePort, LoggerPort,
 EQPort]
       adapters[Apple Adapters
 AVAssetReaderDecoderAdapter,
 AVAudioEngineOutputAdapter,
+SystemAudioRouteAdapter,
 AVAudioUnitEQAdapter,
 AVMetadataTagReaderAdapter,
 AVMutableTagWriterAdapter,

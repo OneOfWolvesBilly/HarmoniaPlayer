@@ -185,7 +185,7 @@ HarmoniaPlayer/
 │       │   │       └── PlaylistView.swift                    # Playlist table + tab bar
 │       │   ├── macOS/
 │       │   │   └── Free/
-│       │   │       ├── AppDelegate.swift                     # Dock-click reopen (Slice 9-AA)
+│       │   │       ├── AppDelegate.swift                     # Dock-click reopen + sleep/wake observation
 │       │   │       ├── HarmoniaPlayerApp.swift               # @main entry
 │       │   │       └── Views/
 │       │   │           ├── HarmoniaPlayerCommands.swift
@@ -285,7 +285,7 @@ constructs production dependencies and passes them into AppState's init:
 @main
 struct HarmoniaPlayerApp: App {
     @StateObject private var appState = AppState(
-        iapManager: StoreKitIAPManager(),
+        iapManager: FreeTierIAPManager(),
         provider:   HarmoniaCoreProvider()
     )
     // ...
@@ -369,6 +369,18 @@ For release builds, the SPM dependency is pinned to a tagged version of the
 This two-step tag flow (HarmoniaCore → HarmoniaCore-Swift) exists because
 SPM cannot consume a subdirectory of a repository — HarmoniaCore-Swift is
 the valid Package.swift root needed for remote resolution.
+
+The current pin uses `kind = revision` (an exact commit SHA) rather than a
+tag. Pinned revision of HarmoniaCore-Swift:
+
+```
+b4624987ab91a4c6a1cccc8c6285030f67510840
+```
+
+To bump the pin: edit the `XCRemoteSwiftPackageReference
+"HarmoniaCore-Swift"` revision in `project.pbxproj`, then regenerate
+`Package.resolved` with Xcode's File → Packages → Resolve Package Versions
+(never hand-edit `Package.resolved`), and commit both files together.
 
 ### 6.3 When to make a cross-repo change
 

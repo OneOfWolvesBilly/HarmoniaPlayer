@@ -76,10 +76,15 @@ At a high level, the codebase is divided into the following logical modules.
 4. **Core Services (HarmoniaCore-Swift)**
    - `PlaybackService` - High-level audio service
 5. **Ports (HarmoniaCore-Swift)**
-   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `TagReaderPort`, `MonotonicTimePort`, `LoggerPort`, `TagWriterPort`, `EQPort`
+   - Abstract interfaces: `DecoderPort`, `AudioOutputPort`, `AudioRoutePort`, `TagReaderPort`, `MonotonicTimePort`, `LoggerPort`, `TagWriterPort`, `EQPort`
+   - `AudioRoutePort` is application-facing: no HarmoniaCore service consumes
+     it. It exists so an application can name the current output device
+     (e.g. in a resume prompt) before calling `PlaybackService.play()`.
+     HarmoniaPlayer does not currently consume it.
 6. **Platform Adapters (HarmoniaCore-Swift)**
    - `AVAssetReaderDecoderAdapter`
    - `AVAudioEngineOutputAdapter`
+   - `SystemAudioRouteAdapter`
    - `AVAudioUnitEQAdapter`
    - `AVMetadataTagReaderAdapter`
    - `AVMutableTagWriterAdapter`
@@ -428,6 +433,39 @@ all future sibling-file features:
 - Slice 10-D (Pro): lyrics write-back — same presenter, but uses
   `NSFileCoordinator.coordinate(writingItemAt:)`.
 - CUE sheet slice (Pro): `.cue` siblings — same pattern.
+
+### 4.7 Sleep/Wake Trigger Placement (System Power Boundary)
+
+The sleep/wake playback-recovery split assigns each half of the problem to
+the only layer that can own it:
+
+**(a) The wake trigger is application-side by necessity.** System
+sleep/wake is observed via `NSWorkspace.willSleepNotification` /
+`NSWorkspace.didWakeNotification` on
+`NSWorkspace.shared.notificationCenter`. `NSWorkspace` is AppKit-only,
+and HarmoniaCore targets macOS **and iOS**, so this observation cannot
+live in HarmoniaCore. `AppDelegate` registers both observers and forwards
+to `AppState.handleSystemWillSleep()` / `handleSystemDidWake()` through a
+weak `AppState` reference assigned by `HarmoniaPlayerApp` — the same
+injection pattern as `openWindow`. The pre-sleep state is recorded at the
+will-sleep notification rather than inferred from the polling loop,
+because the ordering of the did-wake notification against a polling tick
+is undefined.
+
+**(b) Pipeline recovery is HarmoniaCore-side.** `handleSystemDidWake()`
+calls the existing `play()` and nothing else. The playback service
+rebuilds its audio output and re-seeks the decoder to the retained
+position internally, on every `play()` — HarmoniaPlayer writes no resume
+sequence of its own and passes no "did we sleep?" state across the
+boundary. The observable contract is: an invalidated output leaves the
+service in `.paused` with position retained; the next `play()` resumes
+from that position.
+
+**(c) The polling loop mirrors every reachable service state.**
+`AppState`'s polling loop reflects service-side `.paused` and `.error`
+transitions (in addition to `.stopped` completion detection) so
+`playbackState` — and everything subscribed to it, including the system
+Now Playing surface — can never disagree with actual playback.
 
 ---
 

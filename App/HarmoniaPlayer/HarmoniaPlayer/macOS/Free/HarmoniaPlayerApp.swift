@@ -86,12 +86,15 @@ struct HarmoniaPlayerApp: App {
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
-                // Hand the open-window action to the app delegate so a Dock
-                // click can recreate the main window after it has been
-                // closed. Captured here because SwiftUI does not populate
-                // @Environment values during App.init.
+                // Hand the open-window action and the state container to
+                // the app delegate. openWindow lets a Dock click recreate
+                // the main window after it has been closed; appState
+                // receives the system sleep/wake notifications the
+                // delegate observes. Captured here because SwiftUI does
+                // not populate @Environment values during App.init.
                 .onAppear {
                     appDelegate.openWindow = openWindow
+                    appDelegate.appState = appState
                 }
                 // v0.1 frozen: Pro UI hidden. Re-enable in v0.2.
                 // .task {

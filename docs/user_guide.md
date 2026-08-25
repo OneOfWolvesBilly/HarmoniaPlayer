@@ -30,9 +30,10 @@ Complete guide for using HarmoniaPlayer on macOS.
 
 ### Install
 
-HarmoniaPlayer v1.0.0 Free is being prepared for Mac App Store submission.
-Until the App Store listing is live, see
-[README.md](../README.md#build-from-source) for build-from-source instructions.
+Harmonia Player (Free) is available on the
+[Mac App Store](https://apps.apple.com/tw/app/harmonia-player/id6781963866?mt=12).
+To build from source instead, see
+[README.md](../README.md#build-from-source).
 
 ---
 
@@ -157,6 +158,14 @@ to normalise loudness between tracks or albums. Choose the mode in
 - **Off** — no adjustment (default)
 - **Track** — apply per-track gain
 - **Album** — apply album-level gain for consistent album playback
+
+### Sleep and wake
+
+If music is playing when your Mac goes to sleep (for example when you close
+the lid), playback resumes automatically from where it was interrupted as
+soon as the Mac wakes and you log back in. The main window, the Mini
+Player, and Control Center all stay in sync with the resumed playback. If
+playback was paused or stopped before sleep, it stays that way after wake.
 
 ---
 

@@ -1,7 +1,7 @@
 # HarmoniaPlayer API Reference
 
 > Complete interface reference for HarmoniaPlayer.
-> Generated from source code as of 2026-04-15.
+> Generated from source code as of 2026-08-25.
 >
 > For architecture overview, see [Architecture](architecture.md).
 > For dependency rules, see [Module Boundaries](module_boundary.md).
@@ -583,6 +583,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `shuffleQueue` | `[Track.ID]` | Pre-shuffled order |
 | `shuffleQueueIndex` | `Int` | Current position in shuffle queue |
 | `pollingTask` | `Task<Void, Never>?` | Polling loop task for playback state |
+| `wasPlayingBeforeSleep` | `Bool` (`private(set)`) | Whether playback was active when the system began sleeping; recorded by `handleSystemWillSleep()`, consumed and cleared by `handleSystemDidWake()` |
 | `saveBatchSize` | `Int` (static) | Incremental save interval during batch load (5) |
 
 ### 3.4 Methods — Playlist Operations (`AppState+Playlist.swift`)
@@ -658,6 +659,8 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `setLyricsSource(_ source: LyricsSource)` | Switches active source (.embedded ↔ .lrc) for current track; no-op when source is not in `availableSources`. Persists choice via `LyricsPreferenceStore`. Slice 9-J. |
 | `setLyricsLanguage(_ languageCode: String?)` | Switches active language for current track; no-op when source is not `.embedded`. Persists. Slice 9-J. |
 | `setLyricsEncoding(_ encoding: String)` | Stores per-track encoding choice; persists. Slice 9-J. |
+| `handleSystemWillSleep()` | Records `wasPlayingBeforeSleep = (playbackState == .playing)`. Called by `AppDelegate` on `NSWorkspace.willSleepNotification`. |
+| `handleSystemDidWake() async` | Clears `wasPlayingBeforeSleep`; when it was `true`, calls `play()` to resume from the interrupted position (audio-pipeline re-preparation happens inside the playback service). Called by `AppDelegate` on `NSWorkspace.didWakeNotification`. |
 
 ---
 

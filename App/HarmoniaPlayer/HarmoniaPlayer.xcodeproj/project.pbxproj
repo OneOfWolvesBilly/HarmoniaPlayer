@@ -324,7 +324,7 @@
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -347,7 +347,7 @@
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayerTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -368,7 +368,7 @@
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayerUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -389,7 +389,7 @@
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayerUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = macosx;
@@ -531,7 +531,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				ENABLE_APP_SANDBOX = YES;
@@ -567,7 +567,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayer;
 				PRODUCT_NAME = "Harmonia Player";
 				REGISTER_APP_GROUPS = YES;
@@ -592,7 +592,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = J77YHC92VR;
 				ENABLE_APP_SANDBOX = YES;
@@ -628,7 +628,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 15.6;
-				MARKETING_VERSION = 1.0.0;
+				MARKETING_VERSION = 1.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = io.github.oneofwolvesbilly.HarmoniaPlayer;
 				PRODUCT_NAME = "Harmonia Player";
 				REGISTER_APP_GROUPS = YES;
@@ -692,7 +692,7 @@
 			repositoryURL = "https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git";
 			requirement = {
 				kind = revision;
-				revision = 0246e1e7dfa1ea90b2e94d004dd8a72305a63b00;
+				revision = b4624987ab91a4c6a1cccc8c6285030f67510840;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */

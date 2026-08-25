@@ -25,7 +25,7 @@ through five store extractions.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 11-A | Sleep/wake auto-resume policy + polling state reflection + SPM pin bump | Free | ⬜ |
+| 11-A | Sleep/wake auto-resume policy + polling state reflection + SPM pin bump | Free | ✅ |
 
 ### Goals
 
@@ -96,7 +96,7 @@ phase begins, because the pin bump is part of its scope.
 
 ---
 
-## Slice 11-A: Sleep/Wake Auto-Resume and Polling Reflection ⬜
+## Slice 11-A: Sleep/Wake Auto-Resume and Polling Reflection ✅
 
 ### Goal
 
