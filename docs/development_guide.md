@@ -1,7 +1,7 @@
 # HarmoniaPlayer Development Guide
 
 > **Platform:** macOS 15.6+
-> **Language:** Swift (project `SWIFT_VERSION = 6.0`; the app and test targets currently override to the Swift 5 language mode)
+> **Language:** Swift (project `SWIFT_VERSION = 6.0`; the app and test targets currently override to the Swift 5 language mode with `SWIFT_STRICT_CONCURRENCY = complete`, so Swift-6-level concurrency diagnostics surface as warnings)
 > **Framework:** SwiftUI, HarmoniaCore-Swift (SPM)
 >
 > This guide walks a new contributor through setting up the development

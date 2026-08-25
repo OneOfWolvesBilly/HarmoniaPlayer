@@ -973,7 +973,7 @@ that later stages burn down.
 
 | Slice | Content | Status |
 |---|---|---|
-| 12 | Complete strict-concurrency checking + warning baseline | ⬜ |
+| 12 | Complete strict-concurrency checking + warning baseline | ✅ |
 
 ### 11.8 Slice 13: Extract AlertCenter (v1.1.0; AppState Refactor Program)
 

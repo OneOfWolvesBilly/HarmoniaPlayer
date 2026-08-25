@@ -16,7 +16,7 @@ language mode produces warnings, never errors.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 12-A | Enable complete strict-concurrency checking + record warning baseline | — | ⬜ |
+| 12-A | Enable complete strict-concurrency checking + record warning baseline | — | ✅ |
 
 ### Goals
 
@@ -44,7 +44,7 @@ language mode produces warnings, never errors.
 
 ---
 
-## Slice 12-A: Enable Complete Checking + Record Baseline ⬜
+## Slice 12-A: Enable Complete Checking + Record Baseline ✅
 
 ### Goal
 
@@ -99,6 +99,60 @@ exercise. Verification is AC1–AC6.
 
 ### Baseline (filled at execution)
 
+Recorded 2026-08-26 from a full Debug build of all three targets
+(deduplicated diagnostics; app 32 + tests 466 + UITests 50 = 548 total).
+The `appintentsmetadataprocessor` "No AppIntents.framework dependency
+found" build-log line is pre-existing toolchain output, not a Swift
+diagnostic, and is excluded.
+
+**App target — 32**
+
 | File | Warnings | Dominant kind |
 | --- | --- | --- |
-| _(recorded at execution)_ | | |
+| `HarmoniaPlayer/Shared/Views/PlaylistView.swift` | 16 | non-Sendable `KeyPath<Track, _>` crossing actor boundary (16/16) |
+| `HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` | 14 | main-actor API referenced from nonisolated / Sendable-closure context (14/14) |
+| `HarmoniaPlayer/macOS/Free/AppDelegate.swift` | 2 | main-actor API referenced from nonisolated / Sendable-closure context (2/2) |
+
+**Test target — 466**
+
+| File | Warnings | Dominant kind |
+| --- | --- | --- |
+| `HarmoniaPlayerTests/SharedTests/PlaylistTests.swift` | 51 | main-actor isolation violation (45/51) |
+| `HarmoniaPlayerTests/SharedTests/LyricsServiceTests.swift` | 45 | main-actor isolation violation (45/45) |
+| `HarmoniaPlayerTests/SharedTests/CoreFeatureFlagsTests.swift` | 44 | main-actor isolation violation (44/44) |
+| `HarmoniaPlayerTests/SharedTests/CoreFactoryTests.swift` | 34 | main-actor isolation violation (23/34) |
+| `HarmoniaPlayerTests/SharedTests/AppStateReplayGainTests.swift` | 20 | main-actor isolation violation (8/20) |
+| `HarmoniaPlayerTests/SharedTests/AppStatePersistenceTests.swift` | 20 | main-actor isolation violation (8/20) |
+| `HarmoniaPlayerTests/SharedTests/FileOriginServiceTests.swift` | 18 | sending non-Sendable value across isolation (9/18) |
+| `HarmoniaPlayerTests/SharedTests/LyricsPreferenceStoreTests.swift` | 17 | main-actor isolation violation (16/17) |
+| `HarmoniaPlayerTests/SharedTests/EQCoordinatorTests.swift` | 17 | main-actor isolation violation (7/17) |
+| `HarmoniaPlayerTests/SharedTests/AppStateVolumeTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppStateTrackSelectionTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppStatePollingTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppStatePlaybackTrackTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppStatePlaybackStateTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppStatePlaybackControlTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/AppSettingsTests.swift` | 14 | main-actor isolation violation (6/14) |
+| `HarmoniaPlayerTests/SharedTests/EncodingDetectionTests.swift` | 12 | main-actor isolation violation (12/12) |
+| `HarmoniaPlayerTests/SharedTests/EQServiceTests.swift` | 12 | main-actor isolation violation (7/12) |
+| `HarmoniaPlayerTests/SharedTests/LRCStripTests.swift` | 11 | main-actor isolation violation (11/11) |
+| `HarmoniaPlayerTests/SharedTests/EQPresetsTests.swift` | 11 | main-actor isolation violation (11/11) |
+| `HarmoniaPlayerTests/SharedTests/EQSchemaMigratorTests.swift` | 10 | main-actor isolation violation (10/10) |
+| `HarmoniaPlayerTests/SharedTests/EQPersistenceStoreTests.swift` | 10 | main-actor isolation violation (10/10) |
+| `HarmoniaPlayerTests/SharedTests/AppStateFormatGatingTests.swift` | 8 | main-actor isolation violation (3/8) |
+| `HarmoniaPlayerTests/SharedTests/FileDropServiceTests.swift` | 7 | main-actor isolation violation (7/7) |
+| `HarmoniaPlayerTests/SharedTests/SiblingFilePresenterTests.swift` | 5 | main-actor isolation violation (5/5) |
+| `HarmoniaPlayerTests/SharedTests/ErrorReportServiceTests.swift` | 4 | main-actor isolation violation (4/4) |
+| `HarmoniaPlayerTests/SharedTests/RepeatModeTests.swift` | 2 | main-actor isolation violation (2/2) |
+| `HarmoniaPlayerTests/SharedTests/MiniPlayerViewTests.swift` | 2 | main-actor isolation violation (2/2) |
+| `HarmoniaPlayerTests/SharedTests/M3U8ServiceTests.swift` | 2 | main-actor isolation violation (2/2) |
+| `HarmoniaPlayerTests/SharedTests/AppStateUndoTests.swift` | 2 | main-actor isolation violation (2/2) |
+| `HarmoniaPlayerTests/SharedTests/AppStateTests.swift` | 2 | main-actor isolation violation (2/2) |
+| `HarmoniaPlayerTests/FakeInfrastructure/FakeNowPlayingService.swift` | 1 | default initializer both nonisolated and main-actor-isolated (1/1) |
+| `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | 1 | main-actor default value in nonisolated context (1/1) |
+
+**UITest target — 50**
+
+| File | Warnings | Dominant kind |
+| --- | --- | --- |
+| `HarmoniaPlayerUITests/HarmoniaPlayerUITests.swift` | 50 | main-actor isolation violation (49/50) |
