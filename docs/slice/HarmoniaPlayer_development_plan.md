@@ -989,7 +989,7 @@ in `appstate_refactor_plan.md` §7.
 
 | Slice | Content | Status |
 |---|---|---|
-| 13 | AlertCenter extraction + @Environment view migration + test migration | ⬜ |
+| 13 | AlertCenter extraction + @Environment view migration + test migration | ✅ |
 
 ### 11.9 Version Targets
 

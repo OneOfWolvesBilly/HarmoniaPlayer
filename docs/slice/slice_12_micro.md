@@ -105,6 +105,17 @@ The `appintentsmetadataprocessor` "No AppIntents.framework dependency
 found" build-log line is pre-existing toolchain output, not a Swift
 diagnostic, and is excluded.
 
+**Slice 13-A re-measurement (2026-08-29).** The AlertCenter extraction
+moved the 11 alert-surface `@Published` properties and their presentation
+methods out of `AppState.swift`, which carries no row in this baseline —
+the moved code had zero baseline warnings, so no rows retire. Every file
+the slice touched was rebuilt and re-measured: `AlertCenter.swift`,
+`AlertCenterTests.swift`, `AppState.swift`, `ContentView.swift`,
+`PaywallView.swift`, and `HarmoniaPlayerCommands.swift` build with zero
+warnings; `PlaylistView.swift` (16), `HarmoniaPlayerApp.swift` (14), and
+`AppStateTests.swift` (2) keep their baseline counts and dominant kinds
+unchanged. The tables below therefore stand as recorded.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |

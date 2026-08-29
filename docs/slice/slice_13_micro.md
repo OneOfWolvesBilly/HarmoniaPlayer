@@ -16,7 +16,7 @@ structural template for the later store extractions.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 13-A | Extract `AlertCenter` + `@Environment` view migration + test migration | — | ⬜ |
+| 13-A | Extract `AlertCenter` + `@Environment` view migration + test migration | — | ✅ |
 
 ### Goals
 
@@ -58,7 +58,7 @@ structural template for the later store extractions.
 
 ---
 
-## Slice 13-A: Extract AlertCenter ⬜
+## Slice 13-A: Extract AlertCenter ✅
 
 ### Goal
 
@@ -148,8 +148,11 @@ Deliberate choices frozen with it:
 - Tests: add `SharedTests/AlertCenterTests.swift`; modify
   `AppStateTests.swift`, `AppStateErrorHandlingTests.swift`,
   `AppStateFileInfoTests.swift`, `IAPManagerTests.swift`
-- Project: `HarmoniaPlayer.xcodeproj/project.pbxproj` (register the two
-  new files)
+- Project: `HarmoniaPlayer.xcodeproj/project.pbxproj` — no change needed
+  (execution amendment: the project uses
+  `PBXFileSystemSynchronizedRootGroup`, so new `.swift` files under the
+  synchronized roots join their targets automatically; the 9-L file
+  additions likewise left the pbxproj untouched)
 
 ### TDD matrix
 
@@ -171,6 +174,13 @@ Deliberate choices frozen with it:
 Red phase: rows 2–6 fail against the intentionally-unwired skeleton;
 rows 7–11 fail against the not-yet-delegating facade. Rows 1 and 12 are
 green-from-start guards.
+
+Execution amendment (agreed before red): rows 3, 8, and 11 are negative
+guards that pass vacuously against the honest empty-body skeleton — the
+observed red set is rows 2, 4, 5, 6, 7, 9, 10 (7 failures), with rows 1,
+3, 8, 11, 12 green from the start. Forcing all ten rows red would have
+required a deliberately-wrong skeleton body, against the 9-L
+intentionally-unwired precedent.
 
 ### Public API shape
 
