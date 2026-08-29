@@ -236,53 +236,62 @@ final class AppState: ObservableObject {
     /// Initialised to `0`. Updated after a successful `load` in `play(trackID:)`.
     @Published var duration: TimeInterval = 0
 
-    // MARK: - Error State
+    // MARK: - Error State (facade → AlertCenter)
 
-    /// Most recent playback error.
-    ///
-    /// `nil` on init. Set by playback logic when an error occurs.
-    /// Views observe this to present error banners or alerts.
-    @Published var lastError: PlaybackError?
+    /// Most recent playback error. Forwards to `alertCenter.lastError`.
+    var lastError: PlaybackError? {
+        get { alertCenter.lastError }
+        set { alertCenter.lastError = newValue }
+    }
 
     /// One-line diagnostic summary accompanying `lastError`.
-    ///
-    /// Format: `"<errorCode>: <track.url.path>"` or
-    /// `"<errorCode>: (no active track)"` for error sites without a known track.
-    /// Used by the "Report Issue" button to prefill the mailto body.
-    /// Cleared by `clearLastError()`.
-    @Published var lastErrorDetail: String?
+    /// Forwards to `alertCenter.lastErrorDetail`.
+    var lastErrorDetail: String? {
+        get { alertCenter.lastErrorDetail }
+        set { alertCenter.lastErrorDetail = newValue }
+    }
 
-    /// Display name of the track that triggered the most recent `failedToOpenFile` error.
-    ///
-    /// Set to "Title - Artist" when artist is available, otherwise the URL filename.
-    /// Cleared when `clearLastError()` is called.
-    @Published var failedTrackName: String?
+    /// Display name of the track that triggered the most recent
+    /// `failedToOpenFile` error. Forwards to `alertCenter.failedTrackName`.
+    var failedTrackName: String? {
+        get { alertCenter.failedTrackName }
+        set { alertCenter.failedTrackName = newValue }
+    }
 
     /// Controls the file-not-found alert presentation.
-    ///
-    /// Set to `true` by `setFileNotFoundError(for:)`.
-    /// ContentView binds directly to this flag so the alert is not
-    /// dependent on `onChange(of: lastError)` timing.
-    @Published var showFileNotFoundAlert: Bool = false
+    /// Forwards to `alertCenter.showFileNotFoundAlert`.
+    var showFileNotFoundAlert: Bool {
+        get { alertCenter.showFileNotFoundAlert }
+        set { alertCenter.showFileNotFoundAlert = newValue }
+    }
 
     /// Names of tracks skipped during auto-play due to inaccessibility.
-    ///
-    /// Populated during `trackDidFinishPlaying()` skip logic.
-    /// ContentView shows a single alert listing all skipped tracks.
-    /// Cleared when the alert is dismissed.
-    @Published var skippedInaccessibleNames: [String] = []
+    /// Forwards to `alertCenter.skippedInaccessibleNames`.
+    var skippedInaccessibleNames: [String] {
+        get { alertCenter.skippedInaccessibleNames }
+        set { alertCenter.skippedInaccessibleNames = newValue }
+    }
 
-    /// URLs that were skipped during the last load() call because they
-    /// already exist in the playlist. Non-empty triggers a duplicate alert.
-    @Published var skippedDuplicateURLs: [URL] = []
+    /// URLs skipped by the last load because they already exist in the
+    /// playlist. Forwards to `alertCenter.skippedDuplicateURLs`.
+    var skippedDuplicateURLs: [URL] {
+        get { alertCenter.skippedDuplicateURLs }
+        set { alertCenter.skippedDuplicateURLs = newValue }
+    }
 
-    /// URLs that were skipped during the last importPlaylist(from:) call because
-    /// the files were not found on disk. Non-empty triggers a warning alert.
-    @Published var skippedImportURLs: [URL] = []
+    /// URLs skipped by the last playlist import because the files were not
+    /// found on disk. Forwards to `alertCenter.skippedImportURLs`.
+    var skippedImportURLs: [URL] {
+        get { alertCenter.skippedImportURLs }
+        set { alertCenter.skippedImportURLs = newValue }
+    }
 
-    /// URLs skipped during load() because their format is not supported by
-    /// HarmoniaPlayer at any tier. Non-empty triggers an unsupported-format alert.
-    @Published var skippedUnsupportedURLs: [URL] = []
+    /// URLs skipped by the last load because their format is not supported
+    /// at any tier. Forwards to `alertCenter.skippedUnsupportedURLs`.
+    var skippedUnsupportedURLs: [URL] {
+        get { alertCenter.skippedUnsupportedURLs }
+        set { alertCenter.skippedUnsupportedURLs = newValue }
+    }
 
     // MARK: - Blocking Operation
 
@@ -295,35 +304,31 @@ final class AppState: ObservableObject {
     /// Not persisted — always starts as `false` on launch.
     @Published var isPerformingBlockingOperation: Bool = false
 
-    // MARK: - File Info Panel
+    // MARK: - File Info Panel (facade → AlertCenter)
 
     /// One-shot signal requesting the File Info window to open for a track.
-    ///
-    /// Set via `showFileInfo(trackID:)`. `ContentView` observes this property
-    /// via `.onChange` and opens an independent `WindowGroup(for: Track.ID.self)`
-    /// scene keyed by the track's ID, then resets this property back to `nil`
-    /// so the same track can request the window again on a subsequent call.
-    /// Not `private(set)` so the `ContentView.onChange` handler can clear it.
-    @Published var fileInfoTrack: Track? = nil
+    /// Forwards to `alertCenter.fileInfoTrack`.
+    var fileInfoTrack: Track? {
+        get { alertCenter.fileInfoTrack }
+        set { alertCenter.fileInfoTrack = newValue }
+    }
 
-    // MARK: - Paywall
+    // MARK: - Paywall (facade → AlertCenter)
 
     /// Whether the Pro paywall sheet is currently presented.
-    ///
-    /// Set to `true` by `showPaywallIfNeeded()` when a Free-tier user
-    /// triggers a Pro-only action. The sheet binding resets it to `false`
-    /// on dismissal.
-    @Published var showPaywall: Bool = false
+    /// Forwards to `alertCenter.showPaywall`.
+    var showPaywall: Bool {
+        get { alertCenter.showPaywall }
+        set { alertCenter.showPaywall = newValue }
+    }
 
     /// Whether the user has chosen to silently skip Pro-only format tracks
     /// during auto-play for this session.
-    ///
-    /// Set to `true` when the user dismisses the Paywall with the
-    /// "skip session" checkbox checked. Resets to `false` on every app
-    /// launch (not persisted). When `true`, `trackDidFinishPlaying()`
-    /// silently advances past format-gated tracks without showing the Paywall.
-    /// Manual track selection always shows the Paywall regardless of this flag.
-    @Published var paywallDismissedThisSession: Bool = false
+    /// Forwards to `alertCenter.paywallDismissedThisSession`.
+    var paywallDismissedThisSession: Bool {
+        get { alertCenter.paywallDismissedThisSession }
+        set { alertCenter.paywallDismissedThisSession = newValue }
+    }
 
     // MARK: - Settings
 
@@ -685,12 +690,12 @@ final class AppState: ObservableObject {
     // MARK: - Error Helpers
 
     /// Clears the last playback error. Called when the user dismisses an error alert.
+    ///
+    /// Delegates the alert-surface reset to `alertCenter.clearLastError()`;
+    /// the `playbackState` `.error → .stopped` transition stays here because
+    /// playback state is AppState's, not the alert store's.
     func clearLastError() {
-        lastError = nil
-        lastErrorDetail = nil
-        failedTrackName = nil
-        showFileNotFoundAlert = false
-        skippedInaccessibleNames = []
+        alertCenter.clearLastError()
         if case .error = playbackState {
             playbackState = .stopped
         }
@@ -698,20 +703,23 @@ final class AppState: ObservableObject {
 
     /// Requests the File Info window to open for the track with the given ID.
     ///
-    /// Sets `fileInfoTrack` to the matching track. `ContentView` observes
-    /// `fileInfoTrack` and opens the independent `WindowGroup(for:)` scene,
-    /// then clears the property. If no matching track is found, the call
-    /// is a no-op and `fileInfoTrack` remains unchanged.
+    /// Looks the track up in the active playlist (the lookup needs
+    /// `playlist`, so it stays in the facade) and hands the request to
+    /// `alertCenter.presentFileInfo(_:)`. If no matching track is found,
+    /// the call is a no-op and the pending request remains unchanged.
     func showFileInfo(trackID: Track.ID) {
-        fileInfoTrack = playlist.tracks.first { $0.id == trackID }
+        guard let track = playlist.tracks.first(where: { $0.id == trackID }) else { return }
+        alertCenter.presentFileInfo(track)
     }
 
     // MARK: - Paywall
 
     /// Shows the Pro paywall sheet if the user is on the Free tier.
     ///
-    /// Sets `showPaywall = true` and returns `true` when `isProUnlocked == false`.
-    /// Returns `false` (and does not show the paywall) when Pro is already unlocked.
+    /// Checks `isProUnlocked` (tier logic stays in the facade, out of the
+    /// alert store), calls `alertCenter.presentPaywall()`, and returns
+    /// `true` when `isProUnlocked == false`. Returns `false` (and does not
+    /// show the paywall) when Pro is already unlocked.
     ///
     /// Call this guard before any Pro-only action:
     /// ```swift
@@ -721,7 +729,7 @@ final class AppState: ObservableObject {
     @discardableResult
     func showPaywallIfNeeded() -> Bool {
         guard !isProUnlocked else { return false }
-        showPaywall = true
+        alertCenter.presentPaywall()
         return true
     }
 

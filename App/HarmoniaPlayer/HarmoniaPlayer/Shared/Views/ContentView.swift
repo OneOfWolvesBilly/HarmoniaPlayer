@@ -16,6 +16,9 @@
 //    collapsing completely.
 //  - `AppState` is provided via `@EnvironmentObject` injected by
 //    `HarmoniaPlayerApp`; this view does not create or own it.
+//  - Alert, paywall, and File Info request state lives in `AlertCenter`,
+//    observed via `@Environment(AlertCenter.self)` (injected by
+//    `HarmoniaPlayerApp`); `@Bindable` provides the sheet/alert bindings.
 //  - `failedToOpenFile` alert auto-dismisses after 3 seconds.
 //    Other playback errors require manual dismissal.
 //  - No `import HarmoniaCore` — all state access goes through `AppState`.
@@ -38,6 +41,8 @@ struct ContentView: View {
 
     @EnvironmentObject private var appState: AppState
 
+    @Environment(AlertCenter.self) private var alertCenter
+
     @Environment(\.openWindow) private var openWindow
 
     // MARK: - Localization helper
@@ -47,6 +52,8 @@ struct ContentView: View {
     }
 
     var body: some View {
+        @Bindable var alertCenter = alertCenter
+
         HSplitView {
             PlaylistView()
                 .frame(minWidth: 260, idealWidth: 300)
@@ -75,16 +82,17 @@ struct ContentView: View {
         // property changes; @FocusedValue with a scalar value does.
         .focusedValue(\.playbackState, appState.playbackState)
         // File Info window — opens an independent WindowGroup(for: Track.ID.self)
-        // whenever AppState.fileInfoTrack is set by showFileInfo(trackID:).
-        // The property is a one-shot signal: we reset it to nil after opening
-        // so the same track can re-trigger the window on a subsequent call.
-        .onChange(of: appState.fileInfoTrack) { _, newValue in
+        // whenever alertCenter.fileInfoTrack is set by showFileInfo(trackID:).
+        // The property is a one-shot signal: we clear the request after
+        // opening so the same track can re-trigger the window on a
+        // subsequent call.
+        .onChange(of: alertCenter.fileInfoTrack) { _, newValue in
             guard let track = newValue else { return }
             openWindow(value: track.id)
-            appState.fileInfoTrack = nil
+            alertCenter.clearFileInfoRequest()
         }
         // Paywall sheet — presented when a Free user triggers a Pro-only action
-        .sheet(isPresented: $appState.showPaywall) {
+        .sheet(isPresented: $alertCenter.showPaywall) {
             PaywallView()
                 .environmentObject(appState)
         }
@@ -92,36 +100,36 @@ struct ContentView: View {
         .alert(
             Text(L("alert_unsupported_format_title")),
             isPresented: Binding(
-                get: { !appState.skippedUnsupportedURLs.isEmpty },
-                set: { if !$0 { appState.skippedUnsupportedURLs = [] } }
+                get: { !alertCenter.skippedUnsupportedURLs.isEmpty },
+                set: { if !$0 { alertCenter.skippedUnsupportedURLs = [] } }
             )
         ) {
-            Button("OK") { appState.skippedUnsupportedURLs = [] }
+            Button("OK") { alertCenter.skippedUnsupportedURLs = [] }
         } message: {
-            let names = appState.skippedUnsupportedURLs
+            let names = alertCenter.skippedUnsupportedURLs
                 .map { $0.lastPathComponent }
                 .joined(separator: "\n")
             Text(String(format: L("alert_unsupported_format_body"), names))
         }
         // Auto-dismiss alert for failedToOpenFile (3 seconds)
-        .onChange(of: appState.showFileNotFoundAlert) {
-            guard appState.showFileNotFoundAlert else { return }
+        .onChange(of: alertCenter.showFileNotFoundAlert) {
+            guard alertCenter.showFileNotFoundAlert else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                 appState.clearLastError()
             }
         }
         .alert(
             Text(L("alert_file_not_found_title")),
-            isPresented: $appState.showFileNotFoundAlert
+            isPresented: $alertCenter.showFileNotFoundAlert
         ) {
             Button("OK") {
                 appState.clearLastError()
             }
         } message: {
-            if !appState.skippedInaccessibleNames.isEmpty {
-                let names = appState.skippedInaccessibleNames.map { "• \($0)" }.joined(separator: "\n")
+            if !alertCenter.skippedInaccessibleNames.isEmpty {
+                let names = alertCenter.skippedInaccessibleNames.map { "• \($0)" }.joined(separator: "\n")
                 Text(String(format: L("alert_file_not_found_multi"), names))
-            } else if let name = appState.failedTrackName {
+            } else if let name = alertCenter.failedTrackName {
                 Text(String(format: L("alert_file_not_found_single"), name))
             } else {
                 Text(L("alert_file_not_found_generic"))
@@ -130,13 +138,13 @@ struct ContentView: View {
         .alert(
             Text(L("alert_already_in_playlist_title")),
             isPresented: Binding(
-                get: { !appState.skippedDuplicateURLs.isEmpty },
-                set: { if !$0 { appState.skippedDuplicateURLs = [] } }
+                get: { !alertCenter.skippedDuplicateURLs.isEmpty },
+                set: { if !$0 { alertCenter.skippedDuplicateURLs = [] } }
             )
         ) {
-            Button("OK") { appState.skippedDuplicateURLs = [] }
+            Button("OK") { alertCenter.skippedDuplicateURLs = [] }
         } message: {
-            let names = appState.skippedDuplicateURLs
+            let names = alertCenter.skippedDuplicateURLs
                 .map { $0.lastPathComponent }
                 .joined(separator: "\n")
             Text(String(format: L("alert_already_in_playlist_body"), names))
@@ -145,7 +153,7 @@ struct ContentView: View {
             Text(L("alert_playback_error_title")),
             isPresented: Binding(
                 get: {
-                    switch appState.lastError {
+                    switch alertCenter.lastError {
                     case .failedToOpenFile, nil: return false
                     default: return true
                     }
@@ -159,7 +167,7 @@ struct ContentView: View {
             }
             Button("OK") { appState.clearLastError() }
         } message: {
-            switch appState.lastError {
+            switch alertCenter.lastError {
             case .unsupportedFormat:
                 Text(L("error_unsupported_format"))
             case .failedToDecode:
@@ -182,7 +190,7 @@ struct ContentView: View {
     /// runtime versions (app, macOS) and performs the `NSWorkspace` side
     /// effect, keeping both concerns separated.
     private func openReportIssueMail() {
-        let detail = appState.lastErrorDetail ?? "(no detail available)"
+        let detail = alertCenter.lastErrorDetail ?? "(no detail available)"
         let appVersion = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "unknown"
         let osVersion = ProcessInfo.processInfo.operatingSystemVersionString
 

@@ -1,7 +1,7 @@
 # HarmoniaPlayer API Reference
 
 > Complete interface reference for HarmoniaPlayer.
-> Generated from source code as of 2026-08-25.
+> Generated from source code as of 2026-08-29.
 >
 > For architecture overview, see [Architecture](architecture.md).
 > For dependency rules, see [Module Boundaries](module_boundary.md).
@@ -461,6 +461,8 @@ Central application state. `@MainActor`, `ObservableObject`.
 
 Split across 5 files: `AppState.swift` (properties, init, persistence), `AppState+Playlist.swift`, `AppState+Playback.swift`, `AppState+Navigation.swift`, `AppState+M3U8.swift`.
 
+Alert, paywall, and File Info request state lives in the `AlertCenter` store (Slice 13-A, see §5.11). AppState constructs it (`let alertCenter: AlertCenter`) and re-exposes its 11 properties as same-named facade computed forwarders (get + set), so internal call sites and tests keep compiling unchanged while views observe the store directly.
+
 ### 3.1 Initialization
 
 ```swift
@@ -475,7 +477,7 @@ init(
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
 
 ### 3.2 Services (injected)
 
@@ -488,6 +490,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `lyricsPreferenceStore` | `LyricsPreferenceStore` | Per-track persistence of source / encoding / language preference (Slice 9-J) |
 | `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
 | `nowPlayingCoordinator` | `NowPlayingCoordinator` | Routes AppState publishers and action closures to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
+| `alertCenter` | `AlertCenter` | Alert-surface store owning alert, paywall, and File Info request state; constructed first in `init`; views observe it via `@Environment(AlertCenter.self)` (Slice 13-A, see §5.11) |
 
 ### 3.3 Published Properties
 
@@ -518,7 +521,9 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `currentTime` | `TimeInterval` | read | Current position in seconds |
 | `duration` | `TimeInterval` | read | Track duration in seconds |
 
-#### Error / Alert State
+#### Error / Alert State (facade → AlertCenter)
+
+Since Slice 13-A these are **not** `@Published` — each is a computed facade forwarder (get + set) to the same-named `alertCenter` property (see §5.11). Facade reads register the store property with Observation, so views observing either surface re-render correctly.
 
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
@@ -542,9 +547,9 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `viewPreferences` | `ViewPreferences` | read/write | Layout preferences |
-| `fileInfoTrack` | `Track?` | read/write | One-shot signal requesting File Info window to open; ContentView observes and resets to nil |
-| `showPaywall` | `Bool` | read/write | Paywall sheet binding (v1.0.0: hidden) |
-| `paywallDismissedThisSession` | `Bool` | read/write | Session-only skip flag |
+| `fileInfoTrack` | `Track?` | read/write | Facade forwarder to `alertCenter.fileInfoTrack` (Slice 13-A). One-shot signal requesting File Info window to open; ContentView observes the store and clears the request |
+| `showPaywall` | `Bool` | read/write | Facade forwarder to `alertCenter.showPaywall` (Slice 13-A). Paywall sheet binding (v1.0.0: hidden) |
+| `paywallDismissedThisSession` | `Bool` | read/write | Facade forwarder to `alertCenter.paywallDismissedThisSession` (Slice 13-A). Session-only skip flag |
 
 #### Lyrics State (Slice 9-J)
 
@@ -649,9 +654,9 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `saveState()` | Persists playlists via `PlaylistStore` (Application Support file); settings to UserDefaults |
 | `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob; settings from UserDefaults; triggers metadata refresh |
 | `displayName(for:) -> String` | Returns "Title - Artist" or filename |
-| `clearLastError()` | Clears lastError, lastErrorDetail, failedTrackName, showFileNotFoundAlert, skippedInaccessibleNames |
-| `showFileInfo(trackID:)` | Sets fileInfoTrack to signal ContentView to open File Info WindowGroup; no-op if ID not in active playlist |
-| `showPaywallIfNeeded() -> Bool` | Sets showPaywall if Free tier; returns true if blocked |
+| `clearLastError()` | Delegates the alert-surface reset to `alertCenter.clearLastError()`; additionally transitions `playbackState` `.error → .stopped` (the transition stays in the facade) |
+| `showFileInfo(trackID:)` | Looks the track up in the active playlist and calls `alertCenter.presentFileInfo(_:)` to signal ContentView to open the File Info WindowGroup; no-op if ID not in active playlist |
+| `showPaywallIfNeeded() -> Bool` | Checks `isProUnlocked` (tier logic stays in the facade) and calls `alertCenter.presentPaywall()` if Free tier; returns true if blocked |
 | `purchasePro() async throws` | Initiates purchase via IAPManager |
 | `refreshEntitlements() async` | Refreshes Pro status from App Store |
 | `toggleLyrics()` | Toggles `showLyrics`. Slice 9-J. |
@@ -1047,6 +1052,54 @@ struct FilePlaylistStore: PlaylistStore {
 ```
 
 `FilePlaylistStore` writes a single `playlists.json` (atomic) to the Application Support directory; `directory` is overridable for tests. `load()` returns `nil` when no file exists yet and throws on a corrupt file. `AppState` injects it via the `playlistStore` init parameter (production default `FilePlaylistStore()`), calls `save` from `saveState()`, and reads via `load()` in `restoreState()` with a one-shot migration of the legacy `hp.playlists` UserDefaults blob.
+
+---
+
+### 5.11 AlertCenter
+
+**Location:** `Shared/Models/AlertCenter.swift`
+
+**Purpose:** `@MainActor @Observable` store owning the alert, paywall, and File Info request presentation state — the first feature store extracted from AppState under the v1.1.0 decomposition program (Slice 13-A). Lives in `Shared/Models/` for the same reason `EQCoordinator` does: a state-bearing observable object, not a stateless service. No persistence, no service dependencies. Views whose body reads alert state observe it via `@Environment(AlertCenter.self)` (injected on the main window scene by `HarmoniaPlayerApp`), with `@Bindable` providing sheet/alert bindings; `HarmoniaPlayerCommands` reaches it via the focused `appState.alertCenter` path because Commands receive no SwiftUI environment.
+
+```swift
+@MainActor @Observable
+final class AlertCenter {
+
+    // Playback-error surface
+    var lastError: PlaybackError?
+    var lastErrorDetail: String?
+    var failedTrackName: String?
+    var showFileNotFoundAlert = false
+    var skippedInaccessibleNames: [String] = []
+
+    // Batch-operation surfaces
+    var skippedDuplicateURLs: [URL] = []
+    var skippedImportURLs: [URL] = []
+    var skippedUnsupportedURLs: [URL] = []
+
+    // File Info window request (one-shot; ContentView clears after opening)
+    var fileInfoTrack: Track?
+
+    // Paywall
+    var showPaywall = false
+    var paywallDismissedThisSession = false
+
+    func clearLastError()
+    func presentFileInfo(_ track: Track)
+    func clearFileInfoRequest()
+    func presentPaywall()
+
+    nonisolated deinit {}
+}
+```
+
+**Method semantics:** `clearLastError()` clears the 5-field playback-error surface (`lastError`, `lastErrorDetail`, `failedTrackName`, `showFileNotFoundAlert`, `skippedInaccessibleNames`) and deliberately leaves the 3 batch-operation lists untouched — those are cleared by their own alerts' dismiss buttons. `presentFileInfo(_:)` / `clearFileInfoRequest()` set and reset the one-shot `fileInfoTrack` request. `presentPaywall()` raises `showPaywall` without touching `paywallDismissedThisSession`.
+
+**Facade relationship:** AppState re-exposes all 11 properties as same-named computed forwarders (get + set) plus the delegating methods `clearLastError()` / `showFileInfo(trackID:)` / `showPaywallIfNeeded()` (see §3.8). Tier logic (`isProUnlocked`) and the `playbackState` `.error → .stopped` transition stay in the facade; the playlist lookup for `showFileInfo(trackID:)` also stays in the facade because it needs `playlist`.
+
+**Deliberate looseness:** properties stay plain `var` (not `private(set)`) because un-migrated call sites in the `AppState+Playback/+Navigation/+Playlist/+M3U8` extensions still write through the facade's forwarding setters.
+
+**Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
 
 ---
 

@@ -449,6 +449,11 @@ final class AppState: ObservableObject {
     // is initialised.
     private(set) var nowPlayingCoordinator: NowPlayingCoordinator!
 
+    // Alert-surface store (Slice 13-A). Owns alert, paywall, and File Info
+    // request state; views observe it via @Environment(AlertCenter.self).
+    // AppState re-exposes its properties as same-named facade forwarders.
+    let alertCenter: AlertCenter
+
     // Dependencies kept private
     private let iapManager: IAPManager
     private let userDefaults: UserDefaults
@@ -463,7 +468,14 @@ final class AppState: ObservableObject {
     @Published var activePlaylistIndex: Int = 0
     @Published var currentTrack: Track?
     @Published var playbackState: PlaybackState = .idle
-    @Published var lastError: PlaybackError?
+
+    // Facade forwarder (excerpt) — alert state lives in AlertCenter
+    // (Slice 13-A). The forwarding getter registers the store property with
+    // Observation, so views observing either surface re-render correctly.
+    var lastError: PlaybackError? {
+        get { alertCenter.lastError }
+        set { alertCenter.lastError = newValue }
+    }
 
     // Lyrics state (Slice 9-J). Lives directly on AppState rather than in a
     // parallel coordinator — see module_boundary.md §4.4(a) for rationale.
@@ -479,6 +491,8 @@ final class AppState: ObservableObject {
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
+        // Alert store first — no dependencies (Slice 13-A).
+        self.alertCenter  = AlertCenter()
         self.iapManager   = iapManager
         self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
 
@@ -902,6 +916,9 @@ struct HarmoniaPlayerApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                // Alert-surface store (Slice 13-A) — required by the main
+                // window subtree's @Environment(AlertCenter.self) readers.
+                .environment(appState.alertCenter)
                 .focusedSceneObject(appState)
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.willTerminateNotification
@@ -993,21 +1010,26 @@ struct ProgressBar: View {
 
 ### 6.4 Error Presentation
 
-`AppState.lastError` is a `PlaybackError` enum with no String payload. Map
-each case to a localised user-facing message in the View:
+`alertCenter.lastError` is a `PlaybackError` enum with no String payload
+(Slice 13-A: alert state lives in `AlertCenter`, observed via
+`@Environment(AlertCenter.self)`). Map each case to a localised user-facing
+message in the View. Dismissal still calls the facade
+`appState.clearLastError()` because the `.error → .stopped` playback-state
+transition lives there:
 
 ```swift
 struct ErrorAlert: ViewModifier {
     @EnvironmentObject private var appState: AppState
+    @Environment(AlertCenter.self) private var alertCenter
 
     func body(content: Content) -> some View {
         content.alert(
             "Playback Error",
             isPresented: Binding(
-                get: { appState.lastError != nil },
+                get: { alertCenter.lastError != nil },
                 set: { if !$0 { appState.clearLastError() } }
             ),
-            presenting: appState.lastError
+            presenting: alertCenter.lastError
         ) { _ in
             Button("OK") { appState.clearLastError() }
         } message: { error in

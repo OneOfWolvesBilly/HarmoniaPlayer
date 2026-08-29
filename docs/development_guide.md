@@ -120,6 +120,7 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayer/                       # Main app target
 │       │   ├── Shared/                           # Platform-independent code
 │       │   │   ├── Models/
+│       │   │   │   ├── AlertCenter.swift            # Alert/paywall/File Info store (Slice 13-A)
 │       │   │   │   ├── AppState.swift               # Properties, init, persistence
 │       │   │   │   ├── AppState+Playlist.swift      # Playlist ops, undo/redo
 │       │   │   │   ├── AppState+Playback.swift      # Transport, volume, ReplayGain
@@ -297,6 +298,7 @@ Inside AppState:
 ```swift
 @MainActor
 final class AppState: ObservableObject {
+    let alertCenter: AlertCenter                // alert/paywall/File Info store (Slice 13-A)
     let playbackService: PlaybackService        // app-layer protocol
     let tagReaderService: TagReaderService      // app-layer protocol
     let fileDropService: FileDropService
@@ -308,7 +310,12 @@ final class AppState: ObservableObject {
     @Published var playlists: [Playlist]
     @Published var currentTrack: Track?
     @Published var playbackState: PlaybackState = .idle
-    @Published var lastError: PlaybackError?
+
+    /// Facade forwarder — alert state lives in AlertCenter (Slice 13-A).
+    var lastError: PlaybackError? {
+        get { alertCenter.lastError }
+        set { alertCenter.lastError = newValue }
+    }
 
     init(
         iapManager: IAPManager,
@@ -318,6 +325,7 @@ final class AppState: ObservableObject {
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
+        self.alertCenter  = AlertCenter()       // constructed first — no dependencies
         self.iapManager   = iapManager
         self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
 
@@ -614,6 +622,11 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 ### 9.3 SwiftUI patterns
 
 - Views use `@EnvironmentObject private var appState: AppState`
+- Views whose body reads state owned by an extracted feature store declare
+  `@Environment(<Store>.self)` (e.g. `@Environment(AlertCenter.self)`),
+  with `@Bindable var store = store` at the top of `body` when sheet/alert
+  bindings are needed; the store is injected per scene via
+  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slice 13-A)
 - Button handlers wrap async AppState calls: `Task { await appState.play() }`
 - Never inject services directly into a View
 
@@ -698,11 +711,12 @@ final class SomeObservable: ObservableObject {
 
 **When the workaround IS needed.** Any class that is `@MainActor` (explicit
 or inferred). The `final` modifier is independent — it does not change the
-deinit behaviour. Four known production / test sites in HarmoniaPlayer:
+deinit behaviour. Five known production / test sites in HarmoniaPlayer:
 
 | Class | File | Why |
 |-------|------|-----|
 | `AppState` | `Shared/Models/AppState.swift` | Explicit `@MainActor`; long-lived but still hits the bug on test teardown |
+| `AlertCenter` | `Shared/Models/AlertCenter.swift` | Explicit `@MainActor`; deallocated in test contexts (`AlertCenterTests` and every AppState test teardown) |
 | `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Inferred `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
 | `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
 | `FakeEQService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | Inferred `@MainActor` in the main module's actor isolation; many short-lived test instances exercise the crash path repeatedly |

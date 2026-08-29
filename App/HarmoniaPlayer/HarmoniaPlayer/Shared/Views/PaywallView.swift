@@ -10,7 +10,9 @@
 //
 //  DESIGN NOTES
 //  ------------
-//  - Shown via `appState.showPaywall` binding in ContentView.
+//  - Shown via the `alertCenter.showPaywall` binding in ContentView.
+//  - Writes `alertCenter.paywallDismissedThisSession` on dismissal via
+//    `@Environment(AlertCenter.self)`.
 //  - Calls `appState.purchasePro()` and `appState.refreshEntitlements()`.
 //  - On successful purchase or restore, `isProUnlocked` is updated in AppState
 //    and the sheet is dismissed automatically.
@@ -27,6 +29,7 @@ import SwiftUI
 struct PaywallView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(AlertCenter.self) private var alertCenter
     @Environment(\.dismiss) private var dismiss
 
     @State private var isBusy = false
@@ -161,7 +164,7 @@ struct PaywallView: View {
 
     /// Dismisses the Paywall and applies the session skip preference.
     private func dismissPaywall() {
-        appState.paywallDismissedThisSession = skipSession
+        alertCenter.paywallDismissedThisSession = skipSession
         dismiss()
     }
     private func performPurchase() async {

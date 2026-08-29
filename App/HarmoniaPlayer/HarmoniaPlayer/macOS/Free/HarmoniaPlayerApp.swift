@@ -83,6 +83,11 @@ struct HarmoniaPlayerApp: App {
         Window("Harmonia Player", id: "main") {
             ContentView()
                 .environmentObject(appState)
+                // Alert-surface store — required by ContentView, PaywallView,
+                // and PlaylistView (`@Environment(AlertCenter.self)` crashes
+                // at first read if nothing is injected). The other scenes'
+                // subtrees do not read alert state and take no injection.
+                .environment(appState.alertCenter)
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
@@ -140,7 +145,7 @@ struct HarmoniaPlayerApp: App {
         .commandsRemoved()
 
         // File Info — independent, non-modal window identified by Track.ID.
-        // Opened via ContentView's .onChange(of: appState.fileInfoTrack).
+        // Opened via ContentView's .onChange(of: alertCenter.fileInfoTrack).
         // Multiple File Info windows can coexist; each is keyed by its track's ID.
         // `.defaultLaunchBehavior(.suppressed)` mirrors Mini Player: File Info
         // windows are never auto-restored on launch; they only open in response

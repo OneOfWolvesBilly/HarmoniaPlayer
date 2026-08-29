@@ -35,6 +35,10 @@ import UniformTypeIdentifiers
 struct PlaylistView: View {
 
     @EnvironmentObject private var appState: AppState
+
+    /// Alert-surface store — read for the import-skip warning after an
+    /// M3U8 import from the tab context menu.
+    @Environment(AlertCenter.self) private var alertCenter
     @State private var sortOrder: [KeyPathComparator<Track>] = []
     @State private var showShuffleQueue = false
 
@@ -846,7 +850,7 @@ struct PlaylistView: View {
 
         Task {
             await appState.importPlaylist(from: url)
-            let skipped = appState.skippedImportURLs
+            let skipped = alertCenter.skippedImportURLs
             if !skipped.isEmpty {
                 await MainActor.run {
                     let alert = NSAlert()

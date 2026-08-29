@@ -89,18 +89,26 @@ final class AlertCenter {
     /// file-not-found flag, inaccessible-skip list). Batch-operation
     /// lists are cleared by their own alerts' dismiss buttons, not here.
     func clearLastError() {
+        lastError = nil
+        lastErrorDetail = nil
+        failedTrackName = nil
+        showFileNotFoundAlert = false
+        skippedInaccessibleNames = []
     }
 
     /// Presents the File Info window request for the given track.
     func presentFileInfo(_ track: Track) {
+        fileInfoTrack = track
     }
 
     /// Clears the one-shot File Info request after the window opens.
     func clearFileInfoRequest() {
+        fileInfoTrack = nil
     }
 
     /// Presents the Pro paywall sheet.
     func presentPaywall() {
+        showPaywall = true
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.

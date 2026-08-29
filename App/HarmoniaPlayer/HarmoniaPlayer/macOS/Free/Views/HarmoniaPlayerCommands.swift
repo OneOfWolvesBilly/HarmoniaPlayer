@@ -356,8 +356,10 @@ struct HarmoniaPlayerCommands: Commands {
 
         Task {
             await appState.importPlaylist(from: url)
-            // Show warning alert if any files were missing
-            let skipped = appState.skippedImportURLs
+            // Show warning alert if any files were missing. Commands receive
+            // no SwiftUI environment, so the store is reached through the
+            // focused appState reference.
+            let skipped = appState.alertCenter.skippedImportURLs
             if !skipped.isEmpty {
                 await MainActor.run {
                     let alert = NSAlert()

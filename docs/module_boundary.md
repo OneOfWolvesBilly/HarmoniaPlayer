@@ -42,6 +42,12 @@ At a high level, the codebase is divided into the following logical modules.
      the system Now Playing surface via `NowPlayingService`. Lives in
      `Shared/Models/` parallel to `EQCoordinator` (lifecycle
      participant, not stateless service). Slice 9-L. See §4.5.
+   - `AlertCenter` — `@MainActor @Observable` feature store owning the
+     alert, paywall, and File Info request presentation state; the first
+     store extracted from AppState under the v1.1.0 decomposition
+     program. Lives in `Shared/Models/` parallel to `AppState`
+     (state-bearing observable, not stateless service). Slice 13-A.
+     See §4.8.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
      `PlaylistReorderItem`, `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
@@ -466,6 +472,41 @@ from that position.
 transitions (in addition to `.stopped` completion detection) so
 `playbackState` — and everything subscribed to it, including the system
 Now Playing surface — can never disagree with actual playback.
+
+### 4.8 AlertCenter Store Placement and Strangler Facade
+
+Slice 13-A extracted the first `@MainActor @Observable` feature store from
+AppState under the v1.1.0 decomposition program
+(`docs/slice/appstate_refactor_plan.md`). Three boundary nuances:
+
+**(a) Why `AlertCenter` lives in `Shared/Models/`.** Same rule as
+`EQCoordinator` (§4.3(a)): observable state owners → Models, stateless
+utilities → Services. `AlertCenter` owns 11 alert/paywall/File Info
+request properties and 4 presentation methods; it has no persistence and
+no service dependencies.
+
+**(b) The strangler facade keeps the boundary topology unchanged during
+migration.** AppState constructs the store (`let alertCenter`, first in
+`init`) and re-exposes every migrated property as a same-named computed
+forwarder (get + set), plus delegating facade methods
+(`clearLastError()`, `showFileInfo(trackID:)`, `showPaywallIfNeeded()`).
+Un-migrated call sites in the `AppState+…` extensions keep writing
+through the facade; tier logic (`isProUnlocked`) and the
+`playbackState` `.error → .stopped` transition deliberately stay in the
+facade rather than entering the store. Because `@Observable` tracks the
+store property access through the forwarding getter, views observing
+either surface re-render correctly (`ObservableObject` and `@Observable`
+coexist in one view).
+
+**(c) How views reach the store.** Views whose body reads alert state
+declare `@Environment(AlertCenter.self)` (with `@Bindable` for
+sheet/alert bindings); `HarmoniaPlayerApp` injects the store on the main
+window scene via `.environment(appState.alertCenter)`. Scenes whose
+subtrees do not read alert state take no injection — a missing injection
+crashes at first read by design (wiring bugs must surface in
+development, not silently no-op). `HarmoniaPlayerCommands` is not a
+scene subtree receiving environment; it reaches the store through the
+focused `appState.alertCenter` path.
 
 ---
 
