@@ -22,9 +22,9 @@ private func makeURL(_ name: String) -> URL {
 
 // MARK: - Test Suite
 
-/// Tests that `AppState.showFileInfo(trackID:)` populates `fileInfoTrack`
-/// when the given track ID exists in the active playlist, and leaves it
-/// `nil` when the ID does not match any track.
+/// Tests that `AppState.showFileInfo(trackID:)` populates the store's
+/// `alertCenter.fileInfoTrack` when the given track ID exists in the active
+/// playlist, and leaves it `nil` when the ID does not match any track.
 ///
 /// `@MainActor` is required because `AppState` is `@MainActor` isolated.
 @MainActor
@@ -55,12 +55,10 @@ final class AppStateFileInfoTests: XCTestCase {
 
     // MARK: - Tests
 
-    /// Slice 9-D: `testShowFileInfo_SetsTrack`
-    ///
     /// Given a track present in the active playlist,
     /// when `showFileInfo(trackID:)` is called with that track's ID,
-    /// then `fileInfoTrack` is populated with the matching track.
-    func testShowFileInfo_SetsTrack() async {
+    /// then the store's `fileInfoTrack` is populated with the matching track.
+    func testShowFileInfo_SetsAlertCenterTrack() async {
         // Given: a track loaded into the playlist
         let url = makeURL("a")
         await sut.load(urls: [url])
@@ -74,17 +72,15 @@ final class AppStateFileInfoTests: XCTestCase {
 
         // Then
         XCTAssertEqual(
-            sut.fileInfoTrack?.id, loadedID,
-            "showFileInfo(trackID:) must set fileInfoTrack to the matching track"
+            sut.alertCenter.fileInfoTrack?.id, loadedID,
+            "showFileInfo(trackID:) must set alertCenter.fileInfoTrack to the matching track"
         )
     }
 
-    /// Slice 9-D: `testShowFileInfo_InvalidID_NoOp`
-    ///
     /// Given no matching track in the active playlist,
     /// when `showFileInfo(trackID:)` is called with an unknown ID,
-    /// then `fileInfoTrack` remains `nil`.
-    func testShowFileInfo_InvalidID_NoOp() {
+    /// then the store's `fileInfoTrack` remains unchanged (`nil`).
+    func testShowFileInfo_UnknownID_NoOp() {
         // Given: empty playlist and a random ID that cannot match
         let randomID = UUID()
         XCTAssertTrue(
@@ -97,8 +93,8 @@ final class AppStateFileInfoTests: XCTestCase {
 
         // Then
         XCTAssertNil(
-            sut.fileInfoTrack,
-            "showFileInfo(trackID:) with a non-matching ID must leave fileInfoTrack nil"
+            sut.alertCenter.fileInfoTrack,
+            "showFileInfo(trackID:) with a non-matching ID must leave alertCenter.fileInfoTrack nil"
         )
     }
 }

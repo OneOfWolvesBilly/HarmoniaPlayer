@@ -70,6 +70,14 @@ final class AppState: ObservableObject {
     /// to `undoManager.undo()` / `undoManager.redo()`.
     let undoManager: UndoManager
 
+    // MARK: - Stores
+
+    /// Alert-surface store — owns the alert, paywall, and File Info request
+    /// presentation state. Views whose body reads alert state observe it via
+    /// `@Environment(AlertCenter.self)`; AppState's same-named facade
+    /// forwarders keep internal call sites writing through it.
+    let alertCenter: AlertCenter
+
     // MARK: - Services
 
     /// Playback service
@@ -476,6 +484,10 @@ final class AppState: ObservableObject {
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
+        // Step 0: Construct the alert store first — it has no dependencies,
+        // and every later step may surface an alert through it.
+        self.alertCenter = AlertCenter()
+
         // Step 1: Store IAP manager
         self.iapManager = iapManager
 

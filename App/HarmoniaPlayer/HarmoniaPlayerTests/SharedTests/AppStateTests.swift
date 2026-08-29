@@ -342,4 +342,40 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(sut.eqEnabled, toggled,
                        "eqEnabled must update when the coordinator toggles isEnabled")
     }
+
+    // MARK: - Tests: showPaywallIfNeeded facade
+
+    /// Given a Free-tier AppState,
+    /// when `showPaywallIfNeeded()` is called,
+    /// then it returns `true` and raises the store's paywall flag.
+    func testShowPaywallIfNeeded_Free_PresentsAndReturnsTrue() {
+        // Given
+        let sut = makeSUT(isProUnlocked: false)
+
+        // When
+        let result = sut.showPaywallIfNeeded()
+
+        // Then
+        XCTAssertTrue(result,
+                      "showPaywallIfNeeded() must return true for a Free user")
+        XCTAssertTrue(sut.alertCenter.showPaywall,
+                      "showPaywallIfNeeded() must raise alertCenter.showPaywall")
+    }
+
+    /// Given a Pro-tier AppState,
+    /// when `showPaywallIfNeeded()` is called,
+    /// then it is a no-op returning `false` and the paywall stays down.
+    func testShowPaywallIfNeeded_Pro_NoopReturnsFalse() {
+        // Given
+        let sut = makeSUT(isProUnlocked: true)
+
+        // When
+        let result = sut.showPaywallIfNeeded()
+
+        // Then
+        XCTAssertFalse(result,
+                       "showPaywallIfNeeded() must return false for a Pro user")
+        XCTAssertFalse(sut.alertCenter.showPaywall,
+                       "showPaywallIfNeeded() must not raise the paywall for a Pro user")
+    }
 }

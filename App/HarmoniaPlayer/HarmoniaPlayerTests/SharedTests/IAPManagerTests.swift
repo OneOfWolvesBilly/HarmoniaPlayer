@@ -89,36 +89,12 @@ final class IAPManagerTests: XCTestCase {
         XCTAssertTrue(proManager.isProUnlocked,   "Pro manager via protocol should return true")
     }
 
-    // MARK: - Slice 9-A: showPaywallIfNeeded tests
+    // MARK: - isProUnlocked default
 
     /// testIsProUnlocked_DefaultIsFalse
     func testIsProUnlocked_DefaultIsFalse() {
         let mock = MockIAPManager()
         XCTAssertFalse(mock.isProUnlocked)
-    }
-
-    /// testShowPaywallIfNeeded_ReturnsTrueForFreeUser
-    func testShowPaywallIfNeeded_ReturnsTrueForFreeUser() {
-        let appState = AppState(
-            iapManager: MockIAPManager(isProUnlocked: false),
-            provider: FakeCoreProvider(),
-            playlistStore: FakePlaylistStore()
-        )
-        let result = appState.showPaywallIfNeeded()
-        XCTAssertTrue(result,              "should return true for Free user")
-        XCTAssertTrue(appState.showPaywall,"showPaywall should be true")
-    }
-
-    /// testShowPaywallIfNeeded_ReturnsFalseForProUser
-    func testShowPaywallIfNeeded_ReturnsFalseForProUser() {
-        let appState = AppState(
-            iapManager: MockIAPManager(isProUnlocked: true),
-            provider: FakeCoreProvider(),
-            playlistStore: FakePlaylistStore()
-        )
-        let result = appState.showPaywallIfNeeded()
-        XCTAssertFalse(result,              "should return false for Pro user")
-        XCTAssertFalse(appState.showPaywall,"showPaywall should remain false")
     }
 
     // v0.1 frozen: FLAC cannot enter playlist. Re-enable in v0.2.

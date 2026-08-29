@@ -279,4 +279,37 @@ final class AppStateErrorHandlingTests: XCTestCase {
             "clearLastError() must set lastErrorDetail to nil"
         )
     }
+
+    // MARK: - clearLastError facade
+
+    /// Given `playbackState == .error(…)` and a populated store error surface,
+    /// when `AppState.clearLastError()` is called,
+    /// then `playbackState` becomes `.stopped` and the store's playback-error
+    /// surface is cleared.
+    func testClearLastError_ErrorState_BecomesStopped() {
+        // Given
+        sut.playbackState = .error(.failedToDecode)
+        sut.alertCenter.lastError = .failedToDecode
+        sut.alertCenter.lastErrorDetail = "failedToDecode: /tmp/broken.mp3"
+        sut.alertCenter.failedTrackName = "Broken Track"
+        sut.alertCenter.showFileNotFoundAlert = true
+        sut.alertCenter.skippedInaccessibleNames = ["Broken Track"]
+
+        // When
+        sut.clearLastError()
+
+        // Then
+        XCTAssertEqual(sut.playbackState, .stopped,
+                       "clearLastError() must transition .error to .stopped")
+        XCTAssertNil(sut.alertCenter.lastError,
+                     "clearLastError() must clear the store's lastError")
+        XCTAssertNil(sut.alertCenter.lastErrorDetail,
+                     "clearLastError() must clear the store's lastErrorDetail")
+        XCTAssertNil(sut.alertCenter.failedTrackName,
+                     "clearLastError() must clear the store's failedTrackName")
+        XCTAssertFalse(sut.alertCenter.showFileNotFoundAlert,
+                       "clearLastError() must lower the store's showFileNotFoundAlert")
+        XCTAssertTrue(sut.alertCenter.skippedInaccessibleNames.isEmpty,
+                      "clearLastError() must clear the store's skippedInaccessibleNames")
+    }
 }
