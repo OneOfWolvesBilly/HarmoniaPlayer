@@ -26,11 +26,11 @@ test targets from the Swift 5 language mode to Swift 6.
   | Token cleanup | **10** | `slice_10_micro.md` |
   | Strict-concurrency warning baseline | **12** | `slice_12_micro.md` |
   | Extract AlertCenter | **13** | `slice_13_micro.md` |
-  | Extract LyricsStore | — (numbered at open) | §6.1 scope freeze |
-  | Extract SettingsStore | — | §6.2 scope freeze |
-  | Extract PlaybackController | — | §6.3 scope freeze |
-  | Extract PlaylistCollection (incl. M3U8) | — | §6.4 scope freeze |
-  | Swift 6 language-mode switch + close-out | — | §6.5 scope freeze |
+  | Extract LyricsStore | **14** | `slice_14_micro.md` |
+  | Extract SettingsStore | — (numbered at open) | §7.2 scope freeze |
+  | Extract PlaybackController | — | §7.3 scope freeze |
+  | Extract PlaylistCollection (incl. M3U8) | — | §7.4 scope freeze |
+  | Swift 6 language-mode switch + close-out | — | §7.5 scope freeze |
 
   Execution order is the table order, strictly sequential. Stores are
   extracted small → large so the strangler mechanics are proven on the
@@ -353,9 +353,10 @@ Numbered and fully specified (own `slice_NN_micro.md`, structural template =
 `showLyrics`, `lyricsResolution`; owns `lyricsService` +
 `lyricsPreferenceStore`; methods `toggleLyrics` / `recheckLyrics` /
 `setLyricsSource` / `setLyricsLanguage` / `setLyricsEncoding` /
-`updateResolution(for:)` taking the track explicitly (current-track access
-stays with the caller). Views: LyricsPanel, PlayerView lyrics button.
-Tests: `AppStateLyricsTests` → `LyricsStoreTests`.
+`updateResolution(for:)` — every track-dependent method takes the track
+explicitly (current-track access stays with the caller). Views:
+ContentView lyrics-column condition, LyricsPanel, PlayerView lyrics
+button. Tests: `AppStateLyricsTests` → `LyricsStoreTests`.
 
 ### 7.2 SettingsStore
 Mapping rows 14–18 + `featureFlags`, `languageBundle`, `purchasePro()`,

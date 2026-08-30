@@ -842,8 +842,8 @@ Slice 6, the gate moved twice as scope expanded:
 - **AppState decomposition refactor (v1.1.0)** — the program that precedes
   the Pro tier. Design authority: `docs/slice/appstate_refactor_plan.md`.
   Opened stages: Slice 10 (token cleanup), Slice 12 (strict-concurrency
-  baseline), Slice 13 (AlertCenter extraction); later stages are numbered
-  as they open. Slice 11 sits between them and is not part of this
+  baseline), Slice 13 (AlertCenter extraction), Slice 14 (LyricsStore
+  extraction); later stages are numbered as they open. Slice 11 sits between them and is not part of this
   program — see §11.6. The v1.1.0 Free minor also carries further candidate
   slices outside this program (window-menu declarative semantics, lyrics
   expansion backlog, …) — likewise numbered when they open.
@@ -982,16 +982,30 @@ that later stages burn down.
 Third stage of the AppState decomposition refactor program: the first
 store extraction (`@MainActor @Observable AlertCenter` behind the AppState
 strangler facade); serves as the structural template for the later store
-extractions. Remaining program stages (LyricsStore, SettingsStore,
-PlaybackController, PlaylistCollection, Swift 6 language-mode switch) are
-numbered and given their own sections when they open — scope freezes live
-in `appstate_refactor_plan.md` §7.
+extractions.
 
 | Slice | Content | Status |
 |---|---|---|
 | 13 | AlertCenter extraction + @Environment view migration + test migration | ✅ |
 
-### 11.9 Version Targets
+### 11.9 Slice 14: Extract LyricsStore (v1.1.0; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_14_micro.md`
+
+Fourth stage of the AppState decomposition refactor program: the second
+store extraction (`@MainActor @Observable LyricsStore` behind the AppState
+strangler facade). Takes ownership of the lyrics service dependencies and
+removes the migrated facade surface in the same slice — the lyrics state
+has no internal readers left once its views and tests migrate. Remaining
+program stages (SettingsStore, PlaybackController, PlaylistCollection,
+Swift 6 language-mode switch) are numbered and given their own sections
+when they open — scope freezes live in `appstate_refactor_plan.md` §7.
+
+| Slice | Content | Status |
+|---|---|---|
+| 14 | LyricsStore extraction + @Environment view migration + test migration | ⬜ |
+
+### 11.10 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
