@@ -78,6 +78,12 @@ final class AppState: ObservableObject {
     /// forwarders keep internal call sites writing through it.
     let alertCenter: AlertCenter
 
+    /// Lyrics store — owns the lyrics panel visibility, the current track's
+    /// lyrics resolution, and the lyrics service dependencies. Views whose
+    /// body reads lyrics state observe it via
+    /// `@Environment(LyricsStore.self)`.
+    let lyricsStore: LyricsStore
+
     // MARK: - Services
 
     /// Playback service
@@ -527,6 +533,13 @@ final class AppState: ObservableObject {
         // The coordinator stays the source of truth; eqEnabled is a read-only
         // UI mirror so PlayerView re-renders when Enable is toggled.
         self.eqEnabled = self.eqCoordinator.isEnabled
+
+        // Step 4c: Construct the lyrics store from the lyrics service and
+        // preference store created in Step 4.
+        self.lyricsStore = LyricsStore(
+            lyricsService: self.lyricsService,
+            lyricsPreferenceStore: self.lyricsPreferenceStore
+        )
 
         // Step 5: Store UndoManager.
         // Default parameter uses nil instead of UndoManager() to avoid
