@@ -43,6 +43,8 @@ struct ContentView: View {
 
     @Environment(AlertCenter.self) private var alertCenter
 
+    @Environment(LyricsStore.self) private var lyricsStore
+
     @Environment(\.openWindow) private var openWindow
 
     // MARK: - Localization helper
@@ -67,7 +69,7 @@ struct ContentView: View {
             // toggles lyrics on. HSplitView handles the divider so the
             // user can resize it freely; closing it (toggle off) collapses
             // the column and the window contracts back.
-            if appState.showLyrics && appState.currentTrack != nil {
+            if lyricsStore.showLyrics && appState.currentTrack != nil {
                 LyricsPanel()
                     .frame(minWidth: 280, idealWidth: 360)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

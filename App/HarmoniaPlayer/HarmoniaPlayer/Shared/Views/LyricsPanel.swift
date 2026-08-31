@@ -4,11 +4,13 @@
 //
 //  SPDX-License-Identifier: MIT
 //
-//  Lyrics display column (Slice 9-J).
+//  Lyrics display column.
 //
 //  Rendered as a third column inside `ContentView`'s `HSplitView`,
-//  pushed in from the right when `appState.showLyrics` is true.
+//  pushed in from the right when `LyricsStore.showLyrics` is true.
 //
+//  - Observes `LyricsStore` for resolution state and actions; reads
+//    `AppState` only for `currentTrack` and `languageBundle`
 //  - Loads content lazily on appear via `LyricsService.resolveContent`
 //  - Source picker (Embedded / .lrc) shown when both available
 //  - Language picker shown when source is .embedded with multiple variants
@@ -16,13 +18,15 @@
 //  - Decoding failures show a localised inline message
 //  - No-lyrics state shows a "Recheck" button so users can drop in a
 //    sidecar .lrc and refresh without re-loading the track
-//  - Read-only (no edit) per Slice 9-J non-goals
+//  - Read-only (no edit)
 //
 
 import SwiftUI
 
 struct LyricsPanel: View {
     @EnvironmentObject private var appState: AppState
+
+    @Environment(LyricsStore.self) private var lyricsStore
 
     /// Resolved display content. `nil` until first load attempt.
     @State private var content: String?
@@ -47,8 +51,8 @@ struct LyricsPanel: View {
         .background(Color(NSColor.windowBackgroundColor))
         .onAppear { reload() }
         .onChange(of: appState.currentTrack?.id) { _, _ in reload() }
-        .onChange(of: appState.lyricsResolution?.currentSource) { _, _ in reload() }
-        .onChange(of: appState.lyricsResolution?.currentLanguage) { _, _ in reload() }
+        .onChange(of: lyricsStore.lyricsResolution?.currentSource) { _, _ in reload() }
+        .onChange(of: lyricsStore.lyricsResolution?.currentLanguage) { _, _ in reload() }
     }
 
     // MARK: - Header
@@ -78,12 +82,12 @@ struct LyricsPanel: View {
 
     @ViewBuilder
     private var sourcePicker: some View {
-        if let resolution = appState.lyricsResolution,
+        if let resolution = lyricsStore.lyricsResolution,
            resolution.availableSources.count > 1,
            let current = resolution.currentSource {
             Picker(L("lyrics_source"), selection: Binding<LyricsSource>(
                 get: { current },
-                set: { appState.setLyricsSource($0) }
+                set: { lyricsStore.setLyricsSource($0, for: appState.currentTrack) }
             )) {
                 if resolution.availableSources.contains(.lrc) {
                     Text(L("lyrics_source_lrc")).tag(LyricsSource.lrc)
@@ -99,12 +103,12 @@ struct LyricsPanel: View {
 
     @ViewBuilder
     private var languagePicker: some View {
-        if let resolution = appState.lyricsResolution,
+        if let resolution = lyricsStore.lyricsResolution,
            resolution.currentSource == .embedded,
            resolution.availableLanguages.count > 1 {
             Picker(L("lyrics_language"), selection: Binding<String?>(
                 get: { resolution.currentLanguage },
-                set: { appState.setLyricsLanguage($0) }
+                set: { lyricsStore.setLyricsLanguage($0, for: appState.currentTrack) }
             )) {
                 ForEach(resolution.availableLanguages, id: \.self) { code in
                     Text(displayName(forLanguageCode: code))
@@ -118,13 +122,13 @@ struct LyricsPanel: View {
 
     @ViewBuilder
     private var encodingPicker: some View {
-        if appState.lyricsResolution?.currentSource == .lrc {
+        if lyricsStore.lyricsResolution?.currentSource == .lrc {
             Menu {
-                Button(L("lyrics_encoding_auto"))   { appState.setLyricsEncoding("auto") }
-                Button(L("lyrics_encoding_utf8"))   { appState.setLyricsEncoding("utf-8") }
-                Button(L("lyrics_encoding_gb18030")) { appState.setLyricsEncoding("gb18030") }
-                Button(L("lyrics_encoding_big5"))   { appState.setLyricsEncoding("big5") }
-                Button(L("lyrics_encoding_shift_jis")) { appState.setLyricsEncoding("shift-jis") }
+                Button(L("lyrics_encoding_auto"))   { setEncoding("auto") }
+                Button(L("lyrics_encoding_utf8"))   { setEncoding("utf-8") }
+                Button(L("lyrics_encoding_gb18030")) { setEncoding("gb18030") }
+                Button(L("lyrics_encoding_big5"))   { setEncoding("big5") }
+                Button(L("lyrics_encoding_shift_jis")) { setEncoding("shift-jis") }
             } label: {
                 Label(L("lyrics_encoding"), systemImage: "textformat")
             }
@@ -155,8 +159,8 @@ struct LyricsPanel: View {
                     .padding(12)
                     .textSelection(.enabled)
             }
-        } else if appState.lyricsResolution?.hasAny == false
-                  || appState.lyricsResolution == nil {
+        } else if lyricsStore.lyricsResolution?.hasAny == false
+                  || lyricsStore.lyricsResolution == nil {
             VStack(spacing: 12) {
                 Image(systemName: "text.bubble")
                     .font(.title)
@@ -166,7 +170,7 @@ struct LyricsPanel: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 24)
                 Button {
-                    appState.recheckLyrics()
+                    lyricsStore.recheckLyrics(for: appState.currentTrack)
                     reload()
                 } label: {
                     Label(L("lyrics_recheck"), systemImage: "arrow.clockwise")
@@ -180,22 +184,29 @@ struct LyricsPanel: View {
         }
     }
 
+    // MARK: - Actions
+
+    /// Forwards an encoding choice to the store for the current track.
+    private func setEncoding(_ encoding: String) {
+        lyricsStore.setLyricsEncoding(encoding, for: appState.currentTrack)
+    }
+
     // MARK: - Loading
 
     private func reload() {
         guard let track = appState.currentTrack,
-              let resolution = appState.lyricsResolution,
+              let resolution = lyricsStore.lyricsResolution,
               let source = resolution.currentSource else {
             content = nil
             errorMessage = nil
             return
         }
 
-        let pref = appState.lyricsPreferenceStore.load(for: track)
+        let pref = lyricsStore.lyricsPreferenceStore.load(for: track)
         let encodingName = pref?.encoding
 
         do {
-            let text = try appState.lyricsService.resolveContent(
+            let text = try lyricsStore.lyricsService.resolveContent(
                 for: track,
                 source: source,
                 languageCode: resolution.currentLanguage,

@@ -432,11 +432,11 @@ final class AppState: ObservableObject {
     let tagReaderService: TagReaderService
     let fileDropService: FileDropService
 
-    // Lyrics services (Slice 9-J). LyricsService resolves USLT + sidecar
-    // `.lrc` content; LyricsPreferenceStore persists per-track source /
-    // encoding / language choice keyed by absolute file path.
-    let lyricsService: LyricsService
-    let lyricsPreferenceStore: LyricsPreferenceStore
+    // Lyrics store (Slice 14-A). Owns showLyrics / lyricsResolution and the
+    // LyricsService + LyricsPreferenceStore dependencies; views observe it
+    // via @Environment(LyricsStore.self). No facade forwarders — the lyrics
+    // surface has no internal readers on AppState.
+    let lyricsStore: LyricsStore
 
     // Owns observable EQ state; views read EQ via `appState.eqCoordinator.…`
     // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
@@ -477,11 +477,6 @@ final class AppState: ObservableObject {
         set { alertCenter.lastError = newValue }
     }
 
-    // Lyrics state (Slice 9-J). Lives directly on AppState rather than in a
-    // parallel coordinator — see module_boundary.md §4.4(a) for rationale.
-    @Published var showLyrics: Bool = false
-    @Published var lyricsResolution: LyricsResolution?
-
     init(
         iapManager: IAPManager,
         provider: CoreServiceProviding,
@@ -504,11 +499,17 @@ final class AppState: ObservableObject {
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService  = FileDropService()
 
-        // Lyrics — production builds the default store backed by the same
+        // Lyrics store — takes ownership of the factory-made service and the
+        // injected-or-default preference store (Slice 14-A). Production
+        // builds the default preference store backed by the same
         // userDefaults; tests inject a stub via the parameter.
-        self.lyricsService = coreFactory.makeLyricsService()
-        self.lyricsPreferenceStore = lyricsPreferenceStore
+        let lyricsService = coreFactory.makeLyricsService()
+        let lyricsPreferenceStore = lyricsPreferenceStore
             ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
+        self.lyricsStore = LyricsStore(
+            lyricsService: lyricsService,
+            lyricsPreferenceStore: lyricsPreferenceStore
+        )
 
         // EQ coordinator — injected variant for tests, default for production.
         // The default uses the same provider's EQService and a store backed by
@@ -528,7 +529,8 @@ final class AppState: ObservableObject {
         // @MainActor initializer cannot run in the nonisolated default-arg context.
         self.playlistStore  = playlistStore ?? FilePlaylistStore()
         // ... (remaining init: undoManager, languageBundle, restoreState(),
-        //      Combine sinks for replayGainMode/selectedLanguage/lyricsResolution)
+        //      Combine sinks for replayGainMode/selectedLanguage, and the
+        //      $currentTrack sink that calls lyricsStore.updateResolution(for:))
 
         // NowPlayingCoordinator (Slice 9-L). Constructed last so all stored
         // properties are initialised before the seven action closures capture
@@ -919,6 +921,9 @@ struct HarmoniaPlayerApp: App {
                 // Alert-surface store (Slice 13-A) — required by the main
                 // window subtree's @Environment(AlertCenter.self) readers.
                 .environment(appState.alertCenter)
+                // Lyrics store (Slice 14-A) — required by ContentView,
+                // PlayerView, and LyricsPanel.
+                .environment(appState.lyricsStore)
                 .focusedSceneObject(appState)
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.willTerminateNotification
@@ -1192,7 +1197,8 @@ mockIAP.purchaseResult = .success
 // or
 mockIAP.purchaseResult = .failure(.userCancelled)
 
-// Stub a lyrics resolution (Slice 9-J)
+// Stub a lyrics resolution (Slice 14-A: the SUT is LyricsStore, built
+// directly — no AppState needed)
 let stubLyrics = StubLyricsService()
 stubLyrics.stubbedResolution = LyricsResolution(
     hasAny: true,
@@ -1202,8 +1208,11 @@ stubLyrics.stubbedResolution = LyricsResolution(
     currentLanguage: "eng",
     content: nil
 )
-let provider = FakeCoreProvider(lyricsService: stubLyrics)
-// ... drive AppState ...
+let lyricsStore = LyricsStore(
+    lyricsService: stubLyrics,
+    lyricsPreferenceStore: DefaultLyricsPreferenceStore(userDefaults: testDefaults)
+)
+lyricsStore.updateResolution(for: expectedTrack)
 XCTAssertEqual(stubLyrics.resolveAvailabilityCallCount, 1)
 XCTAssertEqual(stubLyrics.lastResolvedTrack?.id, expectedTrack.id)
 ```

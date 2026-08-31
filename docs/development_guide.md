@@ -138,6 +138,7 @@ HarmoniaPlayer/
 │       │   │   │   ├── LyricsPreference.swift       # Per-track lyrics preference (Slice 9-J)
 │       │   │   │   ├── LyricsResolution.swift       # Lyrics availability + content (Slice 9-J)
 │       │   │   │   ├── LyricsSource.swift           # .embedded / .lrc enum (Slice 9-J)
+│       │   │   │   ├── LyricsStore.swift            # Lyrics store (Slice 14-A)
 │       │   │   │   ├── NowPlayingCoordinator.swift  # @MainActor NowPlaying wiring (Slice 9-L)
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
@@ -299,6 +300,7 @@ Inside AppState:
 @MainActor
 final class AppState: ObservableObject {
     let alertCenter: AlertCenter                // alert/paywall/File Info store (Slice 13-A)
+    let lyricsStore: LyricsStore                // lyrics store (Slice 14-A)
     let playbackService: PlaybackService        // app-layer protocol
     let tagReaderService: TagReaderService      // app-layer protocol
     let fileDropService: FileDropService
@@ -312,6 +314,8 @@ final class AppState: ObservableObject {
     @Published var playbackState: PlaybackState = .idle
 
     /// Facade forwarder — alert state lives in AlertCenter (Slice 13-A).
+    /// The lyrics surface has no forwarders: views and the $currentTrack
+    /// sink reach lyricsStore directly (Slice 14-A).
     var lastError: PlaybackError? {
         get { alertCenter.lastError }
         set { alertCenter.lastError = newValue }
@@ -321,6 +325,7 @@ final class AppState: ObservableObject {
         iapManager: IAPManager,
         provider: CoreServiceProviding,
         userDefaults: UserDefaults = .standard,
+        playlistStore: PlaylistStore? = nil,
         undoManager: UndoManager? = nil,
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
@@ -336,6 +341,13 @@ final class AppState: ObservableObject {
         self.playbackService  = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService  = FileDropService()
+        let lyricsService = coreFactory.makeLyricsService()
+        let lyricsPreferenceStore = lyricsPreferenceStore
+            ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
+        self.lyricsStore = LyricsStore(         // owns the lyrics dependencies (Slice 14-A)
+            lyricsService: lyricsService,
+            lyricsPreferenceStore: lyricsPreferenceStore
+        )
         self.isProUnlocked    = iapManager.isProUnlocked
         // ... rest of init
     }
@@ -511,7 +523,7 @@ All test infrastructure lives in
 | `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
 | `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`, `stripLRCTimestamps` returns input unchanged. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). **Why a fake instead of `DefaultLyricsService`:** the real service triggers an Xcode 26 beta Swift runtime double-free when many short-lived instances coexist across the test suite — the fake sidesteps the toolchain bug entirely with no closure storage and no Locale dependency |
-| `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying AppState reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
+| `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying `LyricsStore` reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
@@ -626,7 +638,7 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
   `@Environment(<Store>.self)` (e.g. `@Environment(AlertCenter.self)`),
   with `@Bindable var store = store` at the top of `body` when sheet/alert
   bindings are needed; the store is injected per scene via
-  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slice 13-A)
+  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slices 13-A, 14-A)
 - Button handlers wrap async AppState calls: `Task { await appState.play() }`
 - Never inject services directly into a View
 
@@ -711,12 +723,13 @@ final class SomeObservable: ObservableObject {
 
 **When the workaround IS needed.** Any class that is `@MainActor` (explicit
 or inferred). The `final` modifier is independent — it does not change the
-deinit behaviour. Five known production / test sites in HarmoniaPlayer:
+deinit behaviour. Six known production / test sites in HarmoniaPlayer:
 
 | Class | File | Why |
 |-------|------|-----|
 | `AppState` | `Shared/Models/AppState.swift` | Explicit `@MainActor`; long-lived but still hits the bug on test teardown |
 | `AlertCenter` | `Shared/Models/AlertCenter.swift` | Explicit `@MainActor`; deallocated in test contexts (`AlertCenterTests` and every AppState test teardown) |
+| `LyricsStore` | `Shared/Models/LyricsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`LyricsStoreTests` and every AppState test teardown) |
 | `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Inferred `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
 | `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
 | `FakeEQService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | Inferred `@MainActor` in the main module's actor isolation; many short-lived test instances exercise the crash path repeatedly |

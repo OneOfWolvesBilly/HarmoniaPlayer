@@ -88,6 +88,10 @@ struct HarmoniaPlayerApp: App {
                 // at first read if nothing is injected). The other scenes'
                 // subtrees do not read alert state and take no injection.
                 .environment(appState.alertCenter)
+                // Lyrics store — required by ContentView, PlayerView, and
+                // LyricsPanel. The other scenes' subtrees do not read lyrics
+                // state and take no injection.
+                .environment(appState.lyricsStore)
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()

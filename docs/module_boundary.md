@@ -48,6 +48,12 @@ At a high level, the codebase is divided into the following logical modules.
      program. Lives in `Shared/Models/` parallel to `AppState`
      (state-bearing observable, not stateless service). Slice 13-A.
      See §4.8.
+   - `LyricsStore` — `@MainActor @Observable` feature store owning the
+     lyrics panel visibility, the lyrics resolution, and the
+     `LyricsService` / `LyricsPreferenceStore` dependencies; the second
+     store extracted from AppState under the v1.1.0 decomposition
+     program. Lives in `Shared/Models/` parallel to `AlertCenter`.
+     Slice 14-A. See §4.4(a).
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
      `PlaylistReorderItem`, `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
@@ -140,7 +146,8 @@ TagReaderPort, etc.)]
 ### 3.2 Rules
 
 1. **UI Layer** may depend on:
-   - Application Layer (AppState, UI models).
+   - Application Layer (AppState, feature stores such as `AlertCenter` /
+     `LyricsStore`, UI models).
    - Standard Apple frameworks (SwiftUI, Combine, Foundation) for rendering and binding.
 
    UI Layer **must not**:
@@ -313,20 +320,27 @@ Slice 9-J introduced three boundary nuances that warrant explicit clarification.
 This section is structured to parallel §4.3 so the EQ vs lyrics design
 choices can be read side by side.
 
-**(a) Why lyrics state lives directly on `AppState`, not in a parallel coordinator.**
-Unlike EQ, which has five `@Published` properties plus preset / clamping /
-custom-state / persistence logic that justify a dedicated `EQCoordinator`,
-lyrics state in 9-J consists of only two `@Published` properties on
-`AppState` — `showLyrics: Bool` and `lyricsResolution: LyricsResolution?` —
-plus five mutator methods (`toggleLyrics`, `recheckLyrics`, `setLyricsSource`,
-`setLyricsLanguage`, `setLyricsEncoding`). There is no preset model, no
-clamping, and no in-memory aggregation across tracks; the only persisted
-data is per-track `LyricsPreference` handled by `LyricsPreferenceStore`.
-Pulling this into a `LyricsCoordinator` would add a layer without removing
-state from `AppState`, so the design keeps it inline. If the lyrics surface
-grows (multi-language editing, dynamic karaoke timing), splitting out a
-coordinator becomes the same kind of refactor that produced `EQCoordinator`
-and would follow §4.3(a)'s rule of thumb.
+**(a) Where lyrics state lives: the `LyricsStore` feature store.**
+Slice 9-J originally kept the two lyrics properties inline on `AppState`
+(the surface was too small to justify a coordinator). Slice 14-A moved
+them into `LyricsStore` — a `@MainActor @Observable` feature store under
+the v1.1.0 decomposition program — which owns `showLyrics`,
+`lyricsResolution`, and the `lyricsService` / `lyricsPreferenceStore`
+dependencies, plus the mutator methods (`toggleLyrics`,
+`recheckLyrics(for:)`, `setLyricsSource(_:for:)`,
+`setLyricsLanguage(_:for:)`, `setLyricsEncoding(_:for:)`,
+`updateResolution(for:)`). The store never reads current-track state:
+every track-dependent method takes the track explicitly, supplied by the
+caller (the `AppState` `$currentTrack` sink, or a view passing
+`appState.currentTrack`). Unlike `AlertCenter` (§4.8(b)), AppState keeps
+**no** facade forwarders for the lyrics surface — after the Slice 14-A
+view and test migration it has no internal readers — so AppState only
+constructs the store and retargets its `$currentTrack` sink to
+`lyricsStore.updateResolution(for:)`. Views reading lyrics state
+(`ContentView`'s lyrics-column condition, `PlayerView`'s lyrics button,
+`LyricsPanel`) observe the store via `@Environment(LyricsStore.self)`,
+injected on the main window scene (§4.8(c) injection rules apply
+unchanged).
 
 **(b) Why `LyricsService` does not wrap a HarmoniaCore port.**
 `TagReaderService` wraps `HarmoniaCore.TagReaderPort` because reading audio
@@ -754,7 +768,7 @@ When reviewing code, check these rules:
 - [ ] No imports of `HarmoniaCore`
 - [ ] No direct calls to `PlaybackService`
 - [ ] No access to Ports or Adapters
-- [ ] Only depends on `AppState` and UI models
+- [ ] Only depends on `AppState`, the feature stores (`AlertCenter`, `LyricsStore`), and UI models
 
 **Application Layer:**
 - [ ] Uses `PlaybackService` interface only
@@ -810,8 +824,11 @@ struct PlayerView: View {
 
 ## 10. Summary
 
-- **Views** depend on AppState only.
+- **Views** depend on AppState and the feature stores (`AlertCenter`,
+  `LyricsStore`) only.
 - **AppState** depends on CoreFactory / IAPManager / PlaybackService interface / TagReaderService interface.
+- **LyricsStore** depends on the `LyricsService` and `LyricsPreferenceStore`
+  interfaces it owns.
 - **CoreFactory** depends on HarmoniaCore-Swift services, ports, and platform adapters.
 - **Platform adapters** depend on Apple frameworks and HarmoniaCore-Swift port
   protocols.

@@ -1,7 +1,7 @@
 # HarmoniaPlayer API Reference
 
 > Complete interface reference for HarmoniaPlayer.
-> Generated from source code as of 2026-08-29.
+> Generated from source code as of 2026-08-31.
 >
 > For architecture overview, see [Architecture](architecture.md).
 > For dependency rules, see [Module Boundaries](module_boundary.md).
@@ -342,7 +342,7 @@ Result of a lyrics availability check and optional content resolution. Produced 
 
 ```swift
 struct LyricsResolution {
-    let hasAny: Bool                       // Drives lyrics-button visibility
+    let hasAny: Bool                       // Drives the lyrics panel's content-vs-empty state
     let currentSource: LyricsSource?       // nil when hasAny == false
     let availableSources: Set<LyricsSource>
     let availableLanguages: [String?]      // ISO 639-2 codes; nil entries for undeclared frames
@@ -353,7 +353,7 @@ struct LyricsResolution {
 }
 ```
 
-**β strategy (9-J):** `resolveAvailability` fills everything except `content`, which is `nil` until the user opens `LyricsPanel`. At that point `resolveContent` is called and AppState stores the loaded content in an updated `LyricsResolution`. `hasAny` drives button visibility — checked synchronously on track load.
+**Lazy-content strategy:** `resolveAvailability` fills everything except `content`, which is `nil` until the user opens `LyricsPanel`. At that point `LyricsPanel.reload()` calls `resolveContent` and keeps the loaded text in view-local `@State`. `hasAny` drives the panel's "No lyrics available" + Recheck placeholder, not the toggle button's visibility — the button is always shown and is disabled only when no track is loaded.
 
 `currentLanguage` is `nil` when:
 - source is `.lrc` (no language variants in 9-J), or
@@ -463,6 +463,8 @@ Split across 5 files: `AppState.swift` (properties, init, persistence), `AppStat
 
 Alert, paywall, and File Info request state lives in the `AlertCenter` store (Slice 13-A, see §5.11). AppState constructs it (`let alertCenter: AlertCenter`) and re-exposes its 11 properties as same-named facade computed forwarders (get + set), so internal call sites and tests keep compiling unchanged while views observe the store directly.
 
+Lyrics state lives in the `LyricsStore` store (Slice 14-A, see §5.12). AppState constructs it (`let lyricsStore: LyricsStore`) but keeps **no** facade surface for it — the lyrics surface has no internal readers left, so views, the `$currentTrack` sink, and tests all reach the store directly.
+
 ### 3.1 Initialization
 
 ```swift
@@ -477,7 +479,7 @@ init(
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
+Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The `LyricsStore` is constructed right after the factory-made services exist and takes ownership of the lyrics service and preference store (Slice 14-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests and is handed into the `LyricsStore`; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
 
 ### 3.2 Services (injected)
 
@@ -486,11 +488,10 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `playbackService` | `PlaybackService` | Audio playback |
 | `tagReaderService` | `TagReaderService` | Metadata reading |
 | `fileDropService` | `FileDropService` | URL validation + directory expansion |
-| `lyricsService` | `LyricsService` | Resolves USLT + sidecar `.lrc` content; encoding detection; LRC timestamp stripping (Slice 9-J) |
-| `lyricsPreferenceStore` | `LyricsPreferenceStore` | Per-track persistence of source / encoding / language preference (Slice 9-J) |
 | `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
 | `nowPlayingCoordinator` | `NowPlayingCoordinator` | Routes AppState publishers and action closures to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
 | `alertCenter` | `AlertCenter` | Alert-surface store owning alert, paywall, and File Info request state; constructed first in `init`; views observe it via `@Environment(AlertCenter.self)` (Slice 13-A, see §5.11) |
+| `lyricsStore` | `LyricsStore` | Lyrics store owning `showLyrics` / `lyricsResolution` and the `lyricsService` / `lyricsPreferenceStore` dependencies; views observe it via `@Environment(LyricsStore.self)` (Slice 14-A, see §5.12) |
 
 ### 3.3 Published Properties
 
@@ -550,13 +551,6 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 | `fileInfoTrack` | `Track?` | read/write | Facade forwarder to `alertCenter.fileInfoTrack` (Slice 13-A). One-shot signal requesting File Info window to open; ContentView observes the store and clears the request |
 | `showPaywall` | `Bool` | read/write | Facade forwarder to `alertCenter.showPaywall` (Slice 13-A). Paywall sheet binding (v1.0.0: hidden) |
 | `paywallDismissedThisSession` | `Bool` | read/write | Facade forwarder to `alertCenter.paywallDismissedThisSession` (Slice 13-A). Session-only skip flag |
-
-#### Lyrics State (Slice 9-J)
-
-| Property | Type | Access | Description |
-|----------|------|--------|-------------|
-| `showLyrics` | `Bool` | read/write | Whether the lyrics panel is visible. Toggled by `toggleLyrics()`. Default `false`. |
-| `lyricsResolution` | `LyricsResolution?` | read/write | Lyrics availability + selected source/language for the current track. Recomputed when `currentTrack` changes; `lyricsResolution?.hasAny == true` drives lyrics-button visibility. |
 
 #### Settings
 
@@ -659,11 +653,6 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 | `showPaywallIfNeeded() -> Bool` | Checks `isProUnlocked` (tier logic stays in the facade) and calls `alertCenter.presentPaywall()` if Free tier; returns true if blocked |
 | `purchasePro() async throws` | Initiates purchase via IAPManager |
 | `refreshEntitlements() async` | Refreshes Pro status from App Store |
-| `toggleLyrics()` | Toggles `showLyrics`. Slice 9-J. |
-| `recheckLyrics()` | Re-runs lyrics availability detection for `currentTrack`; refreshes `lyricsResolution`. Slice 9-J. |
-| `setLyricsSource(_ source: LyricsSource)` | Switches active source (.embedded ↔ .lrc) for current track; no-op when source is not in `availableSources`. Persists choice via `LyricsPreferenceStore`. Slice 9-J. |
-| `setLyricsLanguage(_ languageCode: String?)` | Switches active language for current track; no-op when source is not `.embedded`. Persists. Slice 9-J. |
-| `setLyricsEncoding(_ encoding: String)` | Stores per-track encoding choice; persists. Slice 9-J. |
 | `handleSystemWillSleep()` | Records `wasPlayingBeforeSleep = (playbackState == .playing)`. Called by `AppDelegate` on `NSWorkspace.willSleepNotification`. |
 | `handleSystemDidWake() async` | Clears `wasPlayingBeforeSleep`; when it was `true`, calls `play()` to resume from the interrupted position (audio-pipeline re-preparation happens inside the playback service). Called by `AppDelegate` on `NSWorkspace.didWakeNotification`. |
 
@@ -1103,6 +1092,50 @@ final class AlertCenter {
 
 ---
 
+### 5.12 LyricsStore
+
+**Location:** `Shared/Models/LyricsStore.swift`
+
+**Purpose:** `@MainActor @Observable` store owning the lyrics panel visibility, the current track's lyrics resolution, and the lyrics service dependencies — the second feature store extracted from AppState under the v1.1.0 decomposition program (Slice 14-A). Lives in `Shared/Models/` for the same reason `AlertCenter` does: a state-bearing observable object, not a stateless service. Views whose body reads lyrics state (`ContentView`'s lyrics-column condition, `PlayerView`'s lyrics button, `LyricsPanel`) observe it via `@Environment(LyricsStore.self)`, injected on the main window scene by `HarmoniaPlayerApp`.
+
+```swift
+@MainActor @Observable
+final class LyricsStore {
+
+    // Panel visibility
+    var showLyrics = false
+
+    // Availability + selected source/language for the caller-supplied track
+    var lyricsResolution: LyricsResolution?
+
+    // Owned dependencies
+    let lyricsService: LyricsService
+    let lyricsPreferenceStore: LyricsPreferenceStore
+
+    init(lyricsService: LyricsService,
+         lyricsPreferenceStore: LyricsPreferenceStore)
+
+    func toggleLyrics()
+    func recheckLyrics(for track: Track?)
+    func setLyricsSource(_ source: LyricsSource, for track: Track?)
+    func setLyricsLanguage(_ languageCode: String?, for track: Track?)
+    func setLyricsEncoding(_ encoding: String, for track: Track?)
+    func updateResolution(for track: Track?)
+
+    nonisolated deinit {}
+}
+```
+
+**Track-explicit contract:** the store never reads current-track state — every track-dependent method takes the track explicitly, and callers supply it: the AppState `$currentTrack` sink passes the sink's track value to `updateResolution(for:)`, and the views pass `appState.currentTrack`.
+
+**Method semantics:** `toggleLyrics()` flips `showLyrics`. `updateResolution(for:)` recomputes `lyricsResolution` from `lyricsService.resolveAvailability(for:)`, applying any persisted `LyricsPreference` whose source is actually available; `nil` clears the resolution. `recheckLyrics(for:)` is the user-intent entry point behind the panel's Recheck button and delegates to `updateResolution(for:)`. `setLyricsSource(_:for:)` switches the active source when available and persists; `setLyricsLanguage(_:for:)` selects a USLT variant when the current source is `.embedded` and persists; `setLyricsEncoding(_:for:)` persists the `.lrc` decoding charset (`"auto"` re-detects). All persistence goes through the owned `lyricsPreferenceStore`.
+
+**No facade relationship:** unlike `AlertCenter`, AppState keeps no forwarders for the lyrics surface — after the Slice 14-A view and test migration the surface has no internal readers, so the facade step of the strangler protocol is skipped and AppState only constructs the store and retargets its `$currentTrack` sink to `lyricsStore.updateResolution(for:)`.
+
+**Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
+
+---
+
 ## 6. Integration Layer
 
 These files form the Integration Layer. Three of them are the **only** production files allowed to `import HarmoniaCore` (§6.1, §6.2, §6.3). `HarmoniaEQAdapter` (§6.4) is also placed in the Integration Layer but **does not `import HarmoniaCore` by design** — see §6.4. `MPNowPlayingAdapter` (§6.5) is also Integration Layer but imports the `MediaPlayer` framework instead of `HarmoniaCore`, because it bridges to a system-level macOS surface (Control Center widget, lock screen, AirPods, media keys) rather than to the audio core.
@@ -1267,8 +1300,9 @@ Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissed
 ## 9. Module Boundaries Summary
 
 ```
-Views -> AppState (only)
+Views -> AppState + feature stores (AlertCenter, LyricsStore)
 AppState -> PlaybackService, TagReaderService, CoreFactory, IAPManager (protocols)
+LyricsStore -> LyricsService, LyricsPreferenceStore (protocols)
 CoreFactory -> CoreServiceProviding -> HarmoniaCore (via Integration Layer)
 Integration Layer -> HarmoniaCore ports + adapters (import HarmoniaCore)
 ```

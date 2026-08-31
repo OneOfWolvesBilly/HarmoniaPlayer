@@ -44,6 +44,7 @@ import AppKit
 struct PlayerView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(LyricsStore.self) private var lyricsStore
     @Environment(\.openWindow) private var openWindow
 
     /// `true` while the user is dragging the seek slider.
@@ -85,9 +86,9 @@ struct PlayerView: View {
                 // Recheck button so users can drop in a sidecar .lrc and
                 // refresh without re-loading the track.
                 Button {
-                    appState.toggleLyrics()
+                    lyricsStore.toggleLyrics()
                 } label: {
-                    Image(systemName: appState.showLyrics
+                    Image(systemName: lyricsStore.showLyrics
                           ? "text.bubble.fill"
                           : "text.bubble")
                         .font(.system(size: 16))
