@@ -1003,7 +1003,7 @@ when they open — scope freezes live in `appstate_refactor_plan.md` §7.
 
 | Slice | Content | Status |
 |---|---|---|
-| 14 | LyricsStore extraction + @Environment view migration + test migration | ⬜ |
+| 14 | LyricsStore extraction + @Environment view migration + test migration | ✅ |
 
 ### 11.10 Version Targets
 

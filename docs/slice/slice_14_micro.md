@@ -17,7 +17,7 @@ in the same slice (plan §6.0 step 7).
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 14-A | Extract `LyricsStore` + `@Environment` view migration + test migration | — | ⬜ |
+| 14-A | Extract `LyricsStore` + `@Environment` view migration + test migration | — | ✅ |
 
 ### Goals
 
@@ -76,7 +76,7 @@ in the same slice (plan §6.0 step 7).
 
 ---
 
-## Slice 14-A: Extract LyricsStore ⬜
+## Slice 14-A: Extract LyricsStore ✅
 
 ### Goal
 
@@ -225,6 +225,12 @@ skeleton (9 failures). Row 1 is a green-from-start guard, and row 10 is a
 negative guard that passes vacuously against the honest empty-body
 skeleton (the 13-A amendment precedent — forcing it red would require a
 deliberately-wrong skeleton body). Row 12 stays green throughout.
+
+Execution amendment (recorded at close-out): the observed red set matched
+the prediction row for row. AC4's "pre-slice count" was re-measured at the
+spec commit as 493 passed / 5 skipped — the 494 figure recorded at the
+13-A close-out overcounted by one — so the green suite's 496 passed /
+5 skipped / 0 failed is exactly pre-slice + 3.
 
 The moved rows drop their `testAppState_` prefix and the fixture no longer
 constructs an AppState: the SUT is built directly as

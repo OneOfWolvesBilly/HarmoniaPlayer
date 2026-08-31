@@ -116,6 +116,18 @@ warnings; `PlaylistView.swift` (16), `HarmoniaPlayerApp.swift` (14), and
 `AppStateTests.swift` (2) keep their baseline counts and dominant kinds
 unchanged. The tables below therefore stand as recorded.
 
+**Slice 14-A re-measurement (2026-08-31).** The LyricsStore extraction
+moved the 2 lyrics `@Published` properties, the six lyrics methods, and the
+two lyrics dependencies out of `AppState.swift` and the lyrics test rows
+out of `AppStateLyricsTests.swift` — neither file carries a row in this
+baseline, and neither do the migrated views (`ContentView.swift`,
+`PlayerView.swift`, `LyricsPanel.swift`), so no rows retire. Every file
+the slice touched was rebuilt and re-measured: `LyricsStore.swift`,
+`LyricsStoreTests.swift`, `AppState.swift`, `ContentView.swift`,
+`PlayerView.swift`, and `LyricsPanel.swift` build with zero warnings;
+`HarmoniaPlayerApp.swift` (14) keeps its baseline count and dominant kind
+unchanged. The tables below therefore stand as recorded.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |
