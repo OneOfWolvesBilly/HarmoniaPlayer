@@ -291,6 +291,160 @@ final class LyricsStoreTests: XCTestCase {
             "setLyricsEncoding must persist the chosen charset")
     }
 
+    // MARK: - attachLyricsFile
+
+    /// Given no current track,
+    /// when `attachLyricsFile(_:for: nil)` is called,
+    /// then the drop is rejected and nothing happens.
+    func testAttachLyricsFile_NilTrack_Rejected() {
+        // When
+        let accepted = sut.attachLyricsFile(
+            URL(fileURLWithPath: "/tmp/dropped.lrc"), for: nil)
+
+        // Then
+        XCTAssertFalse(accepted, "a drop with no track must be rejected")
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 0)
+        XCTAssertNil(sut.pendingAttach)
+    }
+
+    /// Given a track,
+    /// when a non-`.lrc` file is attached,
+    /// then the drop is rejected and nothing happens.
+    func testAttachLyricsFile_NonLrcExtension_Rejected() {
+        // Given
+        let track = makeTrack()
+
+        // When
+        let accepted = sut.attachLyricsFile(
+            URL(fileURLWithPath: "/tmp/notes.txt"), for: track)
+
+        // Then
+        XCTAssertFalse(accepted, "only .lrc files are accepted")
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 0)
+        XCTAssertNil(sut.pendingAttach)
+    }
+
+    /// Given a track whose resolution offers no `.lrc` source,
+    /// when a `.lrc` is attached,
+    /// then the service installs it, the preference is persisted with
+    /// `source: .lrc` / `encoding: "auto"`, the resolution is re-queried,
+    /// and the panel opens.
+    func testAttachLyricsFile_NoExistingLrc_InstallsAndShows() {
+        // Given
+        stubLyricsService.stubbedResolution = embeddedResolution()
+        let track = makeTrack()
+        let url = URL(fileURLWithPath: "/tmp/dropped.lrc")
+
+        // When
+        let accepted = sut.attachLyricsFile(url, for: track)
+
+        // Then
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 1,
+            "attach must install the dropped file as the sidecar")
+        XCTAssertEqual(stubLyricsService.lastInstallSourceURL, url)
+        XCTAssertEqual(stubLyricsService.lastInstallTrack?.id, track.id)
+        let saved = sut.lyricsPreferenceStore.load(for: track)
+        XCTAssertEqual(saved?.source, .lrc,
+            "attach must persist the .lrc source")
+        XCTAssertEqual(saved?.encoding, "auto",
+            "attach must reset the encoding to auto-detect")
+        XCTAssertEqual(stubLyricsService.resolveAvailabilityCallCount, 1,
+            "attach must re-query availability after installing")
+        XCTAssertTrue(sut.showLyrics,
+            "attach must open the lyrics panel")
+    }
+
+    /// Given a track whose resolution already offers a `.lrc` source,
+    /// when a `.lrc` is attached,
+    /// then the replacement is staged for confirmation and nothing is
+    /// installed yet.
+    func testAttachLyricsFile_ExistingLrc_StagesPendingWithoutInstall() {
+        // Given
+        stubLyricsService.stubbedResolution = dualSourceResolution()
+        let track = makeTrack()
+        sut.updateResolution(for: track)
+        let url = URL(fileURLWithPath: "/tmp/dropped.lrc")
+
+        // When
+        let accepted = sut.attachLyricsFile(url, for: track)
+
+        // Then
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(sut.pendingAttach?.sourceURL, url,
+            "an existing .lrc source must stage a confirmation")
+        XCTAssertEqual(sut.pendingAttach?.track.id, track.id)
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 0,
+            "nothing may be installed before the user confirms")
+    }
+
+    /// Given a staged replacement,
+    /// when `confirmPendingAttach()` is called,
+    /// then the install runs and the staged request is cleared.
+    func testConfirmPendingAttach_InstallsAndClears() {
+        // Given
+        stubLyricsService.stubbedResolution = dualSourceResolution()
+        let track = makeTrack()
+        sut.updateResolution(for: track)
+        let url = URL(fileURLWithPath: "/tmp/dropped.lrc")
+        sut.attachLyricsFile(url, for: track)
+        XCTAssertNotNil(sut.pendingAttach)
+
+        // When
+        sut.confirmPendingAttach()
+
+        // Then
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 1,
+            "confirm must perform the staged install")
+        XCTAssertNil(sut.pendingAttach,
+            "confirm must clear the staged request")
+        let saved = sut.lyricsPreferenceStore.load(for: track)
+        XCTAssertEqual(saved?.source, .lrc)
+    }
+
+    /// Given a staged replacement,
+    /// when `cancelPendingAttach()` is called,
+    /// then the staged request is discarded and nothing is installed.
+    func testCancelPendingAttach_ClearsWithoutInstall() {
+        // Given
+        let track = makeTrack()
+        sut.pendingAttach = LyricsStore.PendingLyricsAttach(
+            sourceURL: URL(fileURLWithPath: "/tmp/dropped.lrc"),
+            track: track
+        )
+
+        // When
+        sut.cancelPendingAttach()
+
+        // Then
+        XCTAssertNil(sut.pendingAttach,
+            "cancel must discard the staged request")
+        XCTAssertEqual(stubLyricsService.installSidecarCallCount, 0,
+            "cancel must never install")
+    }
+
+    /// Given the service fails to install,
+    /// when a `.lrc` is attached,
+    /// then the failure surfaces on `attachErrorKey` and nothing is
+    /// persisted.
+    func testAttachLyricsFile_InstallThrows_SetsErrorAndPersistsNothing() {
+        // Given
+        stubLyricsService.stubbedInstallError = LyricsServiceError.decodingFailed
+        let track = makeTrack()
+
+        // When
+        sut.attachLyricsFile(
+            URL(fileURLWithPath: "/tmp/dropped.lrc"), for: track)
+
+        // Then
+        XCTAssertNotNil(sut.attachErrorKey,
+            "an install failure must surface on attachErrorKey")
+        XCTAssertNil(sut.lyricsPreferenceStore.load(for: track),
+            "a failed install must not persist a preference")
+        XCTAssertFalse(sut.showLyrics,
+            "a failed install must not open the panel")
+    }
+
     // MARK: - recheckLyrics
 
     /// Given a fresh store and a stubbed resolution,

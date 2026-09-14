@@ -60,6 +60,62 @@ final class LyricsServiceTests: XCTestCase {
         try? content.data(using: encoding)!.write(to: url)
     }
 
+    // MARK: - installSidecar
+
+    /// Given an audio file and an external `.lrc`,
+    /// when `installSidecar(from:for:)` runs,
+    /// then the bytes land at the primary sidecar position `<dir>/<name>.lrc`.
+    func testInstallSidecar_CopiesToPrimarySidecarPosition() throws {
+        let track = makeTrack(filename: "song.mp3")
+        let sourceDir = tempDir.appendingPathComponent("external")
+        try FileManager.default.createDirectory(
+            at: sourceDir, withIntermediateDirectories: true)
+        let source = sourceDir.appendingPathComponent("dropped.lrc")
+        let content = "[00:01.00]dropped line"
+        try content.data(using: .utf8)!.write(to: source)
+
+        try sut.installSidecar(from: source, for: track)
+
+        let destination = tempDir.appendingPathComponent("song.lrc")
+        let written = try String(
+            contentsOf: destination, encoding: .utf8)
+        XCTAssertEqual(written, content,
+            "installSidecar must copy the source bytes to <dir>/<name>.lrc")
+    }
+
+    /// Given a sidecar already exists at the destination,
+    /// when `installSidecar(from:for:)` runs,
+    /// then the destination is replaced with the source bytes.
+    func testInstallSidecar_OverwritesExistingDestination() throws {
+        let track = makeTrack(filename: "song.mp3")
+        writeSidecar(name: "song.lrc", content: "old lyrics")
+        let source = tempDir.appendingPathComponent("dropped.lrc")
+        try "new lyrics".data(using: .utf8)!.write(to: source)
+
+        try sut.installSidecar(from: source, for: track)
+
+        let destination = tempDir.appendingPathComponent("song.lrc")
+        let written = try String(contentsOf: destination, encoding: .utf8)
+        XCTAssertEqual(written, "new lyrics",
+            "installSidecar must replace an existing destination")
+    }
+
+    /// Given the source URL already is the destination sidecar,
+    /// when `installSidecar(from:for:)` runs,
+    /// then the call is a no-op and the file is left intact
+    /// (never a self-copy that could truncate it).
+    func testInstallSidecar_SourceIsDestination_NoOp() throws {
+        let track = makeTrack(filename: "song.mp3")
+        writeSidecar(name: "song.lrc", content: "keep me")
+        let destination = tempDir.appendingPathComponent("song.lrc")
+
+        try sut.installSidecar(from: destination, for: track)
+
+        let written = try String(contentsOf: destination, encoding: .utf8)
+        XCTAssertEqual(written, "keep me",
+            "a source that already is the destination must be left intact")
+    }
+
     // MARK: - resolveAvailability: hasAny
 
     func testResolveAvailability_HasAnyFalseWhenNothing() {

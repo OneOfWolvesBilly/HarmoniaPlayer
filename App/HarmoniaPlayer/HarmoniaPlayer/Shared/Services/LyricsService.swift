@@ -52,6 +52,12 @@ protocol LyricsService: AnyObject {
 
     /// Auto-detects the encoding of raw bytes using a fallback chain.
     func detectEncoding(of data: Data) -> String.Encoding
+
+    /// Copies the given lyrics file to the track's primary sidecar position
+    /// (`<dir>/<name>.lrc`), replacing any existing file there. No-op when
+    /// the source already is that destination. Throws on read or write
+    /// failure.
+    func installSidecar(from sourceURL: URL, for track: Track) throws
 }
 
 // MARK: - Errors
@@ -220,6 +226,9 @@ final class DefaultLyricsService: LyricsService {
             }
             return stripLRCTimestamps(text)
         }
+    }
+
+    func installSidecar(from sourceURL: URL, for track: Track) throws {
     }
 
     func stripLRCTimestamps(_ raw: String) -> String {

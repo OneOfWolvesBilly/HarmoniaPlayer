@@ -310,6 +310,8 @@ final class FakeLyricsService: LyricsService {
     func stripLRCTimestamps(_ raw: String) -> String { raw }
 
     func detectEncoding(of data: Data) -> String.Encoding { .utf8 }
+
+    func installSidecar(from sourceURL: URL, for track: Track) throws { }
 }
 
 // MARK: - StubLyricsService
@@ -348,6 +350,21 @@ final class StubLyricsService: LyricsService {
 
     func stripLRCTimestamps(_ raw: String) -> String { raw }
     func detectEncoding(of data: Data) -> String.Encoding { .utf8 }
+
+    /// Error to throw from `installSidecar(from:for:)`; `nil` = succeed.
+    var stubbedInstallError: Error?
+
+    /// Records each call to `installSidecar(from:for:)` for assertion.
+    private(set) var installSidecarCallCount = 0
+    private(set) var lastInstallSourceURL: URL?
+    private(set) var lastInstallTrack: Track?
+
+    func installSidecar(from sourceURL: URL, for track: Track) throws {
+        installSidecarCallCount += 1
+        lastInstallSourceURL = sourceURL
+        lastInstallTrack = track
+        if let error = stubbedInstallError { throw error }
+    }
 }
 
 // MARK: - FakeEQService

@@ -37,6 +37,24 @@ final class LyricsStore {
     /// when no track is loaded.
     var lyricsResolution: LyricsResolution?
 
+    // MARK: - Attach state
+
+    /// A staged replace request: the user dropped a lyrics file onto a track
+    /// that already resolves a `.lrc` source, and must confirm the overwrite
+    /// before anything is written.
+    struct PendingLyricsAttach: Equatable {
+        let sourceURL: URL
+        let track: Track
+    }
+
+    /// The staged replace request awaiting user confirmation, or `nil`.
+    /// Resolved by `confirmPendingAttach()` / `cancelPendingAttach()`.
+    var pendingAttach: PendingLyricsAttach?
+
+    /// Localization key for the attach-failure alert; `nil` when no failure
+    /// is pending. Cleared by the alert's OK button.
+    var attachErrorKey: String?
+
     // MARK: - Dependencies
 
     /// Lyrics service — resolves USLT + sidecar `.lrc` content.
@@ -189,6 +207,25 @@ final class LyricsStore {
         }
 
         lyricsResolution = resolution
+    }
+
+    // MARK: - Attach
+
+    /// Drop entry point. Returns whether the drop was accepted (a `.lrc`
+    /// file with a current track). Installs the file as the track's sidecar
+    /// immediately, or stages `pendingAttach` for confirmation when the
+    /// track already resolves a `.lrc` source.
+    @discardableResult
+    func attachLyricsFile(_ url: URL, for track: Track?) -> Bool {
+        false
+    }
+
+    /// Performs the staged replacement, then clears `pendingAttach`.
+    func confirmPendingAttach() {
+    }
+
+    /// Discards the staged replacement.
+    func cancelPendingAttach() {
     }
 
     /// Returns the persisted encoding name for the given track, or `nil` if
