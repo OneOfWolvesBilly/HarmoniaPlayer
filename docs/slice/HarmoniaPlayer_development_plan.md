@@ -846,7 +846,9 @@ Slice 6, the gate moved twice as scope expanded:
   extraction); later stages are numbered as they open. Slice 11 sits between them and is not part of this
   program — see §11.6. The v1.1.0 Free minor also carries further candidate
   slices outside this program (window-menu declarative semantics, lyrics
-  expansion backlog, …) — likewise numbered when they open.
+  expansion backlog, …) — likewise numbered when they open. Slice 15
+  (drag-and-drop lyrics attach) is the first slice drawn from the lyrics
+  expansion backlog and is likewise outside the program — see §11.10.
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -1005,7 +1007,22 @@ when they open — scope freezes live in `appstate_refactor_plan.md` §7.
 |---|---|---|
 | 14 | LyricsStore extraction + @Environment view migration + test migration | ✅ |
 
-### 11.10 Version Targets
+### 11.10 Slice 15: Drag-and-Drop Lyrics Attach (v1.1.0)
+
+**Spec:** `docs/slice/slice_15_micro.md`
+
+First slice drawn from the v1.1.0 lyrics expansion backlog, outside the
+AppState decomposition refactor program. Dropping a `.lrc` file onto the
+now-playing surface copies it to the track's sidecar position via a
+Related-Items coordinated write, persists the preference, and shows the
+lyrics immediately without interrupting playback. Builds on the Slice 14
+`LyricsStore` (new behavior lands as store methods; AppState untouched).
+
+| Slice | Content | Status |
+|---|---|---|
+| 15 | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | ⬜ |
+
+### 11.11 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
