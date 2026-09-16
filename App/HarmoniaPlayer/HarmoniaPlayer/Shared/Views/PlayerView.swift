@@ -133,6 +133,17 @@ struct PlayerView: View {
             }
             .padding(12)
         }
+        // Drag-and-drop lyrics attach: a `.lrc` file dropped anywhere on
+        // the player panel attaches to the current track. Acceptance is
+        // decided by the store (`.lrc` extension + a current track).
+        .dropDestination(for: URL.self) { urls, _ in
+            var accepted = false
+            for url in urls
+            where lyricsStore.attachLyricsFile(url, for: appState.currentTrack) {
+                accepted = true
+            }
+            return accepted
+        }
     }
 
     // MARK: - Album Art

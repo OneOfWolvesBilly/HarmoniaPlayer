@@ -1,7 +1,7 @@
 # HarmoniaPlayer API Reference
 
 > Complete interface reference for HarmoniaPlayer.
-> Generated from source code as of 2026-08-31.
+> Generated from source code as of 2026-09-16.
 >
 > For architecture overview, see [Architecture](architecture.md).
 > For dependency rules, see [Module Boundaries](module_boundary.md).
@@ -742,10 +742,23 @@ protocol LyricsService: AnyObject {
 
     /// Auto-detects encoding using a fallback chain.
     func detectEncoding(of data: Data) -> String.Encoding
+
+    /// Copies the given lyrics file to the track's primary sidecar position
+    /// (`<dir>/<name>.lrc`), replacing any existing file there. No-op when
+    /// the source already is that destination. Throws on read or write
+    /// failure. (Slice 15-A)
+    func installSidecar(from sourceURL: URL, for track: Track) throws
 }
 ```
 
 Implementations: `DefaultLyricsService` (production).
+
+`installSidecar(from:for:)` (Slice 15-A) is the write twin of the
+`resolveContent(.lrc)` coordinated read: it performs a Related-Items
+coordinated write (`NSFileCoordinator.coordinate(writingItemAt:options:.forReplacing)`)
+through a `SiblingFilePresenter` whose primary is the track's audio file,
+backed by the same `.lrc` `CFBundleDocumentTypes` declaration. The source
+is read once under the drop interaction's own sandbox grant.
 
 Slice 9-J. Pure Application Layer service — does not import HarmoniaCore. The production initializer takes `preferredLanguageCode: String` for testability; default is `Locale.current.language.languageCode?.identifier ?? ""`. `DefaultLyricsService` exposes two static helper constants for non-public Swift encodings: `gb18030` (Simplified Chinese) and `big5` (Traditional Chinese), constructed via `CFStringConvertEncodingToNSStringEncoding`. Throws `LyricsServiceError` (see §2.4) when content cannot be obtained.
 
@@ -1108,6 +1121,14 @@ final class LyricsStore {
     // Availability + selected source/language for the caller-supplied track
     var lyricsResolution: LyricsResolution?
 
+    // Drag-and-drop attach surfaces (Slice 15-A)
+    struct PendingLyricsAttach: Equatable {
+        let sourceURL: URL
+        let track: Track
+    }
+    var pendingAttach: PendingLyricsAttach?
+    var attachErrorKey: String?
+
     // Owned dependencies
     let lyricsService: LyricsService
     let lyricsPreferenceStore: LyricsPreferenceStore
@@ -1122,6 +1143,11 @@ final class LyricsStore {
     func setLyricsEncoding(_ encoding: String, for track: Track?)
     func updateResolution(for track: Track?)
 
+    @discardableResult
+    func attachLyricsFile(_ url: URL, for track: Track?) -> Bool
+    func confirmPendingAttach()
+    func cancelPendingAttach()
+
     nonisolated deinit {}
 }
 ```
@@ -1129,6 +1155,8 @@ final class LyricsStore {
 **Track-explicit contract:** the store never reads current-track state — every track-dependent method takes the track explicitly, and callers supply it: the AppState `$currentTrack` sink passes the sink's track value to `updateResolution(for:)`, and the views pass `appState.currentTrack`.
 
 **Method semantics:** `toggleLyrics()` flips `showLyrics`. `updateResolution(for:)` recomputes `lyricsResolution` from `lyricsService.resolveAvailability(for:)`, applying any persisted `LyricsPreference` whose source is actually available; `nil` clears the resolution. `recheckLyrics(for:)` is the user-intent entry point behind the panel's Recheck button and delegates to `updateResolution(for:)`. `setLyricsSource(_:for:)` switches the active source when available and persists; `setLyricsLanguage(_:for:)` selects a USLT variant when the current source is `.embedded` and persists; `setLyricsEncoding(_:for:)` persists the `.lrc` decoding charset (`"auto"` re-detects). All persistence goes through the owned `lyricsPreferenceStore`.
+
+**Drag-and-drop attach (Slice 15-A):** `attachLyricsFile(_:for:)` is the drop entry point (PlayerView and LyricsPanel forward dropped URLs to it) and returns whether the drop was accepted — a `.lrc` extension with a current track. When the track's resolution already offers a `.lrc` source, the request is staged on `pendingAttach` and ContentView presents a replace-confirmation alert; `confirmPendingAttach()` / `cancelPendingAttach()` resolve it. The install path calls `lyricsService.installSidecar(from:for:)`, persists `LyricsPreference(source: .lrc, encoding: "auto")`, refreshes the resolution, and raises `showLyrics` so the panel opens with the new content. On failure, `attachErrorKey` carries the localized message key for ContentView's failure alert and nothing is persisted.
 
 **No facade relationship:** unlike `AlertCenter`, AppState keeps no forwarders for the lyrics surface — after the Slice 14-A view and test migration the surface has no internal readers, so the facade step of the strangler protocol is skipped and AppState only constructs the store and retargets its `$currentTrack` sink to `lyricsStore.updateResolution(for:)`.
 

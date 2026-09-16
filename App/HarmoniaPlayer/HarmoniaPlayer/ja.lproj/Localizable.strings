@@ -217,6 +217,12 @@
 "lyrics_file_inaccessible" = "歌詞ファイルにアクセスできません。曲を一旦削除してから再度追加してください。";
 "lyrics_none_available" = "このトラックの歌詞は利用できません。";
 "lyrics_recheck" = "再確認";
+"lyrics_attach_replace_title" = "歌詞を置き換えますか？";
+"lyrics_attach_replace_body" = "このトラックには既に LRC 歌詞ファイルがあります。ドロップしたファイルで置き換えますか？";
+"lyrics_attach_replace_confirm" = "置き換える";
+"lyrics_attach_replace_cancel" = "キャンセル";
+"lyrics_attach_failed_title" = "歌詞を追加できません";
+"lyrics_attach_failed_body" = "歌詞ファイルをオーディオファイルの隣にコピーできませんでした。フォルダが書き込み可能か確認してください。";
 
 // MARK: - Equalizer (Slice 9-K)
 

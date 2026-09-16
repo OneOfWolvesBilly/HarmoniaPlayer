@@ -217,6 +217,12 @@
 "lyrics_file_inaccessible" = "無法存取歌詞檔案。請嘗試將曲目移除後重新加入。";
 "lyrics_none_available" = "此曲目沒有可用的歌詞。";
 "lyrics_recheck" = "重新檢查";
+"lyrics_attach_replace_title" = "取代歌詞？";
+"lyrics_attach_replace_body" = "這首曲目已有 LRC 歌詞檔。要以拖入的檔案取代嗎？";
+"lyrics_attach_replace_confirm" = "取代";
+"lyrics_attach_replace_cancel" = "取消";
+"lyrics_attach_failed_title" = "無法加入歌詞";
+"lyrics_attach_failed_body" = "無法將歌詞檔複製到音訊檔旁。請確認該資料夾可寫入。";
 
 // MARK: - Equalizer (Slice 9-K)
 

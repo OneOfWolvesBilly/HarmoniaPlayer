@@ -217,6 +217,12 @@
 "lyrics_file_inaccessible" = "Lyrics file is not accessible. Try removing and re-adding the track.";
 "lyrics_none_available" = "No lyrics available for this track.";
 "lyrics_recheck" = "Recheck";
+"lyrics_attach_replace_title" = "Replace Lyrics?";
+"lyrics_attach_replace_body" = "This track already has an LRC lyrics file. Replace it with the dropped file?";
+"lyrics_attach_replace_confirm" = "Replace";
+"lyrics_attach_replace_cancel" = "Cancel";
+"lyrics_attach_failed_title" = "Could Not Attach Lyrics";
+"lyrics_attach_failed_body" = "The lyrics file could not be copied next to the audio file. Check that the folder is writable.";
 
 // MARK: - Equalizer (Slice 9-K)
 

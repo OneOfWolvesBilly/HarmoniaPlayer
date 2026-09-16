@@ -217,15 +217,50 @@ final class LyricsStore {
     /// track already resolves a `.lrc` source.
     @discardableResult
     func attachLyricsFile(_ url: URL, for track: Track?) -> Bool {
-        false
+        guard let track,
+              url.pathExtension.lowercased() == "lrc" else { return false }
+
+        if lyricsResolution?.availableSources.contains(.lrc) == true {
+            pendingAttach = PendingLyricsAttach(sourceURL: url, track: track)
+            return true
+        }
+
+        install(url, for: track)
+        return true
     }
 
     /// Performs the staged replacement, then clears `pendingAttach`.
     func confirmPendingAttach() {
+        guard let pending = pendingAttach else { return }
+        pendingAttach = nil
+        install(pending.sourceURL, for: pending.track)
     }
 
     /// Discards the staged replacement.
     func cancelPendingAttach() {
+        pendingAttach = nil
+    }
+
+    /// Shared install path for the direct and the confirmed flow: copies
+    /// the file to the sidecar position, persists the `.lrc` preference
+    /// with auto-detect encoding, refreshes the resolution, and opens the
+    /// panel. On failure, surfaces the alert key and persists nothing.
+    private func install(_ sourceURL: URL, for track: Track) {
+        do {
+            try lyricsService.installSidecar(from: sourceURL, for: track)
+        } catch {
+            attachErrorKey = "lyrics_attach_failed_body"
+            return
+        }
+        let pref = LyricsPreference(
+            source: .lrc,
+            encoding: "auto",
+            languageCode: nil,
+            customPath: nil
+        )
+        lyricsPreferenceStore.save(pref, for: track)
+        updateResolution(for: track)
+        showLyrics = true
     }
 
     /// Returns the persisted encoding name for the given track, or `nil` if

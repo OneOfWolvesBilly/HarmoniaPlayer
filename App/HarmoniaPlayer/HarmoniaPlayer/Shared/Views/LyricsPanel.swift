@@ -53,6 +53,16 @@ struct LyricsPanel: View {
         .onChange(of: appState.currentTrack?.id) { _, _ in reload() }
         .onChange(of: lyricsStore.lyricsResolution?.currentSource) { _, _ in reload() }
         .onChange(of: lyricsStore.lyricsResolution?.currentLanguage) { _, _ in reload() }
+        // Drag-and-drop lyrics attach: a `.lrc` file dropped on the panel
+        // attaches to the current track (same handler as PlayerView).
+        .dropDestination(for: URL.self) { urls, _ in
+            var accepted = false
+            for url in urls
+            where lyricsStore.attachLyricsFile(url, for: appState.currentTrack) {
+                accepted = true
+            }
+            return accepted
+        }
     }
 
     // MARK: - Header

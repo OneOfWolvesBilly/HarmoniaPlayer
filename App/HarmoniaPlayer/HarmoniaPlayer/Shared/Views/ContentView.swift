@@ -182,6 +182,36 @@ struct ContentView: View {
                 Text(verbatim: "")
             }
         }
+        // Replace confirmation for a dropped lyrics file — shown when the
+        // track already resolves a .lrc source (drag-and-drop attach).
+        .alert(
+            Text(L("lyrics_attach_replace_title")),
+            isPresented: Binding(
+                get: { lyricsStore.pendingAttach != nil },
+                set: { if !$0 { lyricsStore.cancelPendingAttach() } }
+            )
+        ) {
+            Button(L("lyrics_attach_replace_confirm")) {
+                lyricsStore.confirmPendingAttach()
+            }
+            Button(L("lyrics_attach_replace_cancel"), role: .cancel) {
+                lyricsStore.cancelPendingAttach()
+            }
+        } message: {
+            Text(L("lyrics_attach_replace_body"))
+        }
+        // Attach failure (e.g. the track's folder is not writable)
+        .alert(
+            Text(L("lyrics_attach_failed_title")),
+            isPresented: Binding(
+                get: { lyricsStore.attachErrorKey != nil },
+                set: { if !$0 { lyricsStore.attachErrorKey = nil } }
+            )
+        ) {
+            Button("OK") { lyricsStore.attachErrorKey = nil }
+        } message: {
+            Text(L(lyricsStore.attachErrorKey ?? "lyrics_attach_failed_body"))
+        }
     }
 
     // MARK: - Report Issue

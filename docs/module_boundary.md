@@ -329,7 +329,9 @@ the v1.1.0 decomposition program — which owns `showLyrics`,
 dependencies, plus the mutator methods (`toggleLyrics`,
 `recheckLyrics(for:)`, `setLyricsSource(_:for:)`,
 `setLyricsLanguage(_:for:)`, `setLyricsEncoding(_:for:)`,
-`updateResolution(for:)`). The store never reads current-track state:
+`updateResolution(for:)`, and the Slice 15 drag-and-drop attach trio
+`attachLyricsFile(_:for:)` / `confirmPendingAttach()` /
+`cancelPendingAttach()`). The store never reads current-track state:
 every track-dependent method takes the track explicitly, supplied by the
 caller (the `AppState` `$currentTrack` sink, or a view passing
 `appState.currentTrack`). Unlike `AlertCenter` (§4.8(b)), AppState keeps
@@ -450,8 +452,13 @@ all future sibling-file features:
 - Cover-art slice (Pro): `.jpg` / `.png` / `.bmp` siblings —
   each extension adds its own `CFBundleDocumentTypes` entry in its
   own slice; the presenter class is shared.
-- Lyrics write-back slice (Pro): same presenter, but uses
-  `NSFileCoordinator.coordinate(writingItemAt:)`.
+- Sibling **write** path: realized by the Slice 15 drag-and-drop lyrics
+  attach — `DefaultLyricsService.installSidecar(from:for:)` uses the same
+  presenter with `NSFileCoordinator.coordinate(writingItemAt:options:
+  .forReplacing)` to copy a dropped `.lrc` to the sidecar position (the
+  already-declared `CFBundleTypeRole = Editor` is what permits the
+  write). The future tag-lyrics write-back slice (Pro) reuses this
+  pattern for embedded lyrics.
 - CUE sheet slice (Pro): `.cue` siblings — same pattern.
 
 ### 4.7 Sleep/Wake Trigger Placement (System Power Boundary)

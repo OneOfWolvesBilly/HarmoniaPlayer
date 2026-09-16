@@ -229,6 +229,54 @@ final class DefaultLyricsService: LyricsService {
     }
 
     func installSidecar(from sourceURL: URL, for track: Track) throws {
+        let destination = track.url
+            .deletingLastPathComponent()
+            .appendingPathComponent(
+                track.url.deletingPathExtension().lastPathComponent + ".lrc")
+
+        // No-op when the source already is the destination — a self-copy
+        // through the coordinated write would truncate the file.
+        guard sourceURL.standardizedFileURL != destination.standardizedFileURL
+        else { return }
+
+        // The source is a user-dropped file: the drop interaction's own
+        // sandbox grant covers this one-time read.
+        let data = try Data(contentsOf: sourceURL)
+
+        // Sibling write via Related Items — the write twin of the
+        // coordinated read in resolveContent(.lrc): same `.lrc`
+        // CFBundleDocumentTypes declaration (NSIsRelatedItemType +
+        // CFBundleTypeRole=Editor), same presenter whose
+        // primaryPresentedItemURL is the user-selected audio file. The
+        // sandbox issues a related-item extension for the duration of the
+        // coordinated block.
+        let presenter = SiblingFilePresenter(
+            primaryItemURL: track.url,
+            presentedItemURL: destination
+        )
+        NSFileCoordinator.addFilePresenter(presenter)
+        defer { NSFileCoordinator.removeFilePresenter(presenter) }
+
+        let coordinator = NSFileCoordinator(filePresenter: presenter)
+        var coordError: NSError?
+        var writeError: Error?
+        coordinator.coordinate(
+            writingItemAt: destination,
+            options: .forReplacing,
+            error: &coordError
+        ) { effectiveURL in
+            do {
+                try data.write(to: effectiveURL, options: .atomic)
+            } catch {
+                writeError = error
+            }
+        }
+        if let coordError {
+            throw coordError
+        }
+        if let writeError {
+            throw writeError
+        }
     }
 
     func stripLRCTimestamps(_ raw: String) -> String {

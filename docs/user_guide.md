@@ -12,12 +12,13 @@ Complete guide for using HarmoniaPlayer on macOS.
 4. [Playback Control](#playback-control)
 5. [Playlists](#playlists)
 6. [File Info](#file-info)
-7. [Mini Player](#mini-player)
-8. [Settings](#settings)
-9. [Keyboard Shortcuts](#keyboard-shortcuts)
-10. [Troubleshooting](#troubleshooting)
-11. [FAQ](#faq)
-12. [Getting Help](#getting-help)
+7. [Lyrics](#lyrics)
+8. [Mini Player](#mini-player)
+9. [Settings](#settings)
+10. [Keyboard Shortcuts](#keyboard-shortcuts)
+11. [Troubleshooting](#troubleshooting)
+12. [FAQ](#faq)
+13. [Getting Help](#getting-help)
 
 ---
 
@@ -266,6 +267,53 @@ each window with **`⌘W`** or the window's close button.
 
 ---
 
+## Lyrics
+
+Click the **speech-bubble button** in the top-right of the Now Playing
+area to open the Lyrics panel (it slides in as a third column). The
+button is always visible and is disabled when no track is loaded.
+
+### Where lyrics come from
+
+- **Embedded lyrics** — USLT tags inside the audio file (read
+  automatically)
+- **Sidecar `.lrc` file** — a file next to the audio file named after it
+  (e.g. `song.lrc` for `song.mp3`; a `Lyrics/` subfolder also works)
+
+When both are available, the panel shows a **Source** switch. For
+embedded lyrics with multiple language variants, a **Language** menu
+appears. For `.lrc` files, an **Encoding** menu lets you pick the
+character encoding manually if the automatic detection guesses wrong
+(Auto, UTF-8, GB18030, Big5, Shift-JIS).
+
+LRC timestamps like `[01:23.45]` are stripped — lyrics are shown as
+plain full text.
+
+### Adding lyrics by drag and drop
+
+Drag a `.lrc` file from Finder onto the Now Playing area (or onto the
+open Lyrics panel) to attach it to the current track:
+
+- The file is **copied** next to the audio file as `<track name>.lrc`,
+  so it stays with your music and survives relaunch.
+- The lyrics panel opens immediately with the new content — playback is
+  never interrupted.
+- If the track already has an `.lrc` lyrics file, HarmoniaPlayer asks
+  before replacing it.
+- Only `.lrc` files are accepted, and a track must be loaded.
+
+If the audio file's folder is not writable (for example a read-only
+volume), an alert explains that the lyrics file could not be copied.
+
+### No lyrics showing?
+
+The panel shows "No lyrics available" with a **Recheck** button. If you
+just placed a `.lrc` file next to the audio file yourself, click
+**Recheck** to pick it up without re-loading the track — or simply drag
+the file onto the app as described above.
+
+---
+
 ## Mini Player
 
 Open a compact floating player window via **Window → Mini Player**
@@ -427,9 +475,11 @@ The app does not make any network calls for audio content.
 Not in v1.0.0 — tags are read-only. Tag editing is planned for v2.0.0.
 
 **Does it support lyrics?**
-Yes — v1.0.0 displays static lyrics from embedded USLT tags or a sidecar
-`.lrc` file next to the audio file. Lyrics appear in the Lyrics panel as
-full text. Time-synchronised (line-by-line) lyrics are planned for v2.0.0 (Pro).
+Yes — static lyrics from embedded USLT tags or a sidecar `.lrc` file next
+to the audio file are shown in the Lyrics panel as full text, and you can
+attach an `.lrc` by dragging it onto the Now Playing area (see
+[Lyrics](#lyrics)). Time-synchronised (line-by-line) lyrics are planned
+for v2.0.0 (Pro).
 
 **Does it support gapless playback?**
 Not in v1.0.0. Gapless playback is planned for v2.0.0 (Pro).
