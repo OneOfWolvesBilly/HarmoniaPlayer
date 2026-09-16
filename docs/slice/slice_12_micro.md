@@ -128,6 +128,15 @@ the slice touched was rebuilt and re-measured: `LyricsStore.swift`,
 `HarmoniaPlayerApp.swift` (14) keeps its baseline count and dominant kind
 unchanged. The tables below therefore stand as recorded.
 
+**Slice 15-A re-measurement (2026-09-16).** The drag-and-drop lyrics
+attach touched no file that carries an app-target baseline row. Every
+touched file was rebuilt and re-measured: `LyricsService.swift`,
+`LyricsStore.swift`, `ContentView.swift`, `PlayerView.swift`,
+`LyricsPanel.swift`, `LyricsStoreTests.swift`, and
+`LyricsServiceTests.swift` build with zero warnings;
+`FakeCoreProvider.swift` (1) keeps its baseline count and dominant kind
+unchanged. The tables below therefore stand as recorded.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |

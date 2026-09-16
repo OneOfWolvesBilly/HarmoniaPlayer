@@ -1020,7 +1020,7 @@ lyrics immediately without interrupting playback. Builds on the Slice 14
 
 | Slice | Content | Status |
 |---|---|---|
-| 15 | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | ⬜ |
+| 15 | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | ✅ |
 
 ### 11.11 Version Targets
 

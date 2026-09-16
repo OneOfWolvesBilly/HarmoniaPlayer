@@ -20,7 +20,7 @@ methods; no AppState surface is touched).
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 15-A | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | Free | ⬜ |
+| 15-A | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | Free | ✅ |
 
 ### Goals
 
@@ -93,7 +93,7 @@ methods; no AppState surface is touched).
 
 ---
 
-## Slice 15-A: Drag-and-drop `.lrc` attach ⬜
+## Slice 15-A: Drag-and-drop `.lrc` attach ✅
 
 ### Goal
 
@@ -230,6 +230,14 @@ in place. The service skeleton (empty `installSidecar` body) leaves rows
 8–9 red and row 10 vacuously green (negative guard). Expected red set:
 **rows 3, 4, 5, 6, 7, 8, 9 (7 failures); rows 1, 2, 10 are
 green-from-start guards.** Row 11 stays green throughout.
+
+Execution amendments (recorded at close-out): the observed red set
+matched the prediction row for row. The Localizable.strings additions
+are six keys, not five — the replace-confirmation alert needs a
+localized Cancel label (`lyrics_attach_replace_cancel`), which the
+frozen key list omitted. The user_guide sync also added the previously
+missing top-level Lyrics section (the guide had covered lyrics only in
+its FAQ), per the doc-audit rule.
 
 ### Public API shape
 
