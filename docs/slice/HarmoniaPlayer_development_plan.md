@@ -1036,7 +1036,7 @@ forwarders survive only for members with remaining internal readers.
 
 | Slice | Content | Status |
 |---|---|---|
-| 16 | SettingsStore extraction + persistence split + @Environment view migration + test migration | ⬜ |
+| 16 | SettingsStore extraction + persistence split + @Environment view migration + test migration | ✅ |
 
 ### 11.12 Version Targets
 

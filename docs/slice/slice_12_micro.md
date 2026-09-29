@@ -137,6 +137,21 @@ touched file was rebuilt and re-measured: `LyricsService.swift`,
 `FakeCoreProvider.swift` (1) keeps its baseline count and dominant kind
 unchanged. The tables below therefore stand as recorded.
 
+**Slice 16-A re-measurement (2026-09-29) — first row retirement.** The
+SettingsStore extraction moved the settings rows out of
+`AppSettingsTests.swift` and deleted the file, so its row (14) retires and
+the test-target total drops from 466 to 452 — the first baseline row
+removed by an extraction stage. The other files carrying rows that the
+slice touched were re-measured against a clean build of the pre-slice
+tree with an identical counting method: `AppStatePersistenceTests.swift`,
+`AppStateReplayGainTests.swift`, `AppStateTests.swift`, and
+`HarmoniaPlayerApp.swift` each measure the same before and after the
+slice, so their rows (20, 20, 2, 14) stand with unchanged dominant kinds.
+`SettingsStore.swift`, `SettingsStoreTests.swift`, `AppState.swift`,
+`AppState+Playback.swift`, `ViewPreferences.swift`, `SettingsView.swift`,
+`PaywallView.swift`, `MockIAPManager.swift`, `IAPManagerTests.swift`, and
+`AppStatePlayerlistTests.swift` build with zero warnings.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |
@@ -145,7 +160,7 @@ unchanged. The tables below therefore stand as recorded.
 | `HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` | 14 | main-actor API referenced from nonisolated / Sendable-closure context (14/14) |
 | `HarmoniaPlayer/macOS/Free/AppDelegate.swift` | 2 | main-actor API referenced from nonisolated / Sendable-closure context (2/2) |
 
-**Test target — 466**
+**Test target — 452** (466 at recording; `AppSettingsTests.swift` 14 retired by Slice 16-A)
 
 | File | Warnings | Dominant kind |
 | --- | --- | --- |
@@ -164,7 +179,6 @@ unchanged. The tables below therefore stand as recorded.
 | `HarmoniaPlayerTests/SharedTests/AppStatePlaybackTrackTests.swift` | 14 | main-actor isolation violation (6/14) |
 | `HarmoniaPlayerTests/SharedTests/AppStatePlaybackStateTests.swift` | 14 | main-actor isolation violation (6/14) |
 | `HarmoniaPlayerTests/SharedTests/AppStatePlaybackControlTests.swift` | 14 | main-actor isolation violation (6/14) |
-| `HarmoniaPlayerTests/SharedTests/AppSettingsTests.swift` | 14 | main-actor isolation violation (6/14) |
 | `HarmoniaPlayerTests/SharedTests/EncodingDetectionTests.swift` | 12 | main-actor isolation violation (12/12) |
 | `HarmoniaPlayerTests/SharedTests/EQServiceTests.swift` | 12 | main-actor isolation violation (7/12) |
 | `HarmoniaPlayerTests/SharedTests/LRCStripTests.swift` | 11 | main-actor isolation violation (11/11) |

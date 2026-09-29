@@ -19,7 +19,7 @@ and an upward-notification closure wired by the composition root
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 16-A | Extract `SettingsStore` + persistence split + `@Environment` view migration + test migration | — | ⬜ |
+| 16-A | Extract `SettingsStore` + persistence split + `@Environment` view migration + test migration | — | ✅ |
 
 ### Goals
 
@@ -108,7 +108,7 @@ and an upward-notification closure wired by the composition root
 
 ---
 
-## Slice 16-A: Extract SettingsStore ⬜
+## Slice 16-A: Extract SettingsStore ✅
 
 ### Goal
 
@@ -360,6 +360,24 @@ but keeps its own settings members until green:
   rows 12, 18, 20 (13-A amendment precedent — forcing them red would
   need a deliberately-wrong skeleton body).
 - Green throughout (moved / existing AppState rows): 22–25.
+
+Execution amendments (recorded at close-out):
+
+- The observed red set matched the prediction row for row (14 red,
+  4 green-from-start, 3 negative guards). Green: 518 passed / 5 skipped /
+  0 failed, exactly pre-slice + 11; UITests 9 green.
+- The `init`-restore claim holds only with an ordering constraint,
+  verified empirically: on an `@Observable` class an `init` assignment
+  made after every stored property is initialised runs the setter and
+  its `didSet`; only assignments made while `self` is still being
+  initialised go through the macro's init accessors and skip observers.
+  `SettingsStore.init` therefore performs the three restore assignments
+  first, before the stored properties that have no default, and documents
+  the constraint in its doc comment.
+- Warning re-measurement used a clean build of the pre-slice tree with an
+  identical counting method; the touched baseline files measure the same
+  before and after, so AC5 is met by the `AppSettingsTests.swift` row
+  retirement alone.
 
 ### Public API shape
 
