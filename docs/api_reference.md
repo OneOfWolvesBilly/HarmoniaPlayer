@@ -1,7 +1,7 @@
 # HarmoniaPlayer API Reference
 
 > Complete interface reference for HarmoniaPlayer.
-> Generated from source code as of 2026-09-16.
+> Generated from source code as of 2026-09-29.
 >
 > For architecture overview, see [Architecture](architecture.md).
 > For dependency rules, see [Module Boundaries](module_boundary.md).
@@ -465,6 +465,8 @@ Alert, paywall, and File Info request state lives in the `AlertCenter` store (Sl
 
 Lyrics state lives in the `LyricsStore` store (Slice 14-A, see §5.12). AppState constructs it (`let lyricsStore: LyricsStore`) but keeps **no** facade surface for it — the lyrics surface has no internal readers left, so views, the `$currentTrack` sink, and tests all reach the store directly.
 
+Settings, tier, and UI-string-bundle state lives in the `SettingsStore` store (Slice 16-A, see §5.13), which also owns the `IAPManager` and persists its own `UserDefaults` keys. AppState constructs it (`let settingsStore: SettingsStore`) and keeps facade forwarders only for members that still have internal or un-migrated view readers: `allowDuplicateTracks` and `replayGainMode` (get + set), `isProUnlocked` and `languageBundle` (get-only), and the `showPaywallIfNeeded()` method. `featureFlags`, `viewPreferences`, `selectedLanguage`, `purchasePro()`, and `refreshEntitlements()` have no AppState surface.
+
 ### 3.1 Initialization
 
 ```swift
@@ -479,7 +481,7 @@ init(
 )
 ```
 
-Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The `LyricsStore` is constructed right after the factory-made services exist and takes ownership of the lyrics service and preference store (Slice 14-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests and is handed into the `LyricsStore`; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
+Wiring flow: `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The `SettingsStore` is constructed next from the injected `iapManager` and `userDefaults`, restoring the persisted settings, and `CoreFactory` is built from `settingsStore.featureFlags` (Slice 16-A). After every stored property is initialised, `init` wires the store's two closures: `onReplayGainModeChanged` → `applyReplayGainVolume(requiresActivePlayback: true)` (asynchronous hop) and `onPaywallRequested` → `alertCenter.presentPaywall()`. The `LyricsStore` is constructed right after the factory-made services exist and takes ownership of the lyrics service and preference store (Slice 14-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests and is handed into the `LyricsStore`; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
 
 ### 3.2 Services (injected)
 
@@ -492,6 +494,7 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 | `nowPlayingCoordinator` | `NowPlayingCoordinator` | Routes AppState publishers and action closures to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
 | `alertCenter` | `AlertCenter` | Alert-surface store owning alert, paywall, and File Info request state; constructed first in `init`; views observe it via `@Environment(AlertCenter.self)` (Slice 13-A, see §5.11) |
 | `lyricsStore` | `LyricsStore` | Lyrics store owning `showLyrics` / `lyricsResolution` and the `lyricsService` / `lyricsPreferenceStore` dependencies; views observe it via `@Environment(LyricsStore.self)` (Slice 14-A, see §5.12) |
+| `settingsStore` | `SettingsStore` | Settings store owning the persisted settings, `viewPreferences`, the tier state, `languageBundle`, and the `IAPManager`; views observe it via `@Environment(SettingsStore.self)` (Slice 16-A, see §5.13) |
 
 ### 3.3 Published Properties
 
@@ -499,9 +502,10 @@ Wiring flow: `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
 
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
-| `isProUnlocked` | `Bool` | read | Pro features unlocked |
+| `isProUnlocked` | `Bool` | read | Get-only facade forwarder to `settingsStore.isProUnlocked` (Slice 16-A); read by `PlaylistView` / `MiniPlayerView` format gating |
 | `eqEnabled` | `Bool` | read | Mirror of `eqCoordinator.isEnabled`; lets the toolbar EQ button re-render when Enable is toggled |
-| `featureFlags` | `CoreFeatureFlags` | read | Tier-specific capabilities |
+
+`featureFlags` lives on `settingsStore` only (Slice 16-A).
 
 #### Playlist State
 
@@ -545,9 +549,10 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 
 #### UI State
 
+`viewPreferences` lives on `settingsStore` only (Slice 16-A).
+
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
-| `viewPreferences` | `ViewPreferences` | read/write | Layout preferences |
 | `fileInfoTrack` | `Track?` | read/write | Facade forwarder to `alertCenter.fileInfoTrack` (Slice 13-A). One-shot signal requesting File Info window to open; ContentView observes the store and clears the request |
 | `showPaywall` | `Bool` | read/write | Facade forwarder to `alertCenter.showPaywall` (Slice 13-A). Paywall sheet binding (v1.0.0: hidden) |
 | `paywallDismissedThisSession` | `Bool` | read/write | Facade forwarder to `alertCenter.paywallDismissedThisSession` (Slice 13-A). Session-only skip flag |
@@ -556,12 +561,13 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
-| `allowDuplicateTracks` | `Bool` | read/write | Allow duplicate URLs in playlist |
+| `allowDuplicateTracks` | `Bool` | read/write | Facade forwarder to `settingsStore.allowDuplicateTracks` (Slice 16-A); read by `load(urls:)` |
 | `volume` | `Float` | read/write | Output volume 0.0–1.0 |
-| `selectedLanguage` | `String` | read/write | BCP-47 tag or "system" |
 | `repeatMode` | `RepeatMode` | read | off/all/one |
 | `isShuffled` | `ShuffleMode` | read | off/on |
-| `replayGainMode` | `ReplayGainMode` | read/write | off/track/album |
+| `replayGainMode` | `ReplayGainMode` | read/write | Facade forwarder to `settingsStore.replayGainMode` (Slice 16-A); read by `applyReplayGainVolume` |
+
+`selectedLanguage` lives on `settingsStore` only (Slice 16-A).
 
 #### Format Classification (static)
 
@@ -576,7 +582,7 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 | Property | Type | Description |
 |----------|------|-------------|
 | `undoManager` | `UndoManager` | Injected; `levelsOfUndo = 10` |
-| `languageBundle` | `Bundle` | Resolved at launch for `NSLocalizedString` |
+| `languageBundle` | `Bundle` | Get-only facade forwarder to `settingsStore.languageBundle` (Slice 16-A); resolved at launch for `NSLocalizedString` |
 | `pendingSeekTime` | `TimeInterval` | Seek position buffered while stopped/paused |
 | `lastPlayedTrackID` | `Track.ID?` | Last successfully played track ID |
 | `shuffleQueue` | `[Track.ID]` | Pre-shuffled order |
@@ -645,14 +651,12 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 
 | Method | Description |
 |--------|-------------|
-| `saveState()` | Persists playlists via `PlaylistStore` (Application Support file); settings to UserDefaults |
-| `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob; settings from UserDefaults; triggers metadata refresh |
+| `saveState()` | Persists playlists via `PlaylistStore` (Application Support file); `activePlaylistIndex`, `volume`, `repeatMode`, `isShuffled` to UserDefaults. Settings keys are persisted by `SettingsStore` at change time |
+| `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob; `activePlaylistIndex`, `volume`, `repeatMode`, `isShuffled` from UserDefaults; triggers metadata refresh. Settings keys are restored by `SettingsStore.init` |
 | `displayName(for:) -> String` | Returns "Title - Artist" or filename |
 | `clearLastError()` | Delegates the alert-surface reset to `alertCenter.clearLastError()`; additionally transitions `playbackState` `.error → .stopped` (the transition stays in the facade) |
 | `showFileInfo(trackID:)` | Looks the track up in the active playlist and calls `alertCenter.presentFileInfo(_:)` to signal ContentView to open the File Info WindowGroup; no-op if ID not in active playlist |
-| `showPaywallIfNeeded() -> Bool` | Checks `isProUnlocked` (tier logic stays in the facade) and calls `alertCenter.presentPaywall()` if Free tier; returns true if blocked |
-| `purchasePro() async throws` | Initiates purchase via IAPManager |
-| `refreshEntitlements() async` | Refreshes Pro status from App Store |
+| `showPaywallIfNeeded() -> Bool` | Facade forwarder to `settingsStore.showPaywallIfNeeded()` (Slice 16-A); the Free-tier request reaches `alertCenter.presentPaywall()` through the root-wired `onPaywallRequested` closure; returns true if blocked |
 | `handleSystemWillSleep()` | Records `wasPlayingBeforeSleep = (playbackState == .playing)`. Called by `AppDelegate` on `NSWorkspace.willSleepNotification`. |
 | `handleSystemDidWake() async` | Clears `wasPlayingBeforeSleep`; when it was `true`, calls `play()` to resume from the interrupted position (audio-pipeline re-preparation happens inside the playback service). Called by `AppDelegate` on `NSWorkspace.didWakeNotification`. |
 
@@ -1097,7 +1101,7 @@ final class AlertCenter {
 
 **Method semantics:** `clearLastError()` clears the 5-field playback-error surface (`lastError`, `lastErrorDetail`, `failedTrackName`, `showFileNotFoundAlert`, `skippedInaccessibleNames`) and deliberately leaves the 3 batch-operation lists untouched — those are cleared by their own alerts' dismiss buttons. `presentFileInfo(_:)` / `clearFileInfoRequest()` set and reset the one-shot `fileInfoTrack` request. `presentPaywall()` raises `showPaywall` without touching `paywallDismissedThisSession`.
 
-**Facade relationship:** AppState re-exposes all 11 properties as same-named computed forwarders (get + set) plus the delegating methods `clearLastError()` / `showFileInfo(trackID:)` / `showPaywallIfNeeded()` (see §3.8). Tier logic (`isProUnlocked`) and the `playbackState` `.error → .stopped` transition stay in the facade; the playlist lookup for `showFileInfo(trackID:)` also stays in the facade because it needs `playlist`.
+**Facade relationship:** AppState re-exposes all 11 properties as same-named computed forwarders (get + set) plus the delegating methods `clearLastError()` / `showFileInfo(trackID:)` (see §3.8). The `playbackState` `.error → .stopped` transition stays in the facade; the playlist lookup for `showFileInfo(trackID:)` also stays in the facade because it needs `playlist`. The paywall tier check lives in `SettingsStore.showPaywallIfNeeded()` (Slice 16-A, see §5.13), whose request reaches `presentPaywall()` through the `onPaywallRequested` closure wired by AppState — AlertCenter itself holds no tier logic.
 
 **Deliberate looseness:** properties stay plain `var` (not `private(set)`) because un-migrated call sites in the `AppState+Playback/+Navigation/+Playlist/+M3U8` extensions still write through the facade's forwarding setters.
 
@@ -1159,6 +1163,61 @@ final class LyricsStore {
 **Drag-and-drop attach (Slice 15-A):** `attachLyricsFile(_:for:)` is the drop entry point (PlayerView and LyricsPanel forward dropped URLs to it) and returns whether the drop was accepted — a `.lrc` extension with a current track. When the track's resolution already offers a `.lrc` source, the request is staged on `pendingAttach` and ContentView presents a replace-confirmation alert; `confirmPendingAttach()` / `cancelPendingAttach()` resolve it. The install path calls `lyricsService.installSidecar(from:for:)`, persists `LyricsPreference(source: .lrc, encoding: "auto")`, refreshes the resolution, and raises `showLyrics` so the panel opens with the new content. On failure, `attachErrorKey` carries the localized message key for ContentView's failure alert and nothing is persisted.
 
 **No facade relationship:** unlike `AlertCenter`, AppState keeps no forwarders for the lyrics surface — after the Slice 14-A view and test migration the surface has no internal readers, so the facade step of the strangler protocol is skipped and AppState only constructs the store and retargets its `$currentTrack` sink to `lyricsStore.updateResolution(for:)`.
+
+**Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
+
+---
+
+### 5.13 SettingsStore
+
+**Location:** `Shared/Models/SettingsStore.swift`
+
+**Purpose:** `@MainActor @Observable` store owning the user settings, the Free/Pro tier state, and the UI string bundle — the third feature store extracted from AppState under the v1.1.0 decomposition program (Slice 16-A). Owns the `IAPManager` and the settings `UserDefaults` keys. Lives in `Shared/Models/` for the same reason `AlertCenter` does. Views whose body reads settings state (`SettingsView`, `PaywallView`) observe it via `@Environment(SettingsStore.self)` — injected on the main window scene (PaywallView is a sheet there) and on the Settings scene by `HarmoniaPlayerApp` — with `@Bindable` providing the toggle and picker bindings.
+
+```swift
+@MainActor @Observable
+final class SettingsStore {
+
+    // Persisted settings — each didSet writes its own key
+    var allowDuplicateTracks = false          // hp.allowDuplicateTracks
+    var selectedLanguage = "system"           // hp.selectedLanguage
+    var replayGainMode: ReplayGainMode = .off // hp.replayGainMode; notifies
+
+    // In-memory UI layout preferences (not persisted)
+    var viewPreferences: ViewPreferences = .defaultPreferences
+
+    // Tier state derived from the IAP manager
+    private(set) var isProUnlocked: Bool
+    private(set) var featureFlags: CoreFeatureFlags
+
+    // UI string bundle, fixed at launch from the persisted language
+    let languageBundle: Bundle
+
+    // Root-wired notifications
+    @ObservationIgnored var onReplayGainModeChanged: ((ReplayGainMode) -> Void)?
+    @ObservationIgnored var onPaywallRequested: (() -> Void)?
+
+    init(iapManager: IAPManager, userDefaults: UserDefaults)
+
+    func purchasePro() async throws
+    func refreshEntitlements() async
+
+    @discardableResult
+    func showPaywallIfNeeded() -> Bool
+
+    nonisolated deinit {}
+}
+```
+
+**Persistence:** `init` restores `hp.allowDuplicateTracks`, `hp.selectedLanguage`, and `hp.replayGainMode` from the injected `UserDefaults` (an unrecognised ReplayGain raw value keeps `.off`). The restore assignments run while `self` is still being initialised, which the `@Observable` macro routes through the init accessors, so restore neither re-persists nor notifies. Afterwards each property's `didSet` writes its own key at change time; the store has no save method.
+
+**Language bundle:** resolved once in `init` from the persisted `hp.selectedLanguage` — a never-written key resolves `en.lproj`, `"system"` or a missing `.lproj` resolves `Bundle.main`. Not recomputed when `selectedLanguage` changes; the new language applies after relaunch.
+
+**Tier state:** `isProUnlocked` and `featureFlags` are read from the IAP manager at `init`; `purchasePro()` (rethrows `IAPError`) and `refreshEntitlements()` call the IAP manager and then refresh both. A post-launch flag change does not rebuild services.
+
+**Notifications:** `replayGainMode`'s `didSet` calls `onReplayGainModeChanged` with the new mode after persisting, on every assignment. `showPaywallIfNeeded()` calls `onPaywallRequested` and returns `true` on the Free tier, and returns `false` without calling it on the Pro tier. The store references no other store; AppState wires both closures (see §3.1).
+
+**Facade relationship:** AppState keeps `allowDuplicateTracks` / `replayGainMode` (get + set), `isProUnlocked` / `languageBundle` (get-only), and `showPaywallIfNeeded()` as forwarders for their remaining internal and un-migrated view readers; the other members have no AppState surface (see §3).
 
 **Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
 
@@ -1298,12 +1357,12 @@ with `hp.` prefix keys.
 |-----|------|-------------|
 | `hp.playlists` | `[Playlist]` (JSON) | **Legacy** — no longer written; `restoreState()` reads it once to migrate into `playlists.json`, then deletes the key |
 | `hp.activePlaylistIndex` | `Int` | `saveState()` |
-| `hp.allowDuplicateTracks` | `Bool` | `saveState()` |
+| `hp.allowDuplicateTracks` | `Bool` | `SettingsStore` (didSet) |
 | `hp.volume` | `Float` | `saveState()` |
-| `hp.selectedLanguage` | `String` | `saveState()` + Combine sink |
+| `hp.selectedLanguage` | `String` | `SettingsStore` (didSet); also written by `HarmoniaPlayerApp.init` on first launch (`"en"`) |
 | `hp.repeatMode` | `RepeatMode` (JSON) | `saveState()` |
 | `hp.isShuffled` | `Bool` | `saveState()` |
-| `hp.replayGainMode` | `String` | `saveState()` + Combine sink |
+| `hp.replayGainMode` | `String` | `SettingsStore` (didSet) |
 | `hp.isProUnlocked` | `Bool` | `StoreKitIAPManager` (didSet) |
 | `hp.eq.schemaVersion` | `Int` | `EQPersistenceStore.save(_:)` |
 | `hp.eq.enabled` | `Bool` | `EQPersistenceStore.save(_:)` |
@@ -1321,16 +1380,19 @@ with `hp.` prefix keys.
 
 **Lyrics preferences (Slice 9-J).** The `hp.lyrics.prefs.*` keys are managed by `DefaultLyricsPreferenceStore` (see §4.6), independent of `AppState.saveState()`. The key prefix is `hp.lyrics.prefs.` followed by the track's absolute file path, with an optional `#track=<n>` suffix for CUE virtual tracks. The CUE suffix branch is **latent in 9-J** — `Track` does not yet carry a `cueTrackNumber` field, so the key generator currently emits the non-CUE form only; v1.1.0 activates the suffix when CUE support lands. Preferences are keyed by file path (and CUE track number when applicable), so the same file appearing in playlist A and playlist B uses identical preference. Failures during save (encoder errors) are silently ignored — preferences are best-effort and must not break playback.
 
-Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`.
+**Settings keys (Slice 16-A).** `hp.allowDuplicateTracks`, `hp.selectedLanguage`, and `hp.replayGainMode` are owned by `SettingsStore` (see §5.13), independent of `AppState.saveState()`: restored in the store's `init`, written by each property's `didSet` at change time.
+
+Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`, `viewPreferences`.
 
 ---
 
 ## 9. Module Boundaries Summary
 
 ```
-Views -> AppState + feature stores (AlertCenter, LyricsStore)
-AppState -> PlaybackService, TagReaderService, CoreFactory, IAPManager (protocols)
+Views -> AppState + feature stores (AlertCenter, LyricsStore, SettingsStore)
+AppState -> PlaybackService, TagReaderService, CoreFactory (protocols)
 LyricsStore -> LyricsService, LyricsPreferenceStore (protocols)
+SettingsStore -> IAPManager (protocol), UserDefaults
 CoreFactory -> CoreServiceProviding -> HarmoniaCore (via Integration Layer)
 Integration Layer -> HarmoniaCore ports + adapters (import HarmoniaCore)
 ```

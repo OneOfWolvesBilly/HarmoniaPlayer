@@ -70,12 +70,6 @@ final class AppStateReplayGainTests: XCTestCase {
         Float(min(1.0, Double(base) * pow(10.0, gainDB / 20.0)))
     }
 
-    // MARK: - Default
-
-    func testReplayGainMode_DefaultIsOff() {
-        XCTAssertEqual(sut.replayGainMode, .off)
-    }
-
     // MARK: - mode = off
 
     func testReplayGain_Off_DoesNotAdjustVolume() async throws {
@@ -163,19 +157,6 @@ final class AppStateReplayGainTests: XCTestCase {
 
         let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
         XCTAssertEqual(vol, 1.0, accuracy: 0.001)
-    }
-
-    // MARK: - Persistence
-
-    func testReplayGainMode_Persisted() {
-        sut.replayGainMode = .album
-        sut.saveState()
-
-        let provider2 = FakeCoreProvider()
-        let iap2 = MockIAPManager(isProUnlocked: false)
-        let sut2 = AppState(iapManager: iap2, provider: provider2, userDefaults: testDefaults, playlistStore: FakePlaylistStore())
-
-        XCTAssertEqual(sut2.replayGainMode, .album)
     }
 
     // MARK: - Real-time mode switching

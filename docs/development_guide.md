@@ -145,6 +145,7 @@ HarmoniaPlayer/
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
 │       │   │   │   ├── RepeatMode.swift             # off/all/one
 │       │   │   │   ├── ReplayGainMode.swift         # off/track/album
+│       │   │   │   ├── SettingsStore.swift          # Settings/tier/language-bundle store (Slice 16-A)
 │       │   │   │   ├── ShuffleMode.swift            # off/on
 │       │   │   │   ├── Track.swift                  # Track model (Codable, Sendable)
 │       │   │   │   └── ViewPreferences.swift        # Layout preferences
@@ -301,14 +302,11 @@ Inside AppState:
 final class AppState: ObservableObject {
     let alertCenter: AlertCenter                // alert/paywall/File Info store (Slice 13-A)
     let lyricsStore: LyricsStore                // lyrics store (Slice 14-A)
+    let settingsStore: SettingsStore            // settings/tier/language-bundle store (Slice 16-A)
     let playbackService: PlaybackService        // app-layer protocol
     let tagReaderService: TagReaderService      // app-layer protocol
     let fileDropService: FileDropService
 
-    private let iapManager: IAPManager
-    private(set) var featureFlags: CoreFeatureFlags
-
-    @Published private(set) var isProUnlocked: Bool
     @Published var playlists: [Playlist]
     @Published var currentTrack: Track?
     @Published var playbackState: PlaybackState = .idle
@@ -321,6 +319,10 @@ final class AppState: ObservableObject {
         set { alertCenter.lastError = newValue }
     }
 
+    /// Read-only facade forwarder — tier state lives in SettingsStore
+    /// (Slice 16-A).
+    var isProUnlocked: Bool { settingsStore.isProUnlocked }
+
     init(
         iapManager: IAPManager,
         provider: CoreServiceProviding,
@@ -330,12 +332,14 @@ final class AppState: ObservableObject {
         lyricsPreferenceStore: LyricsPreferenceStore? = nil,
         eqCoordinator: EQCoordinator? = nil
     ) {
-        self.alertCenter  = AlertCenter()       // constructed first — no dependencies
-        self.iapManager   = iapManager
-        self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        self.alertCenter   = AlertCenter()      // constructed first — no dependencies
+        self.settingsStore = SettingsStore(     // owns the IAP manager + settings keys (Slice 16-A)
+            iapManager:   iapManager,
+            userDefaults: userDefaults
+        )
 
         let coreFactory = CoreFactory(
-            featureFlags: featureFlags,
+            featureFlags: settingsStore.featureFlags,
             provider:     provider
         )
         self.playbackService  = coreFactory.makePlaybackService()
@@ -348,8 +352,10 @@ final class AppState: ObservableObject {
             lyricsService: lyricsService,
             lyricsPreferenceStore: lyricsPreferenceStore
         )
-        self.isProUnlocked    = iapManager.isProUnlocked
-        // ... rest of init
+        // ... rest of init; after every stored property is set, the
+        // settings store's closures are wired:
+        //   onReplayGainModeChanged → applyReplayGainVolume(requiresActivePlayback: true)
+        //   onPaywallRequested      → alertCenter.presentPaywall()
     }
 }
 ```
@@ -526,7 +532,7 @@ All test infrastructure lives in
 | `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying `LyricsStore` reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
-| `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); call counts for `refreshEntitlements` and `purchasePro` |
+| `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); `entitlementAfterRefresh: Bool?` applied by `refreshEntitlements()` when set (Slice 16-A); call counts for `refreshEntitlements` and `purchasePro` |
 
 ### 8.2 Test class conventions (Swift 6)
 
@@ -628,8 +634,8 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 - Services on AppState are `let` (internal), not `private let` — Views
   access AppState, not the services directly, but the boundary is
   architectural, not enforced by Swift access modifiers
-- `@Published` properties are `var` by default; use `private(set)` only
-  when the View should never write (e.g. `isProUnlocked`)
+- `@Published` / store properties are `var` by default; use `private(set)`
+  only when the View should never write (e.g. `SettingsStore.isProUnlocked`)
 
 ### 9.3 SwiftUI patterns
 
@@ -638,7 +644,7 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
   `@Environment(<Store>.self)` (e.g. `@Environment(AlertCenter.self)`),
   with `@Bindable var store = store` at the top of `body` when sheet/alert
   bindings are needed; the store is injected per scene via
-  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slices 13-A, 14-A)
+  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slices 13-A, 14-A, 16-A)
 - Button handlers wrap async AppState calls: `Task { await appState.play() }`
 - Never inject services directly into a View
 
@@ -723,13 +729,14 @@ final class SomeObservable: ObservableObject {
 
 **When the workaround IS needed.** Any class that is `@MainActor` (explicit
 or inferred). The `final` modifier is independent — it does not change the
-deinit behaviour. Six known production / test sites in HarmoniaPlayer:
+deinit behaviour. Seven known production / test sites in HarmoniaPlayer:
 
 | Class | File | Why |
 |-------|------|-----|
 | `AppState` | `Shared/Models/AppState.swift` | Explicit `@MainActor`; long-lived but still hits the bug on test teardown |
 | `AlertCenter` | `Shared/Models/AlertCenter.swift` | Explicit `@MainActor`; deallocated in test contexts (`AlertCenterTests` and every AppState test teardown) |
 | `LyricsStore` | `Shared/Models/LyricsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`LyricsStoreTests` and every AppState test teardown) |
+| `SettingsStore` | `Shared/Models/SettingsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`SettingsStoreTests` and every AppState test teardown) |
 | `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Inferred `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
 | `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
 | `FakeEQService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | Inferred `@MainActor` in the main module's actor isolation; many short-lived test instances exercise the crash path repeatedly |
@@ -820,7 +827,7 @@ Spec and code commits are always separate. One logical change per commit.
 | SPM resolution fails | HarmoniaCore not cloned side by side; reset package caches |
 | Test crashes on deinit | Missing `nonisolated deinit {}` on a `@MainActor` class |
 | `@MainActor` error in test | Add `@MainActor` to the whole test class, not individual methods |
-| Duplicate state after purchase | Forgot to rebuild `featureFlags = CoreFeatureFlags(iapManager:)` |
+| Duplicate state after purchase | `featureFlags` not refreshed alongside `isProUnlocked` in `SettingsStore` (both come from the IAP manager) |
 
 ---
 

@@ -72,7 +72,7 @@ final class AppStateTests: XCTestCase {
         // Then: Dependencies are wired
         XCTAssertFalse(appState.isProUnlocked,
                        "Free user should not have Pro unlocked")
-        XCTAssertFalse(appState.featureFlags.supportsFLAC,
+        XCTAssertFalse(appState.settingsStore.featureFlags.supportsFLAC,
                        "Free tier should not support FLAC")
         XCTAssertNotNil(appState.playbackService,
                         "Playback service should be created")
@@ -115,7 +115,7 @@ final class AppStateTests: XCTestCase {
         // Then: Dependencies are wired with Pro features
         XCTAssertTrue(appState.isProUnlocked,
                       "Pro user should have Pro unlocked")
-        XCTAssertTrue(appState.featureFlags.supportsFLAC,
+        XCTAssertTrue(appState.settingsStore.featureFlags.supportsFLAC,
                       "Pro tier should support FLAC")
         XCTAssertNotNil(appState.playbackService,
                         "Playback service should be created")
@@ -174,65 +174,26 @@ final class AppStateTests: XCTestCase {
         XCTAssertTrue(true, "AppState should not execute playback/playlist behavior")
     }
 
-    // MARK: - Tests: Feature Flags Consistency
+    // MARK: - Tests: Settings Store Wiring
 
-    func testFeatureFlags_ConsistentWithIAP_Free() {
-        // Given: Free IAP
-        let freeIAP = MockIAPManager(isProUnlocked: false)
-        let freeAppState = AppState(
-            iapManager: freeIAP,
+    /// Verifies that AppState hands its injected `UserDefaults` to the
+    /// settings store, so persisted settings are restored at init.
+    func testInit_SettingsStoreRestoresFromInjectedDefaults() {
+        // Given: an isolated suite with a persisted ReplayGain mode
+        let defaults = makeIsolatedDefaults()
+        defaults.set("album", forKey: "hp.replayGainMode")
+
+        // When: AppState is built on that suite
+        let appState = AppState(
+            iapManager: MockIAPManager(),
             provider: FakeCoreProvider(),
-            userDefaults: makeIsolatedDefaults(),
+            userDefaults: defaults,
             playlistStore: FakePlaylistStore()
         )
 
-        // Then: Feature flags match IAP state
-        XCTAssertFalse(freeAppState.featureFlags.supportsFLAC)
-        XCTAssertFalse(freeAppState.featureFlags.supportsDSD)
-        XCTAssertFalse(freeAppState.isProUnlocked)
-    }
-
-    func testFeatureFlags_ConsistentWithIAP_Pro() {
-        // Given: Pro IAP
-        let proIAP = MockIAPManager(isProUnlocked: true)
-        let proAppState = AppState(
-            iapManager: proIAP,
-            provider: FakeCoreProvider(),
-            userDefaults: makeIsolatedDefaults(),
-            playlistStore: FakePlaylistStore()
-        )
-
-        // Then: Feature flags match IAP state
-        XCTAssertTrue(proAppState.featureFlags.supportsFLAC)
-        XCTAssertTrue(proAppState.featureFlags.supportsDSD)
-        XCTAssertTrue(proAppState.isProUnlocked)
-    }
-
-    // MARK: - Tests: Initial View Preferences (Slice 1-E)
-
-    /// Verifies that `viewPreferences` is set to `.defaultPreferences` on init,
-    /// without any caller needing to configure it explicitly.
-    func testAppState_InitialViewPreferences_MatchesDefault() {
-        // Given / When: Fresh AppState
-        let sut = makeSUT()
-
-        // Then: viewPreferences equals the documented default
-        XCTAssertEqual(sut.viewPreferences, ViewPreferences.defaultPreferences,
-                       "viewPreferences should equal .defaultPreferences on init")
-    }
-
-    /// Verifies that `viewPreferences` is mutable after init,
-    /// allowing views and actions to update the layout at runtime.
-    func testAppState_ViewPreferences_IsMutable() {
-        // Given: Fresh AppState with default preferences
-        let sut = makeSUT()
-
-        // When: Layout preset is changed
-        sut.viewPreferences.layoutPreset = .compact
-
-        // Then: Change is reflected
-        XCTAssertEqual(sut.viewPreferences.layoutPreset, .compact,
-                       "viewPreferences.layoutPreset should be writable")
+        // Then: the settings store restored the persisted value
+        XCTAssertEqual(appState.settingsStore.replayGainMode, .album,
+                       "AppState must construct SettingsStore on its injected UserDefaults")
     }
 
     // MARK: - Tests: Initial Error State (Slice 1-E)

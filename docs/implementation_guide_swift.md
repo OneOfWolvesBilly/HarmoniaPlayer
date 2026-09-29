@@ -454,16 +454,17 @@ final class AppState: ObservableObject {
     // AppState re-exposes its properties as same-named facade forwarders.
     let alertCenter: AlertCenter
 
+    // Settings store (Slice 16-A). Owns the persisted settings, the tier
+    // state (isProUnlocked, featureFlags), languageBundle, and the
+    // IAPManager; persists its own keys on change. Views observe it via
+    // @Environment(SettingsStore.self).
+    let settingsStore: SettingsStore
+
     // Dependencies kept private
-    private let iapManager: IAPManager
     private let userDefaults: UserDefaults
     private let playlistStore: PlaylistStore
 
-    // Derived from IAPManager
-    private(set) var featureFlags: CoreFeatureFlags
-
     // Published state (excerpt)
-    @Published private(set) var isProUnlocked: Bool
     @Published var playlists: [Playlist]
     @Published var activePlaylistIndex: Int = 0
     @Published var currentTrack: Track?
@@ -477,6 +478,10 @@ final class AppState: ObservableObject {
         set { alertCenter.lastError = newValue }
     }
 
+    // Facade forwarder (excerpt) — tier state lives in SettingsStore
+    // (Slice 16-A); kept for un-migrated readers.
+    var isProUnlocked: Bool { settingsStore.isProUnlocked }
+
     init(
         iapManager: IAPManager,
         provider: CoreServiceProviding,
@@ -487,12 +492,16 @@ final class AppState: ObservableObject {
         eqCoordinator: EQCoordinator? = nil
     ) {
         // Alert store first — no dependencies (Slice 13-A).
-        self.alertCenter  = AlertCenter()
-        self.iapManager   = iapManager
-        self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        self.alertCenter   = AlertCenter()
+        // Settings store — owns the IAP manager, derives the feature flags,
+        // and restores the settings keys from userDefaults (Slice 16-A).
+        self.settingsStore = SettingsStore(
+            iapManager:   iapManager,
+            userDefaults: userDefaults
+        )
 
         let coreFactory = CoreFactory(
-            featureFlags: featureFlags,
+            featureFlags: settingsStore.featureFlags,
             provider:     provider
         )
         self.playbackService  = coreFactory.makePlaybackService()
@@ -521,16 +530,18 @@ final class AppState: ObservableObject {
                 store:   EQPersistenceStore(defaults: userDefaults)
             )
 
-        self.isProUnlocked  = iapManager.isProUnlocked
         self.playlists      = [Playlist(name: "Playlist 1")]
         self.userDefaults   = userDefaults
         // Playlist store — injected fake for tests, default for production.
         // Built in the @MainActor init body (not a default argument) because a
         // @MainActor initializer cannot run in the nonisolated default-arg context.
         self.playlistStore  = playlistStore ?? FilePlaylistStore()
-        // ... (remaining init: undoManager, languageBundle, restoreState(),
-        //      Combine sinks for replayGainMode/selectedLanguage, and the
-        //      $currentTrack sink that calls lyricsStore.updateResolution(for:))
+        // ... (remaining init: undoManager, restoreState(), the settings
+        //      store's closure wiring — onReplayGainModeChanged →
+        //      applyReplayGainVolume(requiresActivePlayback: true) and
+        //      onPaywallRequested → alertCenter.presentPaywall() — the
+        //      repeatMode/isShuffled persistence sinks, and the $currentTrack
+        //      sink that calls lyricsStore.updateResolution(for:))
 
         // NowPlayingCoordinator (Slice 9-L). Constructed last so all stored
         // properties are initialised before the seven action closures capture
@@ -559,7 +570,7 @@ final class AppState: ObservableObject {
 }
 ```
 
-**Wiring flow:** `IAPManager` → `CoreFeatureFlags` → `CoreFactory` → Services.
+**Wiring flow:** `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services.
 
 ### 3.2 Async Playback Methods
 
@@ -769,8 +780,8 @@ Three implementations exist, all conforming to the `IAPManager` protocol:
 
 ### 5.1 StoreKitIAPManager (Production)
 
-Uses StoreKit 2 with a UserDefaults cache so AppState's synchronous init
-can read `isProUnlocked` without awaiting:
+Uses StoreKit 2 with a UserDefaults cache so `SettingsStore`'s synchronous
+init can read `isProUnlocked` without awaiting:
 
 ```swift
 import Foundation
@@ -862,18 +873,25 @@ final class FreeTierIAPManager: IAPManager {
 }
 ```
 
-### 5.3 AppState IAP Surface
+### 5.3 SettingsStore IAP Surface
+
+The IAP surface lives on `SettingsStore` (Slice 16-A), which owns the
+`IAPManager`. `PaywallView` calls it via `@Environment(SettingsStore.self)`:
 
 ```swift
-extension AppState {
+@MainActor @Observable
+final class SettingsStore {
     func purchasePro() async throws {
         try await iapManager.purchasePro()
-        isProUnlocked = iapManager.isProUnlocked
-        featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        refreshTierState()
     }
 
     func refreshEntitlements() async {
         await iapManager.refreshEntitlements()
+        refreshTierState()
+    }
+
+    private func refreshTierState() {
         isProUnlocked = iapManager.isProUnlocked
         featureFlags = CoreFeatureFlags(iapManager: iapManager)
     }
@@ -924,6 +942,9 @@ struct HarmoniaPlayerApp: App {
                 // Lyrics store (Slice 14-A) — required by ContentView,
                 // PlayerView, and LyricsPanel.
                 .environment(appState.lyricsStore)
+                // Settings store (Slice 16-A) — required by PaywallView,
+                // presented as a sheet from ContentView.
+                .environment(appState.settingsStore)
                 .focusedSceneObject(appState)
                 .onReceive(NotificationCenter.default.publisher(
                     for: NSApplication.willTerminateNotification
@@ -944,7 +965,8 @@ struct HarmoniaPlayerApp: App {
         .windowResizability(.contentMinSize)
 
         Settings {
-            SettingsView().environmentObject(appState)
+            // SettingsView reads only the settings store (Slice 16-A).
+            SettingsView().environment(appState.settingsStore)
         }
     }
 }
@@ -1100,7 +1122,7 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 | `StubLyricsService` | `LyricsService` | Configurable: `stubbedResolution` dictates `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Defined inline in `FakeCoreProvider.swift` (Slice 9-J) |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last-value capture; defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters, last-value captures, `updatedElapsedHistory` array, and pull-side callback properties tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
-| `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, call counts |
+| `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, `entitlementAfterRefresh` applied by `refreshEntitlements()` (Slice 16-A), call counts |
 
 ### 7.2 @MainActor Test Classes (Swift 6)
 
@@ -1196,6 +1218,15 @@ let mockIAP = MockIAPManager(isProUnlocked: false)
 mockIAP.purchaseResult = .success
 // or
 mockIAP.purchaseResult = .failure(.userCancelled)
+// Mock an entitlement refresh that finds a purchase
+mockIAP.entitlementAfterRefresh = true
+
+// Settings store built directly (Slice 16-A) — relaunch is a second store
+// on the same isolated suite
+let settingsStore = SettingsStore(iapManager: mockIAP, userDefaults: testDefaults)
+settingsStore.replayGainMode = .album
+let relaunched = SettingsStore(iapManager: mockIAP, userDefaults: testDefaults)
+XCTAssertEqual(relaunched.replayGainMode, .album)
 
 // Stub a lyrics resolution (Slice 14-A: the SUT is LyricsStore, built
 // directly — no AppState needed)
@@ -1259,8 +1290,10 @@ AVAssetReaderDecoder, AVAudioEngine, AVMetadataTagReader (AVFoundation)
    - MediaPlayer: `MPNowPlayingAdapter` (Slice 9-L, system Now Playing surface)
    - Any other file importing either is a boundary violation
 
-5. **Views use AppState only**
-   - No ViewModels — AppState is the single observable state
+5. **Views use AppState and the feature stores only**
+   - No ViewModels — AppState plus the extracted `@Observable` feature
+     stores (`AlertCenter`, `LyricsStore`, `SettingsStore`) are the
+     observable state
    - No direct service access from Views
    - Async AppState methods dispatched via `Task { await ... }`
 
@@ -1343,6 +1376,8 @@ static var transferRepresentation: some TransferRepresentation {
 ---
 
 ### ❌ Don't: Forget to rebuild `featureFlags` after purchase
+
+In `SettingsStore`:
 
 ```swift
 func purchasePro() async throws {

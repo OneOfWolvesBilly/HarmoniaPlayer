@@ -24,7 +24,7 @@ enum LayoutPreset: String, CaseIterable, Equatable, Sendable {
 
 /// UI preference state for the main player window
 ///
-/// Value type (struct). Stored in `AppState.viewPreferences` and
+/// Value type (struct). Stored in `SettingsStore.viewPreferences` and
 /// observed by SwiftUI views for layout decisions.
 ///
 /// **Default** (via `.defaultPreferences`):
@@ -35,10 +35,10 @@ enum LayoutPreset: String, CaseIterable, Equatable, Sendable {
 /// **Usage:**
 /// ```swift
 /// // Read
-/// if appState.viewPreferences.isWaveformVisible { ... }
+/// if settingsStore.viewPreferences.isWaveformVisible { ... }
 ///
 /// // Mutate
-/// appState.viewPreferences.layoutPreset = .compact
+/// settingsStore.viewPreferences.layoutPreset = .compact
 /// ```
 struct ViewPreferences: Equatable, Sendable {
     var isWaveformVisible: Bool

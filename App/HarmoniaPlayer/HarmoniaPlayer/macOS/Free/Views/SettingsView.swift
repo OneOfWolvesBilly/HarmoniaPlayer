@@ -10,13 +10,13 @@ import AppKit
 
 /// Settings window content view (⌘,).
 ///
-/// Binds directly to `AppState` published state.
+/// Binds to `SettingsStore` via `@Environment(SettingsStore.self)` and
+/// `@Bindable`; the store persists each setting when it changes.
 /// No `import HarmoniaCore`.
-/// All UI strings use `String(localized:bundle:appState.languageBundle)`
-/// for runtime language switching support.
+/// All UI strings use `NSLocalizedString(bundle: settingsStore.languageBundle)`.
 struct SettingsView: View {
     
-    @EnvironmentObject private var appState: AppState
+    @Environment(SettingsStore.self) private var settingsStore
 
     @AppStorage("hp.marqueeSpeed") private var marqueeSpeed: Double = 40.0
     @AppStorage("hp.marqueePause") private var marqueePause: Double = 1.0
@@ -25,7 +25,7 @@ struct SettingsView: View {
     // MARK: - Localization helper
     
     private func L(_ key: String) -> String {
-        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+        NSLocalizedString(key, bundle: settingsStore.languageBundle, comment: "")
     }
     
     // MARK: - Available languages (implemented language packs)
@@ -39,9 +39,11 @@ struct SettingsView: View {
     ]
     
     var body: some View {
+        @Bindable var settingsStore = settingsStore
+
         Form {
             Section {
-                Toggle(isOn: $appState.allowDuplicateTracks) {
+                Toggle(isOn: $settingsStore.allowDuplicateTracks) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("settings_allow_duplicates"))
                         Text(L("settings_allow_duplicates_desc"))
@@ -103,7 +105,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Picker(L("settings_replay_gain_mode"), selection: $appState.replayGainMode) {
+                Picker(L("settings_replay_gain_mode"), selection: $settingsStore.replayGainMode) {
                     Text("Off").tag(ReplayGainMode.off)
                     Text("Track").tag(ReplayGainMode.track)
                     Text("Album").tag(ReplayGainMode.album)
@@ -115,7 +117,7 @@ struct SettingsView: View {
             }
 
             Section {
-                Picker(L("settings_section_language"), selection: $appState.selectedLanguage) {
+                Picker(L("settings_section_language"), selection: $settingsStore.selectedLanguage) {
                     ForEach(languageOptions, id: \.id) { option in
                         // "System Default" label is intentionally not localized —
                         // it always shows in English so the user can find it after
@@ -129,8 +131,8 @@ struct SettingsView: View {
                 }
                 .pickerStyle(.menu)
                 .accessibilityIdentifier("language-picker")
-                .onChange(of: appState.selectedLanguage) {
-                    applyLanguageAndRestart(appState.selectedLanguage)
+                .onChange(of: settingsStore.selectedLanguage) {
+                    applyLanguageAndRestart(settingsStore.selectedLanguage)
                 }
             } header: {
                 Text(L("settings_section_language"))

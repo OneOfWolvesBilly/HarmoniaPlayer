@@ -136,26 +136,4 @@ final class IAPManagerTests: XCTestCase {
     //     XCTAssertFalse(appState.showPaywall,
     //                    "showPaywall should remain false for Pro user")
     // }
-
-    // MARK: - purchasePro side effects
-
-    /// After a successful purchase, featureFlags must reflect Pro tier
-    /// so FLAC/DSF/DFF are no longer gated.
-    func testPurchasePro_UpdatesFeatureFlags() async {
-        let suite = UserDefaults(suiteName: "hp-test-\(UUID().uuidString)")!
-        let mock = MockIAPManager(isProUnlocked: false)
-        mock.purchaseResult = .success
-        let appState = AppState(
-            iapManager: mock,
-            provider: FakeCoreProvider(),
-            userDefaults: suite,
-            playlistStore: FakePlaylistStore()
-        )
-        XCTAssertFalse(appState.featureFlags.supportsFLAC, "Pre-condition: Free tier")
-
-        try? await appState.purchasePro()
-
-        XCTAssertTrue(appState.featureFlags.supportsFLAC,
-                      "featureFlags must reflect Pro tier after successful purchase")
-    }
 }

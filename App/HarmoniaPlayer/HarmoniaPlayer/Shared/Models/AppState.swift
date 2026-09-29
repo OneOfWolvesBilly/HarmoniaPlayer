@@ -20,14 +20,11 @@ extension Array {
 private enum PersistenceKey {
     static let playlists           = "hp.playlists"
     static let activePlaylistIndex = "hp.activePlaylistIndex"
-    static let allowDuplicates     = "hp.allowDuplicateTracks"
     static let volume              = "hp.volume"
-    static let selectedLanguage    = "hp.selectedLanguage"
     static let sortKey             = "hp.sortKey"
     static let sortAscending       = "hp.sortAscending"
     static let repeatMode          = "hp.repeatMode"
     static let isShuffled          = "hp.isShuffled"
-    static let replayGainMode      = "hp.replayGainMode"
 }
 
 /// Central application state container.
@@ -49,19 +46,12 @@ final class AppState: ObservableObject {
 
     // MARK: - Dependencies
 
-    /// IAP manager (determines Free/Pro)
-    private let iapManager: IAPManager
-
     /// UserDefaults store used for persistence.
     private let userDefaults: UserDefaults
 
     /// Durable store for the playlist collection, kept outside UserDefaults
     /// because playlists exceed the UserDefaults single-value size limit.
     private let playlistStore: PlaylistStore
-
-    /// Feature flags (derived from IAP).
-    /// Exposes tier-specific capabilities used by format gating and UI.
-    private(set) var featureFlags: CoreFeatureFlags
 
     /// UndoManager for playlist operations (load, removeTrack, moveTrack).
     ///
@@ -83,6 +73,11 @@ final class AppState: ObservableObject {
     /// body reads lyrics state observe it via
     /// `@Environment(LyricsStore.self)`.
     let lyricsStore: LyricsStore
+
+    /// Settings store — owns the user settings, the Free/Pro tier state,
+    /// and the UI string bundle. Views whose body reads settings state
+    /// observe it via `@Environment(SettingsStore.self)`.
+    let settingsStore: SettingsStore
 
     // MARK: - Services
 
@@ -134,9 +129,8 @@ final class AppState: ObservableObject {
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
-    ///
-    /// Derived from feature flags. UI can observe this for Pro gating.
-    @Published private(set) var isProUnlocked: Bool
+    /// Read-only forwarder to `settingsStore.isProUnlocked`.
+    var isProUnlocked: Bool { settingsStore.isProUnlocked }
 
     /// Read-only mirror of `eqCoordinator.isEnabled` so SwiftUI views bound to
     /// `AppState` re-render when EQ enable is toggled. The coordinator remains
@@ -177,17 +171,6 @@ final class AppState: ObservableObject {
     /// the playlist selection when `currentTrack` is nil (e.g. after stop).
     /// Selection does NOT follow playback — it reflects user clicks only.
     @Published var selectedTrackIDs = Set<Track.ID>()
-
-    // MARK: - UI Preference State
-
-    /// UI layout and visibility preferences.
-    ///
-    /// Initialised to `.defaultPreferences` at app launch.
-    /// Mutable so views and actions can update it directly:
-    /// ```swift
-    /// appState.viewPreferences.layoutPreset = .compact
-    /// ```
-    @Published var viewPreferences: ViewPreferences = .defaultPreferences
 
     // MARK: - Playback State
 
@@ -313,15 +296,15 @@ final class AppState: ObservableObject {
         set { alertCenter.paywallDismissedThisSession = newValue }
     }
 
-    // MARK: - Settings
+    // MARK: - Settings (facade → SettingsStore)
 
     /// Whether duplicate URLs are allowed in the playlist.
-    ///
-    /// Default: `false` — duplicates are skipped and reported via `skippedDuplicateURLs`.
-    /// When `true`, the duplicate-URL check in `load(urls:)` is bypassed.
-    ///
-    /// Not `private(set)`: `SettingsView` binds directly via `$appState.allowDuplicateTracks`.
-    @Published var allowDuplicateTracks: Bool = false
+    /// Forwards to `settingsStore.allowDuplicateTracks`; read by the
+    /// duplicate-URL check in `load(urls:)`.
+    var allowDuplicateTracks: Bool {
+        get { settingsStore.allowDuplicateTracks }
+        set { settingsStore.allowDuplicateTracks = newValue }
+    }
 
     // MARK: - Volume State
 
@@ -331,22 +314,11 @@ final class AppState: ObservableObject {
     /// Persisted across launches by Slice 7-E (persistence).
     @Published var volume: Float = 1.0
 
-    // MARK: - Language State
-
-    /// BCP-47 language tag for UI language override, or `"system"` to follow system locale.
-    ///
-    /// Default: `"system"`. Updated by `SettingsView` language picker.
-    /// Persisted across launches via `UserDefaults`.
-    /// Changing this value triggers an app restart; the new language takes effect
-    /// after relaunch, keeping UI strings and system menus in sync.
-    @Published var selectedLanguage: String = "system"
+    // MARK: - Language (facade → SettingsStore)
 
     /// The `Bundle` used for all `NSLocalizedString(bundle:)` calls.
-    ///
-    /// Fixed at launch from the persisted `hp.selectedLanguage` value so that
-    /// UI strings and system menus (which also require a restart) change together.
-    /// Not recomputed when `selectedLanguage` changes — the app must restart first.
-    let languageBundle: Bundle
+    /// Read-only forwarder to `settingsStore.languageBundle`.
+    var languageBundle: Bundle { settingsStore.languageBundle }
 
     // MARK: - Repeat Mode State
 
@@ -359,14 +331,15 @@ final class AppState: ObservableObject {
     /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
     @Published var isShuffled: ShuffleMode = .off
 
-    // MARK: - ReplayGain State
+    // MARK: - ReplayGain (facade → SettingsStore)
 
     /// Current ReplayGain application mode.
-    ///
-    /// Defaults to `.off`. Updated by `SettingsView` picker.
-    /// Persisted across launches via `UserDefaults`.
-    /// Applied in `play(trackID:)` to adjust the effective playback volume.
-    @Published var replayGainMode: ReplayGainMode = .off
+    /// Forwards to `settingsStore.replayGainMode`; applied in
+    /// `play(trackID:)` to adjust the effective playback volume.
+    var replayGainMode: ReplayGainMode {
+        get { settingsStore.replayGainMode }
+        set { settingsStore.replayGainMode = newValue }
+    }
 
     /// Pre-shuffled track ID order used when shuffle is enabled.
     ///
@@ -457,7 +430,7 @@ final class AppState: ObservableObject {
     /// ```
     /// IAPManager
     ///     ↓
-    /// CoreFeatureFlags (derived)
+    /// SettingsStore (CoreFeatureFlags derived)
     ///     ↓
     /// CoreFactory (with flags)
     ///     ↓
@@ -476,15 +449,17 @@ final class AppState: ObservableObject {
         // and every later step may surface an alert through it.
         self.alertCenter = AlertCenter()
 
-        // Step 1: Store IAP manager
-        self.iapManager = iapManager
+        // Step 1: Construct the settings store. It takes ownership of the
+        // IAP manager, derives the feature flags, and restores the persisted
+        // settings from the injected UserDefaults.
+        self.settingsStore = SettingsStore(
+            iapManager: iapManager,
+            userDefaults: userDefaults
+        )
 
-        // Step 2: Derive feature flags from IAP
-        self.featureFlags = CoreFeatureFlags(iapManager: iapManager)
-
-        // Step 3: Create factory with flags
+        // Step 3: Create factory with the settings store's flags
         let coreFactory = CoreFactory(
-            featureFlags: featureFlags,
+            featureFlags: settingsStore.featureFlags,
             provider: provider
         )
 
@@ -526,9 +501,6 @@ final class AppState: ObservableObject {
         self.undoManager = undoManager ?? UndoManager()
         self.undoManager.levelsOfUndo = 10
 
-        // Step 6: Expose Pro unlock state
-        self.isProUnlocked = iapManager.isProUnlocked
-
         // Step 7: Initialise playlist state
         self.playlists = [Playlist(name: "Playlist 1")]
         self.currentTrack = nil
@@ -542,47 +514,24 @@ final class AppState: ObservableObject {
         // context (same constraint as undoManager below).
         self.playlistStore = playlistStore ?? FilePlaylistStore()
 
-        // Step 9: Resolve languageBundle from persisted setting.
-        // Fixed at launch so UI strings and system menus change together after restart.
-        let persistedLang = userDefaults.string(forKey: "hp.selectedLanguage") ?? "en"
-        if persistedLang != "system",
-           let path = Bundle.main.path(forResource: persistedLang, ofType: "lproj"),
-           let bundle = Bundle(path: path) {
-            self.languageBundle = bundle
-        } else {
-            self.languageBundle = .main
-        }
-
         // Step 10: Restore persisted state (overrides Step 7 defaults if data exists)
         restoreState()
 
-        // Step 11: React to replayGainMode changes during active playback.
-        // When the user switches mode in Settings, immediately re-apply the
-        // effective volume so the change is audible without restarting the track.
-        $replayGainMode
-            .dropFirst()            // skip the initial emission at subscription time
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                guard let self else { return }
-                Task { @MainActor in await self.applyReplayGainVolume(requiresActivePlayback: true) }
-            }
-            .store(in: &cancellables)
+        // Step 11: Wire the settings store's notifications. A ReplayGain mode
+        // change re-applies the effective volume during active playback, so
+        // the change is audible without restarting the track; a paywall
+        // request is presented through the alert store.
+        settingsStore.onReplayGainModeChanged = { [weak self] _ in
+            guard let self else { return }
+            Task { @MainActor in await self.applyReplayGainVolume(requiresActivePlayback: true) }
+        }
+        settingsStore.onPaywallRequested = { [weak alertCenter = self.alertCenter] in
+            alertCenter?.presentPaywall()
+        }
 
-        // Step 12: Persist replayGainMode, selectedLanguage, repeatMode, and
-        // isShuffled whenever they change. Callers must not call saveState()
-        // directly — persistence is AppState's responsibility.
-        $replayGainMode
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.saveState() }
-            .store(in: &cancellables)
-
-        $selectedLanguage
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.saveState() }
-            .store(in: &cancellables)
-        
+        // Step 12: Persist repeatMode and isShuffled whenever they change.
+        // Callers must not call saveState() directly — persistence is
+        // AppState's responsibility.
         $repeatMode
             .dropFirst()
             .receive(on: RunLoop.main)
@@ -703,65 +652,33 @@ final class AppState: ObservableObject {
         alertCenter.presentFileInfo(track)
     }
 
-    // MARK: - Paywall
+    // MARK: - Paywall (facade → SettingsStore)
 
     /// Shows the Pro paywall sheet if the user is on the Free tier.
     ///
-    /// Checks `isProUnlocked` (tier logic stays in the facade, out of the
-    /// alert store), calls `alertCenter.presentPaywall()`, and returns
-    /// `true` when `isProUnlocked == false`. Returns `false` (and does not
-    /// show the paywall) when Pro is already unlocked.
-    ///
-    /// Call this guard before any Pro-only action:
-    /// ```swift
-    /// guard !showPaywallIfNeeded() else { return }
-    /// // proceed with Pro action
-    /// ```
+    /// Forwards to `settingsStore.showPaywallIfNeeded()`, whose paywall
+    /// request reaches `alertCenter.presentPaywall()` through the
+    /// `onPaywallRequested` closure wired in `init`. Returns `true` when the
+    /// paywall was requested, `false` when Pro is already unlocked.
     @discardableResult
     func showPaywallIfNeeded() -> Bool {
-        guard !isProUnlocked else { return false }
-        alertCenter.presentPaywall()
-        return true
-    }
-
-    // MARK: - IAP
-
-    /// Initiates the Pro purchase flow via `IAPManager`.
-    ///
-    /// On success, `isProUnlocked` is refreshed from `iapManager.isProUnlocked`.
-    /// Throws `IAPError` on failure or user cancellation.
-    func purchasePro() async throws {
-        try await iapManager.purchasePro()
-        isProUnlocked = iapManager.isProUnlocked
-        featureFlags = CoreFeatureFlags(iapManager: iapManager)
-    }
-
-    /// Refreshes Pro entitlements from the App Store via `IAPManager`.
-    ///
-    /// Updates `isProUnlocked` from `iapManager.isProUnlocked` after completion.
-    /// Call at app launch to verify cached purchase state.
-    func refreshEntitlements() async {
-        await iapManager.refreshEntitlements()
-        isProUnlocked = iapManager.isProUnlocked
-        featureFlags = CoreFeatureFlags(iapManager: iapManager)
+        settingsStore.showPaywallIfNeeded()
     }
 
     // MARK: - Persistence
 
-    /// Saves playlist, activePlaylistIndex, allowDuplicateTracks, and volume to UserDefaults.
+    /// Saves playlist, activePlaylistIndex, volume, repeatMode, and isShuffled.
+    /// Settings keys are persisted by `SettingsStore` at change time.
     ///
     /// Called by the app entry point when `NSApplication.willTerminateNotification` fires.
     func saveState() {
         try? playlistStore.save(playlists)
         userDefaults.set(activePlaylistIndex, forKey: PersistenceKey.activePlaylistIndex)
-        userDefaults.set(allowDuplicateTracks, forKey: PersistenceKey.allowDuplicates)
         userDefaults.set(volume, forKey: PersistenceKey.volume)
-        userDefaults.set(selectedLanguage, forKey: PersistenceKey.selectedLanguage)
         if let repeatData = try? JSONEncoder().encode(repeatMode) {
             userDefaults.set(repeatData, forKey: PersistenceKey.repeatMode)
         }
         userDefaults.set(isShuffled, forKey: PersistenceKey.isShuffled)
-        userDefaults.set(replayGainMode.rawValue, forKey: PersistenceKey.replayGainMode)
     }
 
     /// Restores previously saved state from UserDefaults.
@@ -800,14 +717,8 @@ final class AppState: ObservableObject {
                 }
             }
         }
-        if userDefaults.object(forKey: PersistenceKey.allowDuplicates) != nil {
-            allowDuplicateTracks = userDefaults.bool(forKey: PersistenceKey.allowDuplicates)
-        }
         if userDefaults.object(forKey: PersistenceKey.volume) != nil {
             volume = userDefaults.float(forKey: PersistenceKey.volume)
-        }
-        if let lang = userDefaults.string(forKey: PersistenceKey.selectedLanguage) {
-            selectedLanguage = lang
         }
         if let repeatData = userDefaults.data(forKey: PersistenceKey.repeatMode),
            let decoded = try? JSONDecoder().decode(RepeatMode.self, from: repeatData) {
@@ -815,10 +726,6 @@ final class AppState: ObservableObject {
         }
         if userDefaults.object(forKey: PersistenceKey.isShuffled) != nil {
             isShuffled = userDefaults.bool(forKey: PersistenceKey.isShuffled)
-        }
-        if let raw = userDefaults.string(forKey: PersistenceKey.replayGainMode),
-           let mode = ReplayGainMode(rawValue: raw) {
-            replayGainMode = mode
         }
 
         // Background metadata refresh: re-reads fields for tracks that were

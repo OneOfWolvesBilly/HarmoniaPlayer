@@ -50,6 +50,10 @@ final class MockIAPManager: IAPManager {
     /// What `purchasePro()` will do. Default: `.failure(.notAvailable)`.
     var purchaseResult: PurchaseResult = .failure(.notAvailable)
 
+    /// Entitlement state `refreshEntitlements()` applies. Default: `nil`
+    /// (refresh only records the call and leaves `isProUnlocked` unchanged).
+    var entitlementAfterRefresh: Bool?
+
     // MARK: - Call tracking
 
     var refreshEntitlementsCallCount = 0
@@ -66,9 +70,12 @@ final class MockIAPManager: IAPManager {
 
     // MARK: - IAPManager
 
-    /// Stub: records the call. Does not change `isProUnlocked`.
+    /// Stub: records the call and applies `entitlementAfterRefresh` when set.
     func refreshEntitlements() async {
         refreshEntitlementsCallCount += 1
+        if let entitlement = entitlementAfterRefresh {
+            isProUnlocked = entitlement
+        }
     }
 
     /// Stub: applies `purchaseResult` — either unlocks Pro or throws.

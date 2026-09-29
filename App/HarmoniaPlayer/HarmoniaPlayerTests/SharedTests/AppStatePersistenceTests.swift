@@ -100,14 +100,6 @@ final class AppStatePersistenceTests: XCTestCase {
         XCTAssertEqual(sut.playlist.sortKey, .title)
     }
 
-    func testSaveAndRestore_AllowDuplicates_Survives() {
-        sut.allowDuplicateTracks = true
-        sut.saveState()
-        sut.restoreState()
-
-        XCTAssertTrue(sut.allowDuplicateTracks)
-    }
-
     func testSaveAndRestore_Volume_Survives() async {
         await sut.setVolume(0.7)
         sut.saveState()
@@ -226,21 +218,6 @@ final class AppStatePersistenceTests: XCTestCase {
     }
 
     // MARK: - Combine sink auto-save (no explicit saveState() call)
-
-    /// Changing `replayGainMode` must trigger automatic persistence via its
-    /// Combine sink — SettingsView must NOT need to call saveState() directly.
-    func testReplayGainMode_AutoSaves_ViaCombineSink() async throws {
-        // When: change replayGainMode without calling saveState()
-        sut.replayGainMode = .album
-
-        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        // Then: a fresh AppState backed by the same UserDefaults reads back the value
-        let restored = makeRestoredAppState()
-        XCTAssertEqual(restored.replayGainMode, .album,
-                       "replayGainMode must be persisted automatically via Combine sink")
-    }
 
     /// Changing `repeatMode` must trigger automatic persistence via its
     /// Combine sink — toggling repeat must NOT require an explicit saveState() call.

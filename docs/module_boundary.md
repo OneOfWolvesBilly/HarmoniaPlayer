@@ -54,6 +54,12 @@ At a high level, the codebase is divided into the following logical modules.
      store extracted from AppState under the v1.1.0 decomposition
      program. Lives in `Shared/Models/` parallel to `AlertCenter`.
      Slice 14-A. See §4.4(a).
+   - `SettingsStore` — `@MainActor @Observable` feature store owning the
+     persisted user settings, `viewPreferences`, the Free/Pro tier state,
+     the UI string bundle, and the `IAPManager` dependency; the third
+     store extracted from AppState under the v1.1.0 decomposition
+     program. Lives in `Shared/Models/` parallel to `AlertCenter`.
+     Slice 16-A. See §4.9.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
      `PlaylistReorderItem`, `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
@@ -147,7 +153,7 @@ TagReaderPort, etc.)]
 
 1. **UI Layer** may depend on:
    - Application Layer (AppState, feature stores such as `AlertCenter` /
-     `LyricsStore`, UI models).
+     `LyricsStore` / `SettingsStore`, UI models).
    - Standard Apple frameworks (SwiftUI, Combine, Foundation) for rendering and binding.
 
    UI Layer **must not**:
@@ -510,11 +516,13 @@ no service dependencies.
 migration.** AppState constructs the store (`let alertCenter`, first in
 `init`) and re-exposes every migrated property as a same-named computed
 forwarder (get + set), plus delegating facade methods
-(`clearLastError()`, `showFileInfo(trackID:)`, `showPaywallIfNeeded()`).
+(`clearLastError()`, `showFileInfo(trackID:)`).
 Un-migrated call sites in the `AppState+…` extensions keep writing
-through the facade; tier logic (`isProUnlocked`) and the
-`playbackState` `.error → .stopped` transition deliberately stay in the
-facade rather than entering the store. Because `@Observable` tracks the
+through the facade; the `playbackState` `.error → .stopped` transition
+deliberately stays in the facade rather than entering the store. Tier
+logic never enters AlertCenter: since Slice 16-A the paywall tier check
+lives in `SettingsStore` and reaches `presentPaywall()` through a
+root-wired closure (§4.9(c)). Because `@Observable` tracks the
 store property access through the forwarding getter, views observing
 either surface re-render correctly (`ObservableObject` and `@Observable`
 coexist in one view).
@@ -528,6 +536,49 @@ crashes at first read by design (wiring bugs must surface in
 development, not silently no-op). `HarmoniaPlayerCommands` is not a
 scene subtree receiving environment; it reaches the store through the
 focused `appState.alertCenter` path.
+
+### 4.9 SettingsStore Placement, Persistence Ownership, and Root-Wired Closures
+
+Slice 16-A extracted the third `@MainActor @Observable` feature store from
+AppState. Four boundary nuances:
+
+**(a) Why `SettingsStore` lives in `Shared/Models/` and owns
+`IAPManager`.** Same Models-vs-Services rule as §4.3(a). The store owns
+`allowDuplicateTracks`, `selectedLanguage`, `replayGainMode`,
+`viewPreferences`, the tier state (`isProUnlocked`, `featureFlags`), the
+launch-fixed `languageBundle`, and the `IAPManager` interface — so the
+Free/Pro source of truth is one Application Layer store, and AppState
+builds `CoreFactory` from `settingsStore.featureFlags`.
+
+**(b) The store owns its persistence keys.** `hp.allowDuplicateTracks`,
+`hp.selectedLanguage`, and `hp.replayGainMode` are restored in the
+store's `init` and written by each property's `didSet` at change time,
+through the `UserDefaults` instance AppState injects. AppState's
+`saveState()` / `restoreState()` no longer touch them, and the former
+AppState `$replayGainMode` / `$selectedLanguage` Combine sinks are gone
+(`@Observable` properties have no `$` publishers). This is the first
+application of the per-store persistence split
+(`docs/slice/appstate_refactor_plan.md` §6.1).
+
+**(c) No store-to-store dependency; the composition root wires
+closures.** SettingsStore depends only on `IAPManager` and
+`UserDefaults`. Its two outward effects leave through closures that
+AppState assigns in `init`: `onReplayGainModeChanged` →
+`applyReplayGainVolume(requiresActivePlayback: true)`, and
+`onPaywallRequested` → `alertCenter.presentPaywall()`. The paywall tier
+policy therefore lives with the tier data (`showPaywallIfNeeded()` on the
+store) while presentation stays in AlertCenter — the same
+closure-injection precedent as `NowPlayingCoordinator` (§4.5).
+
+**(d) Facade and injection.** AppState keeps forwarders only for members
+with remaining internal or un-migrated view readers —
+`allowDuplicateTracks` / `replayGainMode` (get + set), `isProUnlocked` /
+`languageBundle` (get-only), and `showPaywallIfNeeded()`.
+`SettingsView` and `PaywallView` declare `@Environment(SettingsStore.self)`
+(with `@Bindable` for the toggle and pickers); `HarmoniaPlayerApp`
+injects the store on the main window scene (PaywallView is a sheet there)
+and on the Settings scene, whose subtree no longer reads AppState. The
+§4.8(c) injection rules apply unchanged.
 
 ---
 
@@ -546,12 +597,12 @@ architecture clean.
 
 3. **Views importing StoreKit or IAPManager**
    - ❌ SwiftUI views must not call StoreKit APIs directly.
-   - ✅ They may observe exposed state such as `isProUnlocked` forwarded by `AppState`.
+   - ✅ They may observe exposed state such as `isProUnlocked` on `SettingsStore` (or its `AppState` forwarder), and call `SettingsStore.purchasePro()` / `refreshEntitlements()`.
 
 4. **Core services knowing about Free vs Pro**
    - ❌ `PlaybackService` must not perform product checks.
    - ✅ `AppState` decides which `PlaybackService` configuration to use based on
-     `IAPManager.isProUnlocked`.
+     `settingsStore.featureFlags`, derived from `IAPManager.isProUnlocked`.
 
 5. **Adapters accessing SwiftUI state**
    - ❌ `OSLogAdapter` must not depend on any view or `AppState`.
@@ -610,12 +661,13 @@ struct PlayerView: View {
 ```swift
 @MainActor
 final class AppState: ObservableObject {
+    let settingsStore: SettingsStore
     let playbackService: PlaybackService
     let tagReaderService: TagReaderService
 
     init(iapManager: IAPManager, provider: CoreServiceProviding, ...) {
-        let featureFlags = CoreFeatureFlags(iapManager: iapManager)
-        let coreFactory = CoreFactory(featureFlags: featureFlags, provider: provider)
+        self.settingsStore = SettingsStore(iapManager: iapManager, userDefaults: userDefaults)
+        let coreFactory = CoreFactory(featureFlags: settingsStore.featureFlags, provider: provider)
         self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
     }
@@ -775,7 +827,7 @@ When reviewing code, check these rules:
 - [ ] No imports of `HarmoniaCore`
 - [ ] No direct calls to `PlaybackService`
 - [ ] No access to Ports or Adapters
-- [ ] Only depends on `AppState`, the feature stores (`AlertCenter`, `LyricsStore`), and UI models
+- [ ] Only depends on `AppState`, the feature stores (`AlertCenter`, `LyricsStore`, `SettingsStore`), and UI models
 
 **Application Layer:**
 - [ ] Uses `PlaybackService` interface only
@@ -800,7 +852,7 @@ When reviewing code, check these rules:
 **HarmoniaCore-Swift Usage:**
 - [ ] Services are obtained through `CoreFactory`
 - [ ] No direct adapter instantiation outside Integration Layer
-- [ ] Free vs Pro decisions made in AppState, not in Core
+- [ ] Free vs Pro decisions made in the app (`SettingsStore` tier state + AppState wiring), not in Core
 
 ---
 
@@ -832,14 +884,17 @@ struct PlayerView: View {
 ## 10. Summary
 
 - **Views** depend on AppState and the feature stores (`AlertCenter`,
-  `LyricsStore`) only.
-- **AppState** depends on CoreFactory / IAPManager / PlaybackService interface / TagReaderService interface.
+  `LyricsStore`, `SettingsStore`) only.
+- **AppState** depends on CoreFactory / PlaybackService interface / TagReaderService interface, and hands the `IAPManager` to `SettingsStore`.
 - **LyricsStore** depends on the `LyricsService` and `LyricsPreferenceStore`
   interfaces it owns.
+- **SettingsStore** depends on the `IAPManager` interface and `UserDefaults`;
+  it references no other store — its outward effects go through closures
+  wired by AppState. See §4.9.
 - **CoreFactory** depends on HarmoniaCore-Swift services, ports, and platform adapters.
 - **Platform adapters** depend on Apple frameworks and HarmoniaCore-Swift port
   protocols.
-- **Free vs Pro decisions** live in the app (AppState + IAPManager), not in the core engine.
+- **Free vs Pro decisions** live in the app (`SettingsStore` + IAPManager, wired by AppState), not in the core engine.
 - **TagReaderService** is an application-level abstraction that wraps HarmoniaCore's TagReaderPort.
 - **EQService** is bound to the shared `HarmoniaCore.PlaybackService` EQ control
   surface via closure binding inside `HarmoniaCoreProvider`. `HarmoniaEQAdapter`

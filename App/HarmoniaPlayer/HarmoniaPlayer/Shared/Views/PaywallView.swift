@@ -13,9 +13,11 @@
 //  - Shown via the `alertCenter.showPaywall` binding in ContentView.
 //  - Writes `alertCenter.paywallDismissedThisSession` on dismissal via
 //    `@Environment(AlertCenter.self)`.
-//  - Calls `appState.purchasePro()` and `appState.refreshEntitlements()`.
-//  - On successful purchase or restore, `isProUnlocked` is updated in AppState
-//    and the sheet is dismissed automatically.
+//  - Calls `settingsStore.purchasePro()` and
+//    `settingsStore.refreshEntitlements()` via
+//    `@Environment(SettingsStore.self)`.
+//  - On successful purchase or restore, `isProUnlocked` is updated in
+//    `SettingsStore` and the sheet is dismissed automatically.
 //  - `IAPError.userCancelled` is silently swallowed (no error shown).
 //  - All other errors surface as a brief error message below the feature list.
 //
@@ -28,7 +30,7 @@ import SwiftUI
 /// Automatically dismisses when `isProUnlocked` transitions to `true`.
 struct PaywallView: View {
 
-    @EnvironmentObject private var appState: AppState
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(AlertCenter.self) private var alertCenter
     @Environment(\.dismiss) private var dismiss
 
@@ -40,7 +42,7 @@ struct PaywallView: View {
     @State private var skipSession: Bool = true
 
     private func L(_ key: String) -> String {
-        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+        NSLocalizedString(key, bundle: settingsStore.languageBundle, comment: "")
     }
 
     // MARK: - Body
@@ -60,9 +62,9 @@ struct PaywallView: View {
         }
         .padding(32)
         .frame(minWidth: 380)
-        .onChange(of: appState.isProUnlocked) {
+        .onChange(of: settingsStore.isProUnlocked) {
             // Auto-dismiss once Pro is confirmed (purchase or restore).
-            if appState.isProUnlocked { dismiss() }
+            if settingsStore.isProUnlocked { dismiss() }
         }
     }
 
@@ -172,7 +174,7 @@ struct PaywallView: View {
         errorMessage = nil
         defer { isBusy = false }
         do {
-            try await appState.purchasePro()
+            try await settingsStore.purchasePro()
             // onChange(of: isProUnlocked) handles dismissal.
         } catch IAPError.userCancelled {
             // User tapped Cancel in the system purchase sheet — no error shown.
@@ -185,8 +187,8 @@ struct PaywallView: View {
         isBusy = true
         errorMessage = nil
         defer { isBusy = false }
-        await appState.refreshEntitlements()
-        if !appState.isProUnlocked {
+        await settingsStore.refreshEntitlements()
+        if !settingsStore.isProUnlocked {
             errorMessage = "No previous purchase found for this Apple ID."
         }
         // If purchase found, onChange(of: isProUnlocked) handles dismissal.

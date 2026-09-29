@@ -354,7 +354,8 @@ extension AppState {
     ///
     /// Called in two places:
     /// 1. `play(trackID:)` — once when a new track starts.
-    /// 2. The `$replayGainMode` Combine sink — whenever the user changes mode in Settings.
+    /// 2. The `settingsStore.onReplayGainModeChanged` closure wired in `init` —
+    ///    whenever the user changes mode in Settings.
     ///
     /// Gain logic:
     /// - `.off`  → use `volume` unchanged
@@ -367,7 +368,7 @@ extension AppState {
             guard playbackState == .playing || playbackState == .paused else { return }
         }
         // explicitTrack is passed from play(trackID:) before currentTrack is set.
-        // Combine sink passes nil and falls back to currentTrack instead.
+        // The mode-change closure passes nil and falls back to currentTrack instead.
         let track = explicitTrack ?? currentTrack
 
         let gainDB: Double? = {

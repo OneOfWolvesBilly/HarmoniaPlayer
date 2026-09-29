@@ -92,6 +92,11 @@ struct HarmoniaPlayerApp: App {
                 // LyricsPanel. The other scenes' subtrees do not read lyrics
                 // state and take no injection.
                 .environment(appState.lyricsStore)
+                // Settings store — required by PaywallView (presented as a
+                // sheet from ContentView). The Mini Player, Equalizer, and
+                // File Info subtrees read settings state only through
+                // AppState's forwarders and take no injection.
+                .environment(appState.settingsStore)
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
@@ -166,8 +171,10 @@ struct HarmoniaPlayerApp: App {
         .defaultLaunchBehavior(.suppressed)
 
         Settings {
+            // SettingsView reads only the settings store; nothing in this
+            // subtree reads AppState.
             SettingsView()
-                .environmentObject(appState)
+                .environment(appState.settingsStore)
         }
         .windowResizability(.contentMinSize)
     }

@@ -96,6 +96,35 @@ final class AppStatePlaylistTests: XCTestCase {
         XCTAssertEqual(sut.playlist.tracks.first?.title, "my-song")
     }
 
+    // MARK: - load(urls:) duplicate handling
+
+    func testLoad_DuplicateURL_DefaultBehaviour_IsSkipped() async {
+        let url = makeURLs(["track1"])[0]
+        await sut.load(urls: [url])
+        XCTAssertEqual(sut.playlist.tracks.count, 1, "Precondition")
+
+        await sut.load(urls: [url])
+
+        XCTAssertEqual(sut.playlist.tracks.count, 1,
+                       "Duplicate should be skipped when allowDuplicateTracks == false")
+        XCTAssertEqual(sut.skippedDuplicateURLs.count, 1,
+                       "Skipped URL should be reported")
+    }
+
+    func testLoad_DuplicateURL_WhenAllowed_IsAdded() async {
+        sut.allowDuplicateTracks = true
+        let url = makeURLs(["track1"])[0]
+        await sut.load(urls: [url])
+        XCTAssertEqual(sut.playlist.tracks.count, 1, "Precondition")
+
+        await sut.load(urls: [url])
+
+        XCTAssertEqual(sut.playlist.tracks.count, 2,
+                       "Duplicate should be added when allowDuplicateTracks == true")
+        XCTAssertTrue(sut.skippedDuplicateURLs.isEmpty,
+                      "skippedDuplicateURLs must be empty when duplicate is allowed")
+    }
+
     // MARK: - clearPlaylist()
 
     func testClearPlaylist_WithTracks_EmptiesPlaylist() async {
