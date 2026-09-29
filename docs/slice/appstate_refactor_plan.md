@@ -240,9 +240,11 @@ throughout.
 
 Each extraction slice performs, in order, all green at every step:
 
-1. **Red**: new `<Store>Tests.swift` lands with the store's contract tests
-   failing (store skeleton exists; behavior intentionally unwired — the
-   9-L red-phase precedent).
+1. **Red**: new `<Store>Tests.swift` is written with the store's contract
+   tests failing (store skeleton exists; behavior intentionally unwired —
+   the 9-L red-phase precedent); the red set is reported from the working
+   tree and is not committed on its own — red, green, and docs land as one
+   atomic code commit (harmonia-dev-workflow Workflow Summary).
 2. **Green**: store implemented; AppState constructs it (`let <store>`),
    deletes the migrated `@Published` properties, and re-exposes them as
    **facade computed properties** (get+set forwarding to the store) plus

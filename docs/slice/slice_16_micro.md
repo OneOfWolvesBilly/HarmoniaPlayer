@@ -95,9 +95,10 @@ and an upward-notification closure wired by the composition root
 - New store code builds warning-free under the Slice 12 baseline; this
   slice retires the baseline rows of the code it moves and re-measures
   every file it touches (plan §6.0 step 5).
-- TDD red-green: red commit lands the failing tests against an
-  intentionally-unwired skeleton (the 9-L precedent); "是請執行" gates
-  the green phase.
+- TDD red-green: the failing tests run against an intentionally-unwired
+  skeleton (the 9-L precedent) and the red set is reported uncommitted;
+  "是請執行" gates the green phase; red, green, and docs land as one
+  atomic code commit.
 
 ### Dependencies
 
@@ -289,7 +290,8 @@ store).
   - modify `FakeInfrastructure/MockIAPManager.swift` (add
     `entitlementAfterRefresh: Bool?` — when set, `refreshEntitlements()`
     applies it to `isProUnlocked`; `nil` keeps today's record-only stub)
-  - the red commit performs the moves (13-A / 14-A precedent)
+  - the test moves are made in the red phase and land with the single
+    code commit
 - Project: `HarmoniaPlayer.xcodeproj/project.pbxproj` — no change needed
   (`PBXFileSystemSynchronizedRootGroup`, 13-A execution amendment)
 - Docs at green: `api_reference.md`, `module_boundary.md`,
