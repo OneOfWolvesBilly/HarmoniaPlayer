@@ -27,7 +27,7 @@ test targets from the Swift 5 language mode to Swift 6.
   | Strict-concurrency warning baseline | **12** | `slice_12_micro.md` |
   | Extract AlertCenter | **13** | `slice_13_micro.md` |
   | Extract LyricsStore | **14** | `slice_14_micro.md` |
-  | Extract SettingsStore | — (numbered at open) | §7.2 scope freeze |
+  | Extract SettingsStore | **16** | `slice_16_micro.md` |
   | Extract PlaybackController | — | §7.3 scope freeze |
   | Extract PlaylistCollection (incl. M3U8) | — | §7.4 scope freeze |
   | Swift 6 language-mode switch + close-out | — | §7.5 scope freeze |
@@ -320,7 +320,7 @@ placement of today's 21 `AppState*Tests` files + known misplaced tests:
 | `AppStateTests` (init/wiring rows) | stays (composition-root contract) |
 | `AppStateTests` (error/preference initial-state rows) | AlertCenterTests / SettingsStoreTests |
 | `AppStateErrorHandlingTests`, `AppStateFileInfoTests` | split: pure alert-state rows → AlertCenterTests (Slice 13); load/play flow rows → PlaybackControllerTests / PlaylistCollectionTests |
-| `IAPManagerTests`' `showPaywallIfNeeded` rows (misplaced) | AppStateTests via facade (Slice 13); final home decided at the SettingsStore stage |
+| `IAPManagerTests`' `showPaywallIfNeeded` rows (misplaced) | AppStateTests via facade (Slice 13); final home confirmed at the SettingsStore stage (Slice 16): AppStateTests, as end-to-end guards of the root-wired `onPaywallRequested` seam, with the store contract in SettingsStoreTests |
 | `AppStateLyricsTests` | LyricsStoreTests |
 | `AppSettingsTests`, `AppStateVolumeTests` (settings rows) | SettingsStoreTests / PlaybackControllerTests (volume) |
 | `AppStatePlayback*`, `AppStatePolling`, `AppStateReplayGain`, `AppStateShuffle`, `AppStateNavigationTests`, `AppStateTrackSelectionTests` | PlaybackControllerTests family |
@@ -364,6 +364,23 @@ Mapping rows 14–18 + `featureFlags`, `languageBundle`, `purchasePro()`,
 `onReplayGainModeChanged` closure (§5). Views: SettingsView, PaywallView
 purchase path. Decides the final `showPaywallIfNeeded` seam. Tests:
 `AppSettingsTests` + settings rows elsewhere → `SettingsStoreTests`.
+
+Folded in at the Slice 16 spec freeze (file-state check):
+- `isProUnlocked` has view readers outside the list above
+  (`PlaylistView` ×3, `MiniPlayerView` ×1 format-gating strikethrough) —
+  they stay on a get-only facade forwarder until their own stages.
+- `viewPreferences` has no view reader at all; no forwarder.
+- `languageBundle` is read by the `L()` helper of 9 views plus
+  `HarmoniaPlayerCommands`; only SettingsView and PaywallView migrate
+  here, the rest read a get-only forwarder until each view's own stage
+  (the bundle is fixed for the process lifetime, so the forwarder costs
+  no invalidation).
+- `showPaywallIfNeeded` seam: the tier check moves into
+  `SettingsStore`; presentation reaches `AlertCenter` through a
+  root-wired `onPaywallRequested` closure (no store-to-store edge, §2
+  unchanged); AppState keeps a method forwarder. A Pro-gating
+  application service is deferred to the Free/Pro isolation discussion
+  (BL-16A-01).
 
 ### 7.3 PlaybackController
 Mapping rows 19–26 + all non-published playback state + transport /

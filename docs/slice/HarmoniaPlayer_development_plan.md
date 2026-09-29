@@ -1022,7 +1022,23 @@ lyrics immediately without interrupting playback. Builds on the Slice 14
 |---|---|---|
 | 15 | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | ✅ |
 
-### 11.11 Version Targets
+### 11.11 Slice 16: Extract SettingsStore (v1.1.0; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_16_micro.md`
+
+Fifth stage of the AppState decomposition refactor program: the third
+store extraction (`@MainActor @Observable SettingsStore` behind the
+AppState strangler facade). Takes ownership of the IAP manager and the
+three settings persistence keys, persisting each on change instead of via
+AppState Combine sinks, and introduces the first root-wired store
+closures (`onReplayGainModeChanged`, `onPaywallRequested`). Facade
+forwarders survive only for members with remaining internal readers.
+
+| Slice | Content | Status |
+|---|---|---|
+| 16 | SettingsStore extraction + persistence split + @Environment view migration + test migration | ⬜ |
+
+### 11.12 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
