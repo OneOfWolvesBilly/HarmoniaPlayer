@@ -849,6 +849,8 @@ Slice 6, the gate moved twice as scope expanded:
   expansion backlog, …) — likewise numbered when they open. Slice 15
   (drag-and-drop lyrics attach) is the first slice drawn from the lyrics
   expansion backlog and is likewise outside the program — see §11.10.
+  Slice 17 (crash-on-exception policy) is a defect-fix slice against the
+  shipped app, outside the program — see §11.12.
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -1038,11 +1040,55 @@ forwarders survive only for members with remaining internal readers.
 |---|---|---|
 | 16 | SettingsStore extraction + persistence split + @Environment view migration + test migration | ✅ |
 
-### 11.12 Version Targets
+### 11.12 Slice 17: Crash-on-Exception Policy (defect fix)
+
+**Spec:** `docs/slice/slice_17_micro.md`
+
+Defect-fix slice against the shipped app, outside the AppState
+decomposition refactor program. The 1.0.0 process caught a main-thread
+exception on 2026-09-22 and survived for seven days as an unusable,
+unquittable zombie. AppKit's default swallows such exceptions and
+continues the run loop; this slice registers the
+`NSApplicationCrashOnExceptions` user default at launch so an uncaught
+main-thread exception terminates the process and writes a crash report,
+adds a Debug-only launch-argument trigger to verify it in the real app,
+and guards the registration with a hosted unit test. The Slice 9-AA
+window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
+(see §11.13).
+
+| Slice | Content | Status |
+|---|---|---|
+| 17 | Crash-on-exception policy + debug raise trigger + registration test | ⬜ |
+
+### 11.13 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
 | v1.0.0 | Slice 9 complete | Free tier feature complete; first public release |
-| v1.0.1 | Slice 11 complete | Free patch: sleep/wake playback recovery (auto-resume after the Mac wakes) |
+| v1.0.1 | Every v1.0.1 item below complete | Free patch: defect fixes and responsiveness against shipped v1.0.0 (see the v1.0.1 contents table) |
 | v1.1.0 | Slices 10, 12, 13 + remaining AppState-refactor stages complete (numbered at open); further v1.1.0 candidate slices numbered at open | Free minor: AppState decomposition refactor (five @Observable stores, Swift 6 language mode) + Free-tier candidate slices (window-menu declarative semantics, lyrics expansion backlog, …) |
 | v2.0.0 | Pro tier slice complete (numbered when it opens) | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
+
+**v1.0.1 contents** (decided 2026-09-30). v1.0.1 is released once every
+item below is complete. Items are listed in handling order; an item whose
+slice has not opened yet has no slice number (no reservations).
+
+| Slice | Item | Status |
+|---|---|---|
+| 11 | Sleep/wake playback recovery | ✅ |
+| 17 | Crash-on-exception policy | ⬜ |
+| at open | File Info SOURCE section: a long URL overlaps the next row | not opened |
+| at open | Settings window cannot be enlarged to fit its form without scrolling | not opened |
+| at open | Change-time persistence of `volume` and `activePlaylistIndex` (BL-17A-01) | not opened |
+| at open | Playlist interaction latency and CPU load while playing | not opened |
+| at open | Import speed for large batches | not opened |
+
+Deferred past v1.0.1: legacy tag-text encoding (ID3 text without a
+declared Unicode encoding) — no operational impact while tag editing
+does not exist.
+
+Release base: `main`. Releases are cut by tagging `main`; no release
+branch is used. v1.0.1 therefore carries everything on `main` at the
+tag — the AppState-refactor stages completed by then and Slice 15
+(drag-and-drop lyrics attach), whose manual acceptance flows are part of
+the pre-release regression.
