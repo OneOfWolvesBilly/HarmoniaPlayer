@@ -12,6 +12,9 @@
 //  Player returns to the main window. Clicking the Dock icon shows the main
 //  window even when the Mini Player is still visible.
 //
+//  In Debug builds, a launch argument raises a test exception on the main
+//  run loop so the crash-on-exception policy can be verified.
+//
 
 import AppKit
 import SwiftUI
@@ -35,6 +38,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var isTerminating = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        #if DEBUG
+        // Verification hook for the crash-on-exception policy: when launched
+        // with this argument, raise an exception from a run-loop timer — a
+        // path on which AppKit would otherwise catch the exception and keep
+        // the process alive.
+        let raiseArgument = "--hp-raise-test-exception"
+        if ProcessInfo.processInfo.arguments.contains(raiseArgument) {
+            Timer.scheduledTimer(withTimeInterval: 1.0, repeats: false) { _ in
+                NSException(
+                    name: .genericException,
+                    reason: "Test exception raised by \(raiseArgument)",
+                    userInfo: nil
+                ).raise()
+            }
+        }
+        #endif
+
         // Closing the Mini Player returns to the main window: bring the
         // hidden window forward, or recreate it when the user had closed it.
         NotificationCenter.default.addObserver(

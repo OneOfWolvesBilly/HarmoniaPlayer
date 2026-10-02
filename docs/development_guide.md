@@ -188,8 +188,8 @@ HarmoniaPlayer/
 │       │   │       └── PlaylistView.swift                    # Playlist table + tab bar
 │       │   ├── macOS/
 │       │   │   └── Free/
-│       │   │       ├── AppDelegate.swift                     # Dock-click reopen + sleep/wake observation
-│       │   │       ├── HarmoniaPlayerApp.swift               # @main entry
+│       │   │       ├── AppDelegate.swift                     # Dock-click reopen + sleep/wake observation + Debug exception trigger
+│       │   │       ├── HarmoniaPlayerApp.swift               # @main entry; launch bootstrap (crash-on-exception policy, UI language)
 │       │   │       └── Views/
 │       │   │           ├── HarmoniaPlayerCommands.swift
 │       │   │           ├── MarqueeText.swift
@@ -819,6 +819,39 @@ Spec and code commits are always separate. One logical change per commit.
 - StoreKit: use `HarmoniaPlayer.storekit` configuration file for local IAP
   testing (Scheme → Edit Scheme → Run → Options → StoreKit Configuration)
 
+#### Crash-on-exception policy
+
+`HarmoniaPlayerApp.init` registers the `NSApplicationCrashOnExceptions`
+user default. Without it, AppKit catches an `NSException` raised on the
+main thread inside the run loop (event dispatch, timers, main-actor jobs)
+and keeps running; Cocoa is not exception-safe, so the result is a
+corrupted process that can be neither used nor quit. With the policy, the
+exception terminates the process (`EXC_BREAKPOINT / SIGTRAP`) and macOS
+writes a crash report to `~/Library/Logs/DiagnosticReports`. The policy
+is a user default read at exception time — an Info.plist entry has no
+effect — and it does not change exceptions on secondary threads or inside
+GCD blocks, which already terminate the process. Because the exception
+was caught before AppKit decided to crash, the report's crashed thread
+shows `+[NSApplication _crashOnException:]` ← `-[NSApplication
+reportException:]` ← `-[NSApplication run]` and **not** the throw site;
+locating the exception needs reproduction at the throw site.
+
+To verify the policy end to end, run a **Debug** build with the launch
+argument `--hp-raise-test-exception` (the scheme's Run action uses the
+Release configuration, so build Debug explicitly):
+
+```bash
+xcodebuild build -project HarmoniaPlayer.xcodeproj -scheme HarmoniaPlayer -configuration Debug -destination 'platform=macOS'
+open -a "<DerivedData>/Build/Products/Debug/Harmonia Player.app" --args --hp-raise-test-exception
+```
+
+`AppDelegate.applicationDidFinishLaunching` (under `#if DEBUG`) raises a
+test `NSException` from a run-loop timer one second after launch. Expected:
+the window appears, the process is gone about a second later, macOS shows
+its "unexpectedly quit" dialog, and a new `Harmonia Player-<date>.ips`
+report names `_crashOnException` on the crashed thread. Release builds
+contain neither the argument string nor the raise.
+
 ### 10.3 Common issues
 
 | Symptom | Likely cause |
@@ -828,6 +861,7 @@ Spec and code commits are always separate. One logical change per commit.
 | Test crashes on deinit | Missing `nonisolated deinit {}` on a `@MainActor` class |
 | `@MainActor` error in test | Add `@MainActor` to the whole test class, not individual methods |
 | Duplicate state after purchase | `featureFlags` not refreshed alongside `isProUnlocked` in `SettingsStore` (both come from the IAP manager) |
+| App quits with `EXC_BREAKPOINT` in `+[NSApplication _crashOnException:]` | An `NSException` was raised on the main thread; the crash-on-exception policy (§10.2) terminated the process. The report does not contain the throw site — reproduce to find it |
 
 ---
 

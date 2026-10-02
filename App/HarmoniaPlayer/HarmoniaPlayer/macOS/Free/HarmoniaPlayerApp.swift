@@ -17,6 +17,17 @@ struct HarmoniaPlayerApp: App {
     @Environment(\.openWindow) private var openWindow
 
     init() {
+        // Crash-on-exception policy. By default AppKit catches an exception
+        // raised on the main thread inside the run loop and keeps running;
+        // Cocoa is not exception-safe, so what survives is a corrupted
+        // process that can be neither used nor quit. With this default
+        // registered, such an exception terminates the process and macOS
+        // writes a crash report. AppKit reads the value from user defaults
+        // when the exception occurs; an Info.plist entry has no effect.
+        UserDefaults.standard.register(
+            defaults: ["NSApplicationCrashOnExceptions": true]
+        )
+
         let savedLang = UserDefaults.standard.string(forKey: "hp.selectedLanguage")
 
         if let lang = savedLang, lang != "system" {

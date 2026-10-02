@@ -452,6 +452,18 @@ may not have been saved. The data is stored via macOS bookmarks so it
 survives relaunch even if the files move — as long as macOS can still
 resolve the bookmark.
 
+### The app quit unexpectedly
+
+If an internal error occurs, HarmoniaPlayer quits immediately instead of
+continuing in a broken state (one with no windows, unresponsive menus, or
+a ⌘Q that does nothing). macOS shows an "unexpectedly quit" dialog and
+writes a crash report, which you can find in **Console → Crash Reports**
+or in `~/Library/Logs/DiagnosticReports`. Your playlists, repeat and
+shuffle modes, and settings are saved as you change them; only the volume
+and the selected playlist tab may revert to their last saved values.
+Relaunch the app and, if it happens again, please
+[report a bug](#report-a-bug) with the crash report attached.
+
 ---
 
 ## FAQ
@@ -510,6 +522,8 @@ macOS 15.6 or later.
    - What happened vs what you expected
    - macOS version
    - HarmoniaPlayer version
+   - The crash report, if the app quit unexpectedly (Console → Crash
+     Reports, or `~/Library/Logs/DiagnosticReports`)
 
 ### Request a feature
 

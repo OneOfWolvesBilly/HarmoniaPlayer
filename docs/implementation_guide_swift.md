@@ -917,6 +917,14 @@ import SwiftUI
 struct HarmoniaPlayerApp: App {
 
     init() {
+        // Crash-on-exception policy: without it AppKit catches a main-thread
+        // NSException and keeps a corrupted, unquittable process alive. This
+        // is a user default read at exception time — an Info.plist entry
+        // has no effect. See development_guide.md §10.2.
+        UserDefaults.standard.register(
+            defaults: ["NSApplicationCrashOnExceptions": true]
+        )
+
         // Resolve UI language from persisted setting before any view loads.
         let saved = UserDefaults.standard.string(forKey: "hp.selectedLanguage")
         if let lang = saved, lang != "system" {
