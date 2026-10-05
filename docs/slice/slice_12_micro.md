@@ -152,6 +152,14 @@ slice, so their rows (20, 20, 2, 14) stand with unchanged dominant kinds.
 `PaywallView.swift`, `MockIAPManager.swift`, `IAPManagerTests.swift`, and
 `AppStatePlayerlistTests.swift` build with zero warnings.
 
+**Slice 17-A re-measurement (2026-10-01).** The crash-on-exception policy
+touched two files carrying app-target rows. Re-measured on a clean build:
+`HarmoniaPlayerApp.swift` (14) and `AppDelegate.swift` (2) keep their
+baseline counts and dominant kinds unchanged — the registration statement
+and the `#if DEBUG` timer trigger add no diagnostic. The new
+`HarmoniaPlayerAppTests.swift` builds with zero warnings. The tables below
+therefore stand as recorded.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |

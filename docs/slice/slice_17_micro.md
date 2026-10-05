@@ -24,7 +24,7 @@ Dock or Window → Main Window) are unchanged.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 17-A | Crash-on-exception policy + debug raise trigger + registration test | Free | ⬜ |
+| 17-A | Crash-on-exception policy + debug raise trigger + registration test | Free | ✅ |
 
 ### Goals
 
@@ -113,7 +113,7 @@ contents are listed in the development plan §11.13.
 
 ---
 
-## Slice 17-A: Crash-on-exception policy ⬜
+## Slice 17-A: Crash-on-exception policy ✅
 
 ### Goal
 
@@ -246,6 +246,31 @@ Not unit-testable, verified manually (AC3–AC5): the termination itself
 and the crash report — they require a real AppKit run loop and a
 process death, and an automated version would crash the app on every
 ⌘U (C6).
+
+Execution amendments (recorded at close-out):
+
+- The observed red set matched the prediction: row 1 failed with
+  `("nil") is not equal to ("Optional(true)")`, confirming that the hosted
+  test runs after `HarmoniaPlayerApp.init`. Green on a clean build:
+  533 tests in the run, 528 passed / 5 skipped / 0 failed = 519 unit
+  tests passed + 5 skipped + 9 UITests, exactly pre-slice + 1.
+- AC5's Debug-side check inspects `Contents/MacOS/Harmonia Player.debug.dylib`,
+  not the Debug product's stub executable: the Debug configuration links
+  the app's code into that dylib (Xcode debug-dylib support), so the stub
+  carries no string literals at all. The Release executable is a single
+  Mach-O and contains no `hp-raise-test-exception`; the Debug dylib
+  contains it once.
+- AC3 observed on the Debug build: the process was gone about 2 s after
+  launch detection; the report `Harmonia Player-2026-10-01-105446.ips`
+  carries `app_version 1.0.1`, `build_version 3`, `EXC_BREAKPOINT
+  (SIGTRAP)`, termination `byProc: exc handler`, crashed thread
+  `+[NSApplication _crashOnException:]` ← `-[NSApplication reportException:]`
+  ← `-[NSApplication run]`.
+- AC4 observed on the same Debug build without the argument: alive after
+  4.5 s; ⌘Q posted to the PID (CGEvent, after the focus gate) → process
+  gone in 0.909 s; `playlists.json` modification time advanced.
+- Warning re-measurement on the clean build: `HarmoniaPlayerApp.swift`
+  14 and `AppDelegate.swift` 2 unchanged; `HarmoniaPlayerAppTests.swift` 0.
 
 ### Implementation notes
 

@@ -1058,7 +1058,7 @@ window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
 
 | Slice | Content | Status |
 |---|---|---|
-| 17 | Crash-on-exception policy + debug raise trigger + registration test | ⬜ |
+| 17 | Crash-on-exception policy + debug raise trigger + registration test | ✅ |
 
 ### 11.13 Version Targets
 
@@ -1076,7 +1076,7 @@ slice has not opened yet has no slice number (no reservations).
 | Slice | Item | Status |
 |---|---|---|
 | 11 | Sleep/wake playback recovery | ✅ |
-| 17 | Crash-on-exception policy | ⬜ |
+| 17 | Crash-on-exception policy | ✅ |
 | at open | File Info SOURCE section: a long URL overlaps the next row | not opened |
 | at open | Settings window cannot be enlarged to fit its form without scrolling | not opened |
 | at open | Change-time persistence of `volume` and `activePlaylistIndex` (BL-17A-01) | not opened |
