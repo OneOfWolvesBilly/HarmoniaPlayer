@@ -4,7 +4,8 @@ This document defines the SDD → TDD → commit cycle used in HarmoniaPlayer,
 together with the commit atomicity rules and cross-repo coordination when
 a slice touches HarmoniaCore.
 
-> For cross-repo setup (local path vs GitHub tag, subtree split, etc.) see
+> For cross-repo setup (the pinned HarmoniaCore-Swift dependency, the
+> temporary local-package override, subtree split, etc.) see
 > [Development Guide](development_guide.md). This document focuses on the
 > per-slice engineering workflow.
 
@@ -115,11 +116,11 @@ Repeat for each commit in the plan.
 undo stack (or equivalent state) before the operation under test:
 
 ```swift
-func testPlayCallsServicePlay() async {
-    // Setup: seed a track so play() can proceed past the guards.
-    // seedTracks() calls play(trackID:) internally, which bumps counts
-    // and registers undo actions.
-    await seedTracks()
+func testPlay_CallsPlaybackServicePlay() async {
+    // Setup: load a track so play() can proceed past the guards.
+    // loadTrackIntoSUT() calls play(trackID:) internally, which bumps
+    // counts and registers undo actions.
+    await loadTrackIntoSUT()
 
     // Clear counts and undo stack so the next operation is isolated.
     fakePlaybackService.resetCounts()
@@ -229,9 +230,10 @@ the order across repos is:
    HarmoniaCore-local tests green
 2. **HarmoniaCore-Swift** — if a new release is needed, subtree split +
    tag (see [Development Guide](development_guide.md) §6.2)
-3. **HarmoniaPlayer** — update SPM pin (deploy mode) or rely on local
-   path (dev mode); add Integration Layer adapter changes; then AppState
-   + Views; then HarmoniaPlayer tests green
+3. **HarmoniaPlayer** — move the SPM pin to the new HarmoniaCore-Swift
+   commit (while iterating, the temporary local-package override of
+   Development Guide §6.1 may stand in); add Integration Layer adapter
+   changes; then AppState + Views; then HarmoniaPlayer tests green
 4. **Slice spec** — mark slice complete only after both repos' tests are
    green
 
@@ -239,8 +241,9 @@ the order across repos is:
 (HarmoniaCore → HarmoniaPlayer). Do not ship app features that depend
 on unpushed HarmoniaCore changes.
 
-For the detailed cross-repo mechanics (local path vs tag, subtree split
-workflow), see [Development Guide](development_guide.md) §6.
+For the detailed cross-repo mechanics (pinned dependency, local-package
+override, subtree split workflow), see
+[Development Guide](development_guide.md) §6.
 
 ---
 
@@ -254,7 +257,8 @@ A slice is done only when all of these are satisfied:
 - No `import HarmoniaCore` outside the 3 Integration Layer files
 - No Xcode warnings introduced
 - If HarmoniaCore changed: HarmoniaCore tests are green and the SPM pin
-  is updated (deploy mode) or the local path resolves (dev mode)
+  points at the new HarmoniaCore-Swift commit, with no local-package
+  override left in the project
 - Slice spec in `docs/slice/` reflects the shipped behaviour
 - No feature claimed in the spec that is not backed by tests + code
 

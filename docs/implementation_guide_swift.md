@@ -104,6 +104,11 @@ final class HarmoniaCoreProvider: CoreServiceProviding {
         )
     }
 
+    func makeNowPlayingService() -> NowPlayingService {
+        // System surface, not the audio core — see §2.6.
+        MPNowPlayingAdapter()
+    }
+
     private func buildCore() -> HarmoniaCore.PlaybackService {
         let logger  = OSLogAdapter(subsystem: "HarmoniaPlayer", category: "Playback")
         let time    = MonotonicTimeAdapter()
@@ -167,6 +172,12 @@ final class HarmoniaPlaybackServiceAdapter: PlaybackService {
 
     func pause() async             { core.pause() }
     func stop() async              { core.stop() }
+
+    func seek(to seconds: TimeInterval) async throws {
+        do { try core.seek(to: seconds) }
+        catch let error as CoreError { throw Self.mapCoreError(error) }
+    }
+
     func currentTime() async -> TimeInterval { core.currentTime() }
     func duration() async -> TimeInterval    { core.duration() }
     func setVolume(_ volume: Float) async    { core.setVolume(volume) }
@@ -276,6 +287,10 @@ struct CoreFactory {
 
     func makeEQService() -> EQService {
         provider.makeEQService()
+    }
+
+    func makeNowPlayingService() -> NowPlayingService {
+        provider.makeNowPlayingService()
     }
 }
 ```
@@ -799,54 +814,87 @@ final class StoreKitIAPManager: IAPManager {
     }
 
     private let defaults: UserDefaults
+
+    // Long-running listener for transactions completed outside the app
+    // (Ask to Buy approvals, Family Sharing, purchases on another device).
     private var updatesTask: Task<Void, Never>?
 
     init(userDefaults: UserDefaults = .standard) {
         self.defaults = userDefaults
+        // Fast-read cache; refreshed async by refreshEntitlements().
         self.isProUnlocked = userDefaults.bool(forKey: Self.defaultsKey)
-        // Listen for Transaction.updates for Ask-to-Buy / Family Sharing.
-        updatesTask = Task.detached { [weak self] in
-            for await update in Transaction.updates {
-                if case .verified(let transaction) = update {
-                    await transaction.finish()
-                    await self?.refreshEntitlements()
-                }
+        updatesTask = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+                await self.handleTransactionUpdate(result)
             }
         }
     }
 
+    deinit {
+        updatesTask?.cancel()
+    }
+
+    private func handleTransactionUpdate(_ result: VerificationResult<Transaction>) async {
+        guard case .verified(let transaction) = result,
+              transaction.productID == Self.productID else { return }
+        isProUnlocked = true
+        await transaction.finish()
+    }
+
     func refreshEntitlements() async {
-        guard let result = await Transaction.currentEntitlement(for: Self.productID)
-        else {
-            isProUnlocked = false
-            return
+        // currentEntitlements(for:) is an AsyncSequence; any verified
+        // transaction for the product unlocks Pro.
+        var foundVerified = false
+        for await result in Transaction.currentEntitlements(for: Self.productID) {
+            switch result {
+            case .verified:
+                foundVerified = true
+            case .unverified:
+                break
+            }
         }
-        if case .verified = result {
-            isProUnlocked = true
-        }
+        isProUnlocked = foundVerified
     }
 
     func purchasePro() async throws {
-        let products = try await Product.products(for: [Self.productID])
+        // 1. Fetch the product from App Store Connect.
+        let products: [Product]
+        do {
+            products = try await Product.products(for: [Self.productID])
+        } catch {
+            throw IAPError.purchaseFailed(error.localizedDescription)
+        }
+
         guard let product = products.first else {
             throw IAPError.productNotFound
         }
-        let result = try await product.purchase()
+
+        // 2. Present the purchase sheet.
+        let result: Product.PurchaseResult
+        do {
+            result = try await product.purchase()
+        } catch {
+            throw IAPError.purchaseFailed(error.localizedDescription)
+        }
+
+        // 3. Handle the result.
         switch result {
         case .success(let verification):
             switch verification {
             case .verified(let transaction):
-                await transaction.finish()
                 isProUnlocked = true
+                await transaction.finish()
             case .unverified:
                 throw IAPError.verificationFailed
             }
         case .userCancelled:
             throw IAPError.userCancelled
         case .pending:
-            throw IAPError.purchaseFailed("pending")
+            // Ask to Buy or deferred — treated as cancelled from the user's perspective.
+            throw IAPError.userCancelled
         @unknown default:
-            throw IAPError.purchaseFailed("unknown")
+            throw IAPError.purchaseFailed("Unknown purchase result")
         }
     }
 }
@@ -1158,9 +1206,10 @@ final class AppStatePlaybackControlTests: XCTestCase {
         let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: false)
         sut = AppState(
-            iapManager:   iap,
-            provider:     provider,
-            userDefaults: testDefaults
+            iapManager:    iap,
+            provider:      provider,
+            userDefaults:  testDefaults,
+            playlistStore: FakePlaylistStore()
         )
     }
 
@@ -1173,10 +1222,10 @@ final class AppStatePlaybackControlTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPlayCallsServicePlay() async {
-        await seedTracks()
+    func testPlay_CallsPlaybackServicePlay() async {
+        await loadTrackIntoSUT()
 
-        // Clear call counts set up by seedTracks().
+        // Clear call counts set up by loadTrackIntoSUT().
         fakePlaybackService.resetCounts()
 
         await sut.play()
@@ -1185,9 +1234,9 @@ final class AppStatePlaybackControlTests: XCTestCase {
         XCTAssertEqual(sut.playbackState, .playing)
     }
 
-    // Helper: loads tracks so play() can proceed past the
+    // Helper: loads a track so play() can proceed past the
     // "no currentTrack / stopped state" guards.
-    private func seedTracks() async {
+    private func loadTrackIntoSUT() async {
         let url = URL(fileURLWithPath: "/tmp/test.mp3")
         await sut.load(urls: [url])
         if let first = sut.playlist.tracks.first {
@@ -1201,8 +1250,8 @@ Key points:
 - `@MainActor` on the test class — do not put it on individual methods
 - Use a fresh `UserDefaults(suiteName:)` per test and clean up in `tearDown`
 - Inject a fresh `FakePlaylistStore()` per test alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. Tests that exercise relaunch (a second `AppState` over the same data) must share one `FakePlaylistStore` instance across both.
-- Setup helpers like `seedTracks()` should reset call counts so assertions
-  target the operation under test, not the setup
+- Setup helpers like `loadTrackIntoSUT()` should reset call counts so
+  assertions target the operation under test, not the setup
 
 ### 7.3 Configuring Fakes
 
@@ -1432,7 +1481,7 @@ final class AppStateTests: XCTestCase {
 
 ---
 
-## 9. Cross-References
+## 10. Cross-References
 
 **HarmoniaCore Documentation:**
 - [Services Implementation](https://github.com/OneOfWolvesBilly/HarmoniaCore/blob/main/docs/impl/04_services_impl.md)

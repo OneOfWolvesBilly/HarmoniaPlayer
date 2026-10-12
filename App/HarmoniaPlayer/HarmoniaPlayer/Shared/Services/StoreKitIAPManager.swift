@@ -11,13 +11,13 @@
 //  DESIGN NOTES
 //  ------------
 //  - `isProUnlocked` is persisted in UserDefaults (`hp.isProUnlocked`) as a
-//    fast-read cache so that `AppState` does not need to await an async call
-//    during its synchronous init. The cache is refreshed at launch via
-//    `refreshEntitlements()`, which is called from `HarmoniaPlayerApp.onAppear`.
+//    fast-read cache so that `SettingsStore` can read it synchronously in
+//    its init. `refreshEntitlements()` re-checks the App Store and rewrites
+//    the cache.
 //  - `purchasePro()` uses the StoreKit 2 `Product.purchase()` API and verifies
 //    the result before setting `isProUnlocked = true`.
-//  - `refreshEntitlements()` uses `Transaction.currentEntitlement(for:)` to
-//    verify an existing purchase without re-purchasing.
+//  - `refreshEntitlements()` iterates `Transaction.currentEntitlements(for:)`
+//    to verify an existing purchase without re-purchasing.
 //  - Requires App Store Connect product ID: `harmoniaplayer.pro`.
 //
 //  THREAD SAFETY
@@ -107,8 +107,8 @@ final class StoreKitIAPManager: IAPManager {
 
     /// Verifies the current Pro entitlement with the App Store.
     ///
-    /// Updates `isProUnlocked` based on the current transaction state.
-    /// Call at app launch (e.g. in `HarmoniaPlayerApp.task`) to refresh stale cache.
+    /// Updates `isProUnlocked` based on the current transaction state,
+    /// replacing whatever the UserDefaults cache held.
     func refreshEntitlements() async {
         // currentEntitlements(for:) replaced currentEntitlement(for:) in macOS 15.4.
         // It returns an AsyncSequence; we take the first verified transaction.

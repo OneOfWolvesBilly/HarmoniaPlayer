@@ -24,7 +24,7 @@ HarmoniaPlayer lives in a three-repo ecosystem:
 2. **[HarmoniaCore-Swift](https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift)** — standalone Swift Package
    - Created via `git subtree split` from `HarmoniaCore/apple-swift/`
    - Required because SPM cannot consume a subdirectory of a repository
-   - Tagged releases define what HarmoniaPlayer pins for deployment
+   - The commit HarmoniaPlayer pins (§6.2) lives in this repo
 
 3. **[HarmoniaPlayer](https://github.com/OneOfWolvesBilly/HarmoniaPlayer)** (this repo) — macOS application
    - SwiftUI-based UI, application state, integration layer, tests
@@ -32,28 +32,31 @@ HarmoniaPlayer lives in a three-repo ecosystem:
 
 ### 1.2 Layout on disk
 
-For local development, clone HarmoniaPlayer and HarmoniaCore **side by side**:
+The Xcode project depends on **HarmoniaCore-Swift** through its GitHub
+URL, pinned to an exact commit (§6.2), so HarmoniaPlayer builds from its
+own clone alone. Clone HarmoniaCore beside it only when you work on the
+audio engine itself:
 
 ```
 ~/Projects/
-├── HarmoniaCore/                    # Source repo (dev)
-│   ├── apple-swift/                 # ← HarmoniaPlayer's SPM target in dev mode
+├── HarmoniaCore/                    # Engine source repo (only when developing the engine)
+│   ├── apple-swift/                 # Swift package root; `swift test` runs here
 │   │   ├── Package.swift
 │   │   ├── Sources/HarmoniaCore/
 │   │   └── Tests/HarmoniaCoreTests/
 │   ├── linux-cpp/                   # (deferred)
 │   └── docs/specs/
 │
-├── HarmoniaCore-Swift/              # Deploy package (only needed if tagging)
-│   └── (subtree split of apple-swift/)
+├── HarmoniaCore-Swift/              # Subtree split of apple-swift/; the app's SPM
+│   └── (subtree split of apple-swift/)   dependency points here (clone only when tagging)
 │
 └── HarmoniaPlayer/                  # This repo
     └── App/HarmoniaPlayer/HarmoniaPlayer.xcodeproj
 ```
 
-Xcode resolves the SPM dependency as `../HarmoniaCore/apple-swift` relative
-to `HarmoniaPlayer.xcodeproj`. In deploy mode the package resolves from the
-pinned GitHub tag of HarmoniaCore-Swift — no local clone needed.
+Xcode fetches HarmoniaCore-Swift from GitHub on the first build and
+records the resolved commit in `Package.resolved`. To build against an
+engine change that is not yet pushed and pinned, see §6.1.
 
 ---
 
@@ -71,10 +74,11 @@ pinned GitHub tag of HarmoniaCore-Swift — no local clone needed.
 ### 3.1 Clone
 
 ```bash
-# Clone both repos side by side under the same parent directory
+# HarmoniaPlayer alone is enough to build the app; clone HarmoniaCore
+# beside it only when you also work on the engine (§1.2)
 mkdir -p ~/Projects && cd ~/Projects
-git clone https://github.com/OneOfWolvesBilly/HarmoniaCore.git
 git clone https://github.com/OneOfWolvesBilly/HarmoniaPlayer.git
+git clone https://github.com/OneOfWolvesBilly/HarmoniaCore.git
 ```
 
 ### 3.2 Open in Xcode
@@ -91,7 +95,7 @@ The scheme is **`HarmoniaPlayer`**. Build and run with ⌘R.
 Build the project once. If HarmoniaCore cannot be resolved:
 
 1. Xcode → File → Packages → Reset Package Caches
-2. If still failing: Project settings → Package Dependencies → remove the broken entry → Add Local → navigate to `../HarmoniaCore/apple-swift`
+2. If still failing: Project settings → Package Dependencies → remove the broken entry → Add Package Dependency → `https://github.com/OneOfWolvesBilly/HarmoniaCore-Swift.git`, dependency rule **Commit** with the revision from §6.2
 
 Sanity check inside one of the Integration Layer files:
 
@@ -370,20 +374,26 @@ For the full adapter and provider implementations, see
 HarmoniaPlayer and HarmoniaCore are separate repos with their own commit
 histories. Changes that span both repos must be coordinated.
 
-### 6.1 Development mode: local path reference
+### 6.1 Building against an unreleased HarmoniaCore change
 
-For day-to-day development, the Xcode project references
-`../HarmoniaCore/apple-swift` as a local SPM. This means:
+The Xcode project references HarmoniaCore-Swift by URL in every build
+(§6.2); there is no separate development mode checked in. To build
+HarmoniaPlayer against engine changes that are not yet pushed and
+pinned, use Xcode's local-package override: add the local
+`../HarmoniaCore/apple-swift` folder to the project (drag it into the
+Project navigator, or File → Add Package Dependencies… → Add Local…).
+While the local package is present, Xcode builds from that folder
+instead of the remote package, and edits under
+`HarmoniaCore/apple-swift/Sources/` are picked up on the next build.
+Remove the local reference before committing — `project.pbxproj` keeps
+only the URL reference — and run HarmoniaCore's own `swift test` in
+`apple-swift/` for the engine-side change.
 
-- Editing a file in `HarmoniaCore/apple-swift/Sources/` and rebuilding
-  HarmoniaPlayer picks up the change immediately — no re-resolve needed
-- You can run HarmoniaCore's own `swift test` against `apple-swift/` while
-  HarmoniaPlayer's tests run against the same working copy
+### 6.2 The pinned GitHub dependency
 
-### 6.2 Deploy mode: GitHub tag
-
-For release builds, the SPM dependency is pinned to a tagged version of the
-**HarmoniaCore-Swift** repo (not HarmoniaCore). The workflow is:
+Every build resolves the SPM dependency from the **HarmoniaCore-Swift**
+repo (not HarmoniaCore) at a pinned revision. The workflow to move the
+pin is:
 
 1. Commit + push changes in `HarmoniaCore`
 2. Cut a tag on `HarmoniaCore` (e.g. `v0.3.0`)
@@ -419,7 +429,7 @@ A typical cross-repo fix flow:
 4. Back in HarmoniaPlayer: add a test that verifies the adapter behaviour
    with the fixed core
 5. Commit both repos separately (HarmoniaCore first, then HarmoniaPlayer)
-6. If the change is release-blocking, follow the deploy workflow in 6.2
+6. Move HarmoniaPlayer's pin to the new HarmoniaCore-Swift commit (6.2)
 
 ### 6.4 Commit formats
 
@@ -560,9 +570,10 @@ final class AppStatePlaybackControlTests: XCTestCase {
         let provider = FakeCoreProvider(playbackService: fakePlaybackService)
         let iap = MockIAPManager(isProUnlocked: false)
         sut = AppState(
-            iapManager:   iap,
-            provider:     provider,
-            userDefaults: testDefaults
+            iapManager:    iap,
+            provider:      provider,
+            userDefaults:  testDefaults,
+            playlistStore: FakePlaylistStore()
         )
     }
 
@@ -575,9 +586,9 @@ final class AppStatePlaybackControlTests: XCTestCase {
         super.tearDown()
     }
 
-    func testPlayCallsServicePlay() async {
-        // Seed a track (this calls play(trackID:) internally and bumps counts)
-        await seedTracks()
+    func testPlay_CallsPlaybackServicePlay() async {
+        // Load a track (this calls play(trackID:) internally and bumps counts)
+        await loadTrackIntoSUT()
 
         // Reset counts before the operation under test
         fakePlaybackService.resetCounts()
@@ -588,7 +599,7 @@ final class AppStatePlaybackControlTests: XCTestCase {
         XCTAssertEqual(sut.playbackState, .playing)
     }
 
-    private func seedTracks() async {
+    private func loadTrackIntoSUT() async {
         let url = URL(fileURLWithPath: "/tmp/test.mp3")
         await sut.load(urls: [url])
         if let first = sut.playlist.tracks.first {
@@ -599,6 +610,9 @@ final class AppStatePlaybackControlTests: XCTestCase {
 ```
 
 Rules:
+- Inject `FakePlaylistStore()` alongside the isolated `UserDefaults` —
+  without it `AppState` falls back to the real `FilePlaylistStore` and the
+  test reads and writes the shared `playlists.json`
 - One operation per test — setup helpers call `resetCounts()` before the
   assertion target so the count reflects the operation under test only
 - Use `await` for every async AppState call — `play`, `pause`, `stop`,
@@ -729,7 +743,7 @@ final class SomeObservable: ObservableObject {
 
 **When the workaround IS needed.** Any class that is `@MainActor` (explicit
 or inferred). The `final` modifier is independent — it does not change the
-deinit behaviour. Seven known production / test sites in HarmoniaPlayer:
+deinit behaviour. Nine known production / test-double sites in HarmoniaPlayer:
 
 | Class | File | Why |
 |-------|------|-----|
@@ -737,9 +751,16 @@ deinit behaviour. Seven known production / test sites in HarmoniaPlayer:
 | `AlertCenter` | `Shared/Models/AlertCenter.swift` | Explicit `@MainActor`; deallocated in test contexts (`AlertCenterTests` and every AppState test teardown) |
 | `LyricsStore` | `Shared/Models/LyricsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`LyricsStoreTests` and every AppState test teardown) |
 | `SettingsStore` | `Shared/Models/SettingsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`SettingsStoreTests` and every AppState test teardown) |
-| `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Inferred `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
+| `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Explicit `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
+| `NowPlayingCoordinator` | `Shared/Models/NowPlayingCoordinator.swift` | Explicit `@MainActor`; deallocated in test contexts (`NowPlayingCoordinatorTests` and every AppState test teardown) |
 | `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
 | `FakeEQService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | Inferred `@MainActor` in the main module's actor isolation; many short-lived test instances exercise the crash path repeatedly |
+| `FakeNowPlayingService` | `HarmoniaPlayerTests/FakeInfrastructure/FakeNowPlayingService.swift` | Inferred `@MainActor` in the main module's actor isolation; one instance per AppState / NowPlayingCoordinator test |
+
+Several `XCTestCase` subclasses that hold an `AppState` declare the same
+`nonisolated deinit {}` for the same reason (e.g. `IntegrationTests`,
+`AppStateNavigationTests`, `AppStateShuffleTests`,
+`AppStateFormatGatingTests`, `RepeatModeTests`).
 
 **When the workaround is NOT needed.** Classes already declared
 `nonisolated`, structs, enums, and actors are unaffected because their
@@ -857,7 +878,7 @@ contain neither the argument string nor the raise.
 | Symptom | Likely cause |
 |---------|--------------|
 | "Cannot find type 'PlaybackService'" | Missing the import or confusing app-layer with `[HC]` — check file header |
-| SPM resolution fails | HarmoniaCore not cloned side by side; reset package caches |
+| SPM resolution fails | No access to GitHub, or a stale package cache — File → Packages → Reset Package Caches (§3.3) |
 | Test crashes on deinit | Missing `nonisolated deinit {}` on a `@MainActor` class |
 | `@MainActor` error in test | Add `@MainActor` to the whole test class, not individual methods |
 | Duplicate state after purchase | `featureFlags` not refreshed alongside `isProUnlocked` in `SettingsStore` (both come from the IAP manager) |
