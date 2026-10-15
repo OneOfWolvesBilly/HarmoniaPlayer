@@ -109,7 +109,7 @@ Dock or Window → Main Window) are unchanged.
 ### Release
 
 Ships in **v1.0.1** (Chen's decision, 2026-09-30); the release's full
-contents are listed in the development plan §11.13.
+contents are listed in the development plan §11.14.
 
 ---
 

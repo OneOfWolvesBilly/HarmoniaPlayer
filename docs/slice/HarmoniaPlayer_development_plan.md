@@ -850,7 +850,9 @@ Slice 6, the gate moved twice as scope expanded:
   (drag-and-drop lyrics attach) is the first slice drawn from the lyrics
   expansion backlog and is likewise outside the program — see §11.10.
   Slice 17 (crash-on-exception policy) is a defect-fix slice against the
-  shipped app, outside the program — see §11.12.
+  shipped app, outside the program — see §11.12. Slice 18 (correcting the
+  window descriptions in the living docs) is a documentation-only
+  housekeeping slice, outside the program — see §11.13.
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -1054,13 +1056,37 @@ main-thread exception terminates the process and writes a crash report,
 adds a Debug-only launch-argument trigger to verify it in the real app,
 and guards the registration with a hosted unit test. The Slice 9-AA
 window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
-(see §11.13).
+(see §11.14).
 
 | Slice | Content | Status |
 |---|---|---|
 | 17 | Crash-on-exception policy + debug raise trigger + registration test | ✅ |
 
-### 11.13 Version Targets
+### 11.13 Slice 18: Correct the Window Descriptions in the Living Docs (docs housekeeping)
+
+**Spec:** `docs/slice/slice_18_micro.md`
+
+Documentation-only follow-up to Slice 9-AA, outside the AppState
+decomposition refactor program. Slice 9-AA (`slice_09_window_menu_micro.md`)
+made the main window reopenable: the main window became a single
+`Window` with id `"main"`, an application delegate handles the Dock
+click, the Mini Player and the main window became two modes of one
+player surface, and each window's automatic menu items were removed.
+9-AA updated `user_guide.md` only, so three developer-facing
+descriptions still show the earlier design: the development guide's
+window-identification section (main window as an id-less `WindowGroup`),
+the implementation guide's entry-point example (the pre-9-AA entry), and
+the `AppDelegate.swift` header (Mini Player hides the main window; Dock
+click always shows it). Noticed during Slice 17's full read of the
+living docs. This slice rewrites those three descriptions to match what
+9-AA shipped; text and comments only, no behaviour change. Not a v1.0.1
+contents item; rides on `main`.
+
+| Slice | Content | Status |
+|---|---|---|
+| 18 | Window-scene descriptions realigned with the shipped 9-AA design (dev guide §9.7, impl guide §6.1, AppDelegate header) | ⬜ |
+
+### 11.14 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
