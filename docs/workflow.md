@@ -60,16 +60,9 @@ Violating any of these creates technical debt that compounds across slices.
 
 ### 3.1 Two-spec-file pattern
 
-Each slice produces two spec files in `docs/slice/`:
-
-| File | Content | Committed? |
-|------|---------|-----------|
-| `slice_0X_micro.md` | Concise reference: Goal / Scope / Files / API / TDD plan / Commit plan | **Yes** — in repo |
-| `HarmoniaPlayer_slice_X_micro.md` | Detailed developer version: working notes, alternatives considered, rough edges | **No** — local-only, ignored by git |
-
-The committed spec is the team-facing summary. The local spec is the
-developer's scratch pad and never pushed. See
-[Documentation Strategy](documentation_strategy.md) §5 for rationale.
+Each slice produces a committed `slice_NN_micro.md` and a local-only
+`HarmoniaPlayer_slice_NN_micro.md` in `docs/slice/`; see
+[Documentation Strategy](documentation_strategy.md) §5 for the pattern.
 
 ### 3.2 Committed spec structure
 
@@ -157,19 +150,9 @@ Poor mocks create flaky tests and hide bugs. Fix at the source.
 
 ### 4.4 Test class conventions (Swift 6)
 
-AppState is `@MainActor`, so test classes using it must also be
-`@MainActor`. XCTest runs `@MainActor`-isolated classes on the main actor
-automatically — no `await MainActor.run {}` boilerplate needed.
-
-```swift
-@MainActor
-final class AppStatePlaybackControlTests: XCTestCase {
-    // ...
-}
-```
-
-See [Development Guide](development_guide.md) §8 for the full test
-template including `UserDefaults(suiteName:)` isolation.
+Test classes that use `AppState` are `@MainActor`; the test template,
+including `UserDefaults(suiteName:)` isolation, is in
+[Development Guide](development_guide.md) §8.2.
 
 ---
 
@@ -275,32 +258,5 @@ A slice is done only when all of these are satisfied:
 - **No claiming completion without test coverage**
 - **No app feature added first and core contract fixed later** — spec changes in HarmoniaCore first
 
----
-
-## 9. Summary
-
-The actual HarmoniaPlayer workflow is:
-
-```
-SDD (spec committed)
-  → TDD red (tests written and failing)
-    → confirm ("是請執行")
-      → TDD green (code written, tests passing)
-        → commit (atomic, formatted)
-          → next commit in the slice plan
-            → ... until the slice is complete
-              → slice spec marked complete
-```
-
-For cross-repo slices, expand the TDD loop around HarmoniaCore first,
-then HarmoniaCore-Swift release sync (if needed), then HarmoniaPlayer
-integration.
-
----
-
-## 10. Cross-References
-
-- [Development Guide](development_guide.md) — setup, cross-repo workflow, test doubles
-- [Documentation Strategy](documentation_strategy.md) — spec file pattern, commit conventions for docs
-- [Module Boundaries](module_boundary.md) — enforcement of the non-negotiable rules
-- [Implementation Guide (Swift)](implementation_guide_swift.md) — test template, @MainActor patterns
+The dependency rules are enforced through
+[Module Boundaries](module_boundary.md).
