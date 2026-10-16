@@ -264,10 +264,9 @@ Documentation commits use conventional-commits prefixes:
 - `feat(docs):` — new documentation sections or files
 - `fix(docs):` — correcting technical errors
 
-**Format rules (project-wide):**
-- Bullet points use `-` only; no `*` or `•`
-- Facts only in bullets; no prose paragraphs in commit bodies
-- Spec commits are separate from code commits
+Message format (dash bullets, facts only) and commit atomicity follow
+[Workflow](workflow.md) §5; a `docs(...)` commit for a spec is separate
+from the slice's code commits.
 
 **Examples:**
 
@@ -303,6 +302,10 @@ Before committing documentation changes:
 - [ ] Filename references match actual filenames (case-sensitive)
 - [ ] Commit message follows convention
 - [ ] No duplication of HarmoniaCore specs (link instead)
+- [ ] No workflow rules restated in a slice spec (Constraints hold technical limits only)
+- [ ] No decision attributions, decision dates, or incident narrative
+- [ ] No section that duplicates another document's section (link instead)
+- [ ] No slice provenance in structure listings
 - [ ] Full document read end-to-end (not grep-only)
 
 ---
@@ -327,3 +330,42 @@ Before committing documentation changes:
 - Table of contents for documents over ~200 lines
 - Section numbering consistent within each document
 - Cross-references to other docs use relative paths
+
+### No filler
+
+Filler is text a reader does not need in order to use the document. Four
+categories are checked at every documentation commit; for each, the
+**Delete** line is removed and the **Keep** line is what remains.
+
+**1. Process restatement in slice specs.** A spec's Constraints section
+holds slice-specific technical limits only. Workflow rules — TDD
+red-green, the confirmation gate before implementation, atomic commits —
+have their home in [Workflow](workflow.md) and are not repeated per spec.
+
+- Delete: `TDD red-green; explicit confirmation gates the green phase; red, green, and docs land as one atomic commit.`
+- Keep: `The store never reads current-track state: every track-dependent method takes the track explicitly.`
+
+**2. Decision attributions and narrative rationale.** State the decision
+and the fact; drop who made the decision, when it was made, and the story
+around it. Git history holds authorship and dates.
+
+- Delete: `Ships in v1.0.1 (Chen's decision, 2026-09-30).` → Keep: `Ships in v1.0.1.`
+- Delete: `kept running for seven days with dead menus until an unrelated fatal error finally ended it` → Keep: `AppKit's default leaves a corrupted process that can be neither used nor quit.`
+
+**3. Duplicated sections across docs.** Every topic has one home
+document; other documents link to it. A summary section that repeats the
+document's own earlier sections, and a cross-reference list that repeats
+links already given inline, are removed.
+
+- Delete: a second copy of the §5 two-spec-file table in another document.
+- Keep: `See [Documentation Strategy](documentation_strategy.md) §5 for the two-spec-file pattern.`
+
+**4. Per-file slice provenance in structural listings.** A project tree,
+file table, or inventory says what a file is, not which slice added it;
+`git log` and `git blame` hold provenance.
+
+- Delete: `EQBand.swift   # Static band config (Slice 9-K)`
+- Keep: `EQBand.swift   # Static band config`
+
+Closed slice specs are historical records: they are amended only to remove
+these categories, never to change what was decided or observed.
