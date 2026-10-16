@@ -124,7 +124,7 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayer/                       # Main app target
 │       │   ├── Shared/                           # Platform-independent code
 │       │   │   ├── Models/
-│       │   │   │   ├── AlertCenter.swift            # Alert/paywall/File Info store (Slice 13-A)
+│       │   │   │   ├── AlertCenter.swift            # Alert/paywall/File Info store
 │       │   │   │   ├── AppState.swift               # Properties, init, persistence
 │       │   │   │   ├── AppState+Playlist.swift      # Playlist ops, undo/redo
 │       │   │   │   ├── AppState+Playback.swift      # Transport, volume, ReplayGain
@@ -133,59 +133,59 @@ HarmoniaPlayer/
 │       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable (file import)
 │       │   │   │   ├── PlaylistReorderItem.swift    # Drag-and-drop Transferable (row reorder)
 │       │   │   │   ├── CoreFeatureFlags.swift       # Free/Pro feature flags
-│       │   │   │   ├── EQBand.swift                 # Static band config (Slice 9-K)
-│       │   │   │   ├── EQBandState.swift            # Editable per-band state (Slice 9-K)
-│       │   │   │   ├── EQCoordinator.swift          # @MainActor EQ observable (Slice 9-K)
-│       │   │   │   ├── EQPreset.swift               # Named EQ configuration (Slice 9-K)
-│       │   │   │   ├── EQPresets.swift              # Built-in presets (Slice 9-K)
-│       │   │   │   ├── LyricsLanguageVariant.swift  # USLT language variant (Slice 9-J)
-│       │   │   │   ├── LyricsPreference.swift       # Per-track lyrics preference (Slice 9-J)
-│       │   │   │   ├── LyricsResolution.swift       # Lyrics availability + content (Slice 9-J)
-│       │   │   │   ├── LyricsSource.swift           # .embedded / .lrc enum (Slice 9-J)
-│       │   │   │   ├── LyricsStore.swift            # Lyrics store (Slice 14-A)
-│       │   │   │   ├── NowPlayingCoordinator.swift  # @MainActor NowPlaying wiring (Slice 9-L)
+│       │   │   │   ├── EQBand.swift                 # Static band config
+│       │   │   │   ├── EQBandState.swift            # Editable per-band state
+│       │   │   │   ├── EQCoordinator.swift          # @MainActor EQ observable
+│       │   │   │   ├── EQPreset.swift               # Named EQ configuration
+│       │   │   │   ├── EQPresets.swift              # Built-in presets
+│       │   │   │   ├── LyricsLanguageVariant.swift  # USLT language variant
+│       │   │   │   ├── LyricsPreference.swift       # Per-track lyrics preference
+│       │   │   │   ├── LyricsResolution.swift       # Lyrics availability + content
+│       │   │   │   ├── LyricsSource.swift           # .embedded / .lrc enum
+│       │   │   │   ├── LyricsStore.swift            # Lyrics store
+│       │   │   │   ├── NowPlayingCoordinator.swift  # @MainActor NowPlaying wiring
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
 │       │   │   │   ├── RepeatMode.swift             # off/all/one
 │       │   │   │   ├── ReplayGainMode.swift         # off/track/album
-│       │   │   │   ├── SettingsStore.swift          # Settings/tier/language-bundle store (Slice 16-A)
+│       │   │   │   ├── SettingsStore.swift          # Settings/tier/language-bundle store
 │       │   │   │   ├── ShuffleMode.swift            # off/on
 │       │   │   │   ├── Track.swift                  # Track model (Codable, Sendable)
 │       │   │   │   └── ViewPreferences.swift        # Layout preferences
 │       │   │   ├── Services/
 │       │   │   │   ├── CoreFactory.swift                     # (App Layer) factory
 │       │   │   │   ├── CoreServiceProviding.swift            # (App Layer) provider protocol
-│       │   │   │   ├── DarwinFileOriginAdapter.swift         # kMDItemWhereFroms via xattr (Slice 9-B)
-│       │   │   │   ├── EQPersistenceStore.swift              # (App Layer) UserDefaults EQ store (Slice 9-K)
-│       │   │   │   ├── EQSchemaMigrator.swift                # (App Layer) EQ schema versioning (Slice 9-K)
-│       │   │   │   ├── EQService.swift                       # (App Layer) EQ protocol (Slice 9-K)
+│       │   │   │   ├── DarwinFileOriginAdapter.swift         # kMDItemWhereFroms via xattr
+│       │   │   │   ├── EQPersistenceStore.swift              # (App Layer) UserDefaults EQ store
+│       │   │   │   ├── EQSchemaMigrator.swift                # (App Layer) EQ schema versioning
+│       │   │   │   ├── EQService.swift                       # (App Layer) EQ protocol
 │       │   │   │   ├── ErrorReportService.swift              # mailto: issue-report URL builder
 │       │   │   │   ├── ExtendedAttributeService.swift        # xattr for kMDItemWhereFroms
 │       │   │   │   ├── FileDropService.swift                 # URL validation + dir expand
-│       │   │   │   ├── FileOriginService.swift               # (App Layer) file-origin protocol (Slice 9-B)
+│       │   │   │   ├── FileOriginService.swift               # (App Layer) file-origin protocol
 │       │   │   │   ├── FreeTierIAPManager.swift              # Stub IAP (Free tier)
 │       │   │   │   ├── HarmoniaCoreProvider.swift            # ⚠ Integration Layer
-│       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import) (Slice 9-K)
+│       │   │   │   ├── HarmoniaEQAdapter.swift               # Integration Layer (closure-binding, no HarmoniaCore import)
 │       │   │   │   ├── HarmoniaPlaybackServiceAdapter.swift  # ⚠ Integration Layer
 │       │   │   │   ├── HarmoniaTagReaderAdapter.swift        # ⚠ Integration Layer
 │       │   │   │   ├── IAPManager.swift                      # IAPManager protocol + IAPError
-│       │   │   │   ├── LyricsPreferenceStore.swift           # (App Layer) per-track lyrics prefs (Slice 9-J)
-│       │   │   │   ├── LyricsService.swift                   # (App Layer) USLT + sidecar resolver (Slice 9-J)
+│       │   │   │   ├── LyricsPreferenceStore.swift           # (App Layer) per-track lyrics prefs
+│       │   │   │   ├── LyricsService.swift                   # (App Layer) USLT + sidecar resolver
 │       │   │   │   ├── M3U8Service.swift                     # M3U8 parse/export
-│       │   │   │   ├── MPNowPlayingAdapter.swift             # Integration Layer (imports MediaPlayer, not HarmoniaCore) (Slice 9-L)
-│       │   │   │   ├── NowPlayingService.swift               # (App Layer) NowPlaying protocol (Slice 9-L)
+│       │   │   │   ├── MPNowPlayingAdapter.swift             # Integration Layer (imports MediaPlayer, not HarmoniaCore)
+│       │   │   │   ├── NowPlayingService.swift               # (App Layer) NowPlaying protocol
 │       │   │   │   ├── PlaybackService.swift                 # App-layer protocol (async)
-│       │   │   │   ├── PlaylistStore.swift                   # playlists.json store (Slice 9-W)
-│       │   │   │   ├── SiblingFilePresenter.swift            # Related-items .lrc access (Slice 9-J)
+│       │   │   │   ├── PlaylistStore.swift                   # playlists.json store
+│       │   │   │   ├── SiblingFilePresenter.swift            # Related-items .lrc access
 │       │   │   │   ├── StoreKitIAPManager.swift              # StoreKit 2 implementation
 │       │   │   │   └── TagReaderService.swift                # App-layer protocol (async)
 │       │   │   └── Views/
 │       │   │       ├── ContentView.swift                     # Root view
-│       │   │       ├── EQView.swift                          # EQ window content (Slice 9-K)
-│       │   │       ├── EQWindow.swift                        # EQ window wrapper (Slice 9-K)
+│       │   │       ├── EQView.swift                          # EQ window content
+│       │   │       ├── EQWindow.swift                        # EQ window wrapper
 │       │   │       ├── FileInfoView.swift                    # File Info panel
-│       │   │       ├── LyricsPanel.swift                     # Lyrics display panel (Slice 9-J)
+│       │   │       ├── LyricsPanel.swift                     # Lyrics display panel
 │       │   │       ├── PaywallView.swift                     # Pro paywall sheet
 │       │   │       ├── PlaybackFocusedValues.swift           # FocusedValue for Commands
 │       │   │       ├── PlayerView.swift                      # Main player
@@ -206,9 +206,9 @@ HarmoniaPlayer/
 │       ├── HarmoniaPlayerTests/
 │       │   ├── FakeInfrastructure/
 │       │   │   ├── FakeCoreProvider.swift                    # CoreServiceProviding double
-│       │   │   ├── FakeFileOriginService.swift               # FileOriginService double (Slice 9-B)
-│       │   │   ├── FakeNowPlayingService.swift               # NowPlayingService double (Slice 9-L)
-│       │   │   ├── FakePlaylistStore.swift                   # PlaylistStore double (Slice 9-W)
+│       │   │   ├── FakeFileOriginService.swift               # FileOriginService double
+│       │   │   ├── FakeNowPlayingService.swift               # NowPlayingService double
+│       │   │   ├── FakePlaylistStore.swift                   # PlaylistStore double
 │       │   │   ├── FakeTagReaderService.swift                # TagReaderService double
 │       │   │   └── MockIAPManager.swift                      # IAPManager double
 │       │   └── SharedTests/                                  # Unit tests (one per SUT)
@@ -231,7 +231,7 @@ HarmoniaPlayer/
 
 **Key rules:**
 - `import HarmoniaCore` is **only** allowed in 3 files in `Shared/Services/` (marked ⚠ Integration Layer)
-- `import MediaPlayer` is **only** allowed in `MPNowPlayingAdapter.swift` (Slice 9-L)
+- `import MediaPlayer` is **only** allowed in `MPNowPlayingAdapter.swift`
 - `Shared/` contains all cross-platform code; `macOS/Free/` contains the entry point and macOS-only views
 - Test doubles live in `FakeInfrastructure/`; test cases in `SharedTests/` (one file per system under test)
 
@@ -254,13 +254,13 @@ depends on app-layer protocols:
 
 Any other file importing HarmoniaCore is a boundary violation.
 
-> **Slice 9-K note:** `HarmoniaEQAdapter.swift` is in the Integration Layer
+> `HarmoniaEQAdapter.swift` is in the Integration Layer
 > too, but it does **not** `import HarmoniaCore`. It bridges the Core
 > PlaybackService EQ control surface to `EQService` via three closures bound
 > by `HarmoniaCoreProvider.makeEQService()`, so the Core type surface stays
 > confined to the provider. The 3-file rule above is unchanged.
 
-> **Slice 9-L note:** `MPNowPlayingAdapter.swift` is also in the Integration
+> `MPNowPlayingAdapter.swift` is also in the Integration
 > Layer but imports `MediaPlayer` (not `HarmoniaCore`). It bridges
 > `NowPlayingService` to `MPNowPlayingInfoCenter` and `MPRemoteCommandCenter`
 > — system surfaces, not the audio core. This is the only `import MediaPlayer`
@@ -304,9 +304,9 @@ Inside AppState:
 ```swift
 @MainActor
 final class AppState: ObservableObject {
-    let alertCenter: AlertCenter                // alert/paywall/File Info store (Slice 13-A)
-    let lyricsStore: LyricsStore                // lyrics store (Slice 14-A)
-    let settingsStore: SettingsStore            // settings/tier/language-bundle store (Slice 16-A)
+    let alertCenter: AlertCenter                // alert/paywall/File Info store
+    let lyricsStore: LyricsStore                // lyrics store
+    let settingsStore: SettingsStore            // settings/tier/language-bundle store
     let playbackService: PlaybackService        // app-layer protocol
     let tagReaderService: TagReaderService      // app-layer protocol
     let fileDropService: FileDropService
@@ -315,16 +315,15 @@ final class AppState: ObservableObject {
     @Published var currentTrack: Track?
     @Published var playbackState: PlaybackState = .idle
 
-    /// Facade forwarder — alert state lives in AlertCenter (Slice 13-A).
+    /// Facade forwarder — alert state lives in AlertCenter.
     /// The lyrics surface has no forwarders: views and the $currentTrack
-    /// sink reach lyricsStore directly (Slice 14-A).
+    /// sink reach lyricsStore directly.
     var lastError: PlaybackError? {
         get { alertCenter.lastError }
         set { alertCenter.lastError = newValue }
     }
 
-    /// Read-only facade forwarder — tier state lives in SettingsStore
-    /// (Slice 16-A).
+    /// Read-only facade forwarder — tier state lives in SettingsStore.
     var isProUnlocked: Bool { settingsStore.isProUnlocked }
 
     init(
@@ -337,7 +336,7 @@ final class AppState: ObservableObject {
         eqCoordinator: EQCoordinator? = nil
     ) {
         self.alertCenter   = AlertCenter()      // constructed first — no dependencies
-        self.settingsStore = SettingsStore(     // owns the IAP manager + settings keys (Slice 16-A)
+        self.settingsStore = SettingsStore(     // owns the IAP manager + settings keys
             iapManager:   iapManager,
             userDefaults: userDefaults
         )
@@ -352,7 +351,7 @@ final class AppState: ObservableObject {
         let lyricsService = coreFactory.makeLyricsService()
         let lyricsPreferenceStore = lyricsPreferenceStore
             ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
-        self.lyricsStore = LyricsStore(         // owns the lyrics dependencies (Slice 14-A)
+        self.lyricsStore = LyricsStore(         // owns the lyrics dependencies
             lyricsService: lyricsService,
             lyricsPreferenceStore: lyricsPreferenceStore
         )
@@ -440,9 +439,8 @@ Both repos use conventional commits, but with repo-specific scopes:
 feat(slice 9-B): add tag editor basic fields
 fix(slice 7): remove duplicate format gate in load(urls:)
 ```
-- Scope is always the active slice
-- Bullet points use `-` only; no prose paragraphs
-- Spec commit precedes code commit (separate commits)
+- Scope is the active slice; message format and atomicity rules are in
+  [Workflow](workflow.md) §5
 
 **HarmoniaCore** (standard conventional commits):
 ```
@@ -456,7 +454,7 @@ refactor(services): rename PlaybackState.buffering to .loading
 
 ## 7. Sandbox File Access Patterns
 
-Slice 9-M. HarmoniaPlayer ships with `ENABLE_APP_SANDBOX = YES` for App Store distribution. Two file-access scenarios occur and use different mechanisms:
+HarmoniaPlayer ships with `ENABLE_APP_SANDBOX = YES` for App Store distribution. Two file-access scenarios occur and use different mechanisms:
 
 ### 7.1 User-selected primary files: security-scoped bookmarks
 
@@ -538,11 +536,11 @@ All test infrastructure lives in
 | `FakeCoreProvider` | `CoreServiceProviding` | Accepts injectable `FakePlaybackService`, `TagReaderService`, `FakeLyricsService`, `FakeEQService`, and `FakeNowPlayingService` stubs; records `makePlaybackService` / `makeTagReaderService` / `makeLyricsService` / `makeEQService` / `makeNowPlayingService` call counts |
 | `FakePlaybackService` | `PlaybackService` | Call counts for every method; error stubs (`stubbedLoadError`, `stubbedPlayError`, `stubbedSeekError`); `resetCounts()` for post-setup tests |
 | `FakeTagReaderService` | `TagReaderService` | Per-URL metadata stubs (`stubbedMetadata[url]`) and per-URL error stubs (`stubbedErrors[url]`); configurable `stubbedSchemaVersion` |
-| `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`, `stripLRCTimestamps` returns input unchanged. Defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-J). **Why a fake instead of `DefaultLyricsService`:** the real service triggers an Xcode 26 beta Swift runtime double-free when many short-lived instances coexist across the test suite — the fake sidesteps the toolchain bug entirely with no closure storage and no Locale dependency |
-| `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying `LyricsStore` reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift` (Slice 9-J). Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
-| `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
-| `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
-| `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); `entitlementAfterRefresh: Bool?` applied by `refreshEntitlements()` when set (Slice 16-A); call counts for `refreshEntitlements` and `purchasePro` |
+| `FakeLyricsService` | `LyricsService` | No-op fake: `resolveAvailability` returns `.none`, `resolveContent` throws `noEmbeddedLyrics`, `stripLRCTimestamps` returns input unchanged. Defined inline in `FakeCoreProvider.swift`, not a separate file. **Why a fake instead of `DefaultLyricsService`:** the real service triggers an Xcode 26 beta Swift runtime double-free when many short-lived instances coexist across the test suite — the fake sidesteps the toolchain bug entirely with no closure storage and no Locale dependency |
+| `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying `LyricsStore` reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift`. Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
+| `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file |
+| `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` |
+| `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); `entitlementAfterRefresh: Bool?` applied by `refreshEntitlements()` when set; call counts for `refreshEntitlements` and `purchasePro` |
 
 ### 8.2 Test class conventions (Swift 6)
 
@@ -658,7 +656,7 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
   `@Environment(<Store>.self)` (e.g. `@Environment(AlertCenter.self)`),
   with `@Bindable var store = store` at the top of `body` when sheet/alert
   bindings are needed; the store is injected per scene via
-  `.environment(appState.<store>)` in `HarmoniaPlayerApp` (Slices 13-A, 14-A, 16-A)
+  `.environment(appState.<store>)` in `HarmoniaPlayerApp`
 - Button handlers wrap async AppState calls: `Task { await appState.play() }`
 - Never inject services directly into a View
 
@@ -714,9 +712,8 @@ are all pure typed codes.
 
 ### 9.5 Language rules
 
-- Explanations, chat discussion: Traditional Chinese
-- All Swift code, comments, commit messages, documentation: **English only**
-- No competitor brand names anywhere in docs
+Swift code, comments, commit messages, and documentation are English
+only; see [Documentation Strategy](documentation_strategy.md) §6–§7.
 
 ### 9.6 `nonisolated deinit` pattern (Xcode 26 beta workaround)
 
@@ -817,21 +814,7 @@ The main `WindowGroup` has no `id:`, so `ContentView` attaches a
 The project follows SDD → TDD red → confirm → TDD green → commit. The
 detailed workflow and commit atomicity rules are in [Workflow](workflow.md).
 
-### 10.1 Adding a feature (summary)
-
-1. **Write the spec first** — `docs/slice/slice_NN_micro.md` with Goal,
-   Scope, Files, API, TDD plan, Commit plan
-2. **Commit the spec** separately from any code
-3. **Write the failing tests** for the first commit in the plan
-4. **Run tests — confirm red**
-5. **Implement** — minimal code to make the tests pass
-6. **Run tests — confirm green**
-7. **Commit** with the format `feat(slice X-Y): description`
-8. Repeat for each commit in the plan
-
-Spec and code commits are always separate. One logical change per commit.
-
-### 10.2 Debugging
+### 10.1 Debugging
 
 - Logs: `OSLogAdapter` in HarmoniaCore emits to OSLog subsystem
   `HarmoniaPlayer` / category `Playback`. View in Console.app or Xcode Console.
@@ -873,7 +856,7 @@ its "unexpectedly quit" dialog, and a new `Harmonia Player-<date>.ips`
 report names `_crashOnException` on the crashed thread. Release builds
 contain neither the argument string nor the raise.
 
-### 10.3 Common issues
+### 10.2 Common issues
 
 | Symptom | Likely cause |
 |---------|--------------|
@@ -882,7 +865,7 @@ contain neither the argument string nor the raise.
 | Test crashes on deinit | Missing `nonisolated deinit {}` on a `@MainActor` class |
 | `@MainActor` error in test | Add `@MainActor` to the whole test class, not individual methods |
 | Duplicate state after purchase | `featureFlags` not refreshed alongside `isProUnlocked` in `SettingsStore` (both come from the IAP manager) |
-| App quits with `EXC_BREAKPOINT` in `+[NSApplication _crashOnException:]` | An `NSException` was raised on the main thread; the crash-on-exception policy (§10.2) terminated the process. The report does not contain the throw site — reproduce to find it |
+| App quits with `EXC_BREAKPOINT` in `+[NSApplication _crashOnException:]` | An `NSException` was raised on the main thread; the crash-on-exception policy (§10.1) terminated the process. The report does not contain the throw site — reproduce to find it |
 
 ---
 

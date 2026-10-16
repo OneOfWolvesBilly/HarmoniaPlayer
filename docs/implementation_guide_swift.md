@@ -968,7 +968,7 @@ struct HarmoniaPlayerApp: App {
         // Crash-on-exception policy: without it AppKit catches a main-thread
         // NSException and keeps a corrupted, unquittable process alive. This
         // is a user default read at exception time — an Info.plist entry
-        // has no effect. See development_guide.md §10.2.
+        // has no effect. See development_guide.md §10.1.
         UserDefaults.standard.register(
             defaults: ["NSApplicationCrashOnExceptions": true]
         )
