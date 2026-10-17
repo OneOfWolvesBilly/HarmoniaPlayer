@@ -1,7 +1,5 @@
 # HarmoniaPlayer Development Plan
 
-> **Last Updated:** 2026-08-09
->
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
 >
@@ -53,30 +51,15 @@
 
 ### 1.3 Development Workflow (TDD)
 
-For each slice:
-
-1. **Write Tests First** (Red)
-   - Define expected behavior
-   - Tests fail initially
-
-2. **Implement Code** (Green)
-   - Make tests pass
-   - Minimal implementation
-
-3. **Verify Manually** (Validate)
-   - Run Xcode project
-   - Verify actual behavior
-   - Check audio output if applicable
-
-4. **Refactor** (Clean)
-   - Improve code quality
-   - Tests still pass
+Each slice follows the SDD → TDD red → confirm → TDD green → commit cycle
+in [Workflow](../workflow.md), plus the manual verification listed per
+slice in §2.
 
 ---
 
 ## 2. Slice Breakdown
 
-### Slice 1: 基礎操作 (Foundation)
+### Slice 1: Foundation
 
 **Scope:**
 - CoreFactory construction
@@ -90,7 +73,6 @@ For each slice:
 3. `MockIAPManager.swift` (for testing)
 4. `CoreFactoryTests.swift`
 5. `AppStateInitTests.swift`
-6. `SLICE_1_GUIDE.md` (setup and verification instructions)
 
 **Test Files Required:**
 - None (no audio needed yet)
@@ -122,7 +104,7 @@ func testIAPIntegration()
 
 ---
 
-### Slice 2: Playlist 管理操作 (Playlist Management)
+### Slice 2: Playlist Management
 
 **Scope:**
 - Pure data operations (no metadata reading)
@@ -152,7 +134,6 @@ func load(urls: [URL]) {
 **Deliverables:**
 1. Updated `AppState.swift` (playlist methods)
 2. `PlaylistManagementTests.swift`
-3. `SLICE_2_GUIDE.md`
 
 **Test Files Required:**
 - `test1.mp3`, `test2.mp3`, `test3.mp3` (for URL validation)
@@ -180,7 +161,7 @@ func testRemoveCurrentTrack()
 
 ---
 
-### Slice 3: 檢查 Metadata 資訊 (Metadata Reading)
+### Slice 3: Metadata Reading
 
 **Scope:**
 - enrichTrack(url:) using TagReaderPort
@@ -210,7 +191,6 @@ func enrichTrack(url: URL) throws -> Track {
 1. Updated `AppState.swift` (enrichTrack method)
 2. `MetadataReadingTests.swift`
 3. Test audio files with proper metadata
-4. `SLICE_3_GUIDE.md`
 
 **Test Files Required:**
 - `test_with_tags.mp3` (full metadata: title, artist, album)
@@ -241,7 +221,7 @@ func testCorruptFile()
 
 ---
 
-### Slice 4: Playback 控制 (Playback Control)
+### Slice 4: Playback Control
 
 **Scope:**
 - play(), pause(), stop(), seek(to:)
@@ -495,7 +475,7 @@ After completing each slice:
 - [ ] No compiler warnings
 - [ ] Code follows Swift style guidelines
 - [ ] Manual verification completed
-- [ ] Documentation updated (SLICE_N_GUIDE.md)
+- [ ] Documentation updated
 - [ ] Ready for next slice
 
 ### Final Verification (After Slice 5)
@@ -566,10 +546,8 @@ HarmoniaPlayer/
 │           │   └── ViewPreferencesTests.swift
 │           └── HarmoniaPlayerTests.swift
 └── docs/
-    ├── DEVELOPMENT_PLAN.md  (this file)
-    ├── SLICE_1_GUIDE.md
-    ├── SLICE_2_GUIDE.md
-    └── ...
+    └── slice/
+        └── HarmoniaPlayer_development_plan.md  (this file)
 ```
 
 ### 5.2 Dependencies
@@ -674,23 +652,7 @@ main
 
 ### 7.2 Commit Message Format
 
-Follow HarmoniaPlayer style:
-
-```
-<type>(<scope>): <subject>
-- <change 1>
-- <change 2>
-- <change 3>
-```
-
-**Example:**
-```
-feat(slice 1): implement CoreFactory and AppState initialization
-- Add CoreFactory with makePlaybackService and makeTagReader
-- Add AppState with basic initialization
-- Add MockIAPManager for testing
-- Add CoreFactoryTests and AppStateInitTests
-```
+Commit messages follow [Workflow](../workflow.md) §5.2.
 
 ### 7.3 PR Requirements
 
@@ -1047,10 +1009,9 @@ forwarders survive only for members with remaining internal readers.
 **Spec:** `docs/slice/slice_17_micro.md`
 
 Defect-fix slice against the shipped app, outside the AppState
-decomposition refactor program. The 1.0.0 process caught a main-thread
-exception on 2026-09-22 and survived for seven days as an unusable,
-unquittable zombie. AppKit's default swallows such exceptions and
-continues the run loop; this slice registers the
+decomposition refactor program. AppKit's default swallows a main-thread
+exception and continues the run loop, leaving an unusable, unquittable
+process — the shipped 1.0.0 app reached that state; this slice registers the
 `NSApplicationCrashOnExceptions` user default at launch so an uncaught
 main-thread exception terminates the process and writes a crash report,
 adds a Debug-only launch-argument trigger to verify it in the real app,
@@ -1095,7 +1056,7 @@ contents item; rides on `main`.
 | v1.1.0 | Slices 10, 12, 13 + remaining AppState-refactor stages complete (numbered at open); further v1.1.0 candidate slices numbered at open | Free minor: AppState decomposition refactor (five @Observable stores, Swift 6 language mode) + Free-tier candidate slices (window-menu declarative semantics, lyrics expansion backlog, …) |
 | v2.0.0 | Pro tier slice complete (numbered when it opens) | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
 
-**v1.0.1 contents** (decided 2026-09-30). v1.0.1 is released once every
+**v1.0.1 contents.** v1.0.1 is released once every
 item below is complete. Items are listed in handling order; an item whose
 slice has not opened yet has no slice number (no reservations).
 
