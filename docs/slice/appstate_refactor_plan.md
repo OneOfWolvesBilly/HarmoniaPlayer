@@ -35,8 +35,8 @@ test targets from the Swift 5 language mode to Swift 6.
   Execution order is the table order, strictly sequential. Stores are
   extracted small → large so the strangler mechanics are proven on the
   cheapest store first.
-- **Version attribution: v1.1.0** (Chen's decision — this program is the
-  core of the v1.1.0 Free minor). The older v2.0.0 labels in the
+- **Version attribution: v1.1.0** — this program is the core of the
+  v1.1.0 Free minor. The older v2.0.0 labels in the
   development plan and the harmonia-dev-workflow skill were stale records,
   corrected together with this section. The v1.1.0 Free minor also
   carries candidate slices outside this program (window-menu declarative
@@ -179,9 +179,8 @@ final class <Store> {
 
 ### Observation-migration behavioral constraints (verified)
 
-The following external-behavior facts were verified via web research before
-this plan was frozen (source log: `appstate_refactor_plan_draft.md`, not
-committed). They are design constraints, not assumptions:
+The following external-behavior facts were verified before this plan was
+frozen. They are design constraints, not assumptions:
 
 - **C1** `@Observable` gives property-level dependency tracking: a view
   re-evaluates only when a property its `body` actually read changes. This
