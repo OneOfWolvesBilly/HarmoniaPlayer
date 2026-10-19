@@ -34,21 +34,21 @@ methods; no AppState surface is touched).
 - Failures (e.g. read-only volume) surface as a user-visible alert; no
   partial state is persisted.
 
-### Decisions frozen at spec commit
+### Decisions frozen with the user (2026-09-13)
 
-- Persistence approach: **copy-to-sidecar**. The dropped file is read
-  once under the drop's own sandbox grant and copied next to the audio
-  file, so everything downstream is the existing sidecar machinery — no
-  schema change, no bookmarks. `LyricsPreference.customPath` stays
-  reserved (a future no-copy variant would use it).
+- Persistence approach: **copy-to-sidecar** (approach B). The dropped
+  file is read once under the drop's own sandbox grant and copied next
+  to the audio file, so everything downstream is the existing sidecar
+  machinery — no schema change, no bookmarks. `LyricsPreference.customPath`
+  stays reserved (a future no-copy variant would use it).
 - Drop targets: PlayerView (now-playing panel) and LyricsPanel, same
-  handler. Playlist-area drops of `.lrc` stay ignored (out of scope).
-- Attach target is `currentTrack`; no track loaded → drop rejected.
-- Existing `.lrc` source → confirmation alert before replacing.
-- On attach, the persisted encoding resets to `"auto"` (re-detect).
-- Accepted extension: `.lrc` only (`.txt` etc. stay on the 9-J deferred
-  list).
-- Copy failure → alert with a localized message; nothing persisted.
+  handler (Q1). Playlist-area drops of `.lrc` stay ignored (out of scope).
+- Attach target is `currentTrack`; no track loaded → drop rejected (Q2).
+- Existing `.lrc` source → confirmation alert before replacing (Q3).
+- On attach, the persisted encoding resets to `"auto"` (re-detect) (Q4).
+- Accepted extension: `.lrc` only (Q5; `.txt` etc. stay on the 9-J
+  deferred list).
+- Copy failure → alert with a localized message; nothing persisted (Q6).
 
 ### Out of Scope
 
@@ -63,7 +63,8 @@ methods; no AppState surface is touched).
 
 ### Constraints
 
-- Verified external behavior:
+- Verified external behavior (web research 2026-09-13, sources in the
+  session log; per-claim summary):
   - `dropDestination(for: URL.self)` receives Finder file drags on
     macOS (same Transferable/URL mechanics as the existing
     `AudioFileItem` import path).
@@ -81,6 +82,8 @@ methods; no AppState surface is touched).
   AlertCenter is NOT wired in.
 - New code builds warning-free under the Slice 12 baseline; touched
   baseline files keep their counts.
+- TDD red-green: red commit lands failing tests against an
+  intentionally-unwired skeleton; "是請執行" gates the green phase.
 
 ### Dependencies
 
