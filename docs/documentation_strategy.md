@@ -367,5 +367,6 @@ file table, or inventory says what a file is, not which slice added it;
 - Delete: `EQBand.swift   # Static band config (Slice 9-K)`
 - Keep: `EQBand.swift   # Static band config`
 
-Closed slice specs are historical records: they are amended only to remove
-these categories, never to change what was decided or observed.
+These rules apply to the living documents under `docs/` and to slice
+specs that are still open. A closed slice spec is a frozen historical
+record and is not amended, for filler or for anything else.
