@@ -3,9 +3,13 @@
 > This document defines the development strategy for HarmoniaPlayer,
 > including slice breakdown, testing approach, and verification criteria.
 >
-> **Scope note:** Sections 2–10 cover Slices 1–6 (v1.0.0 foundation, now complete).
-> Slices 7–9 are defined in their respective spec files and summarised in
-> Section 11 of this document.
+> **Scope note:** Sections 2–10 and Appendix A are the plan as written for
+> Slices 1–6 (the v1.0.0 foundation, complete) and are kept as a historical
+> record; they are not updated and some details no longer match the shipped
+> project. The current project structure, test commands, and git workflow
+> are in [Development Guide](../development_guide.md) and
+> [Workflow](../workflow.md). Slices 7 onward are defined in their own spec
+> files and summarised in Section 11, which is maintained.
 
 ---
 
