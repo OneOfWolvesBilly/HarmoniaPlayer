@@ -2,13 +2,14 @@
 
 ## Purpose
 
-AppKit's default is to catch exceptions raised during main-thread event
-dispatch and continue the run loop; Cocoa is not exception-safe, so what
-survives is a corrupted process the user can neither use nor quit: no
-windows, a broken accessibility tree, dead menus, and a ⌘Q that does
-nothing. The shipped 1.0.0 app reached that state. A process in that
-state is not an application state at all — it must be removed, not
-preserved.
+On 2026-09-22 the shipped 1.0.0 process caught an exception on the main
+thread and kept running for seven days with no windows, a broken
+accessibility tree, dead menus, and a ⌘Q that did nothing, until an
+unrelated fatal error finally ended it on 2026-09-29. AppKit's default is
+to catch exceptions raised during main-thread event dispatch and continue
+the run loop; Cocoa is not exception-safe, so what survives is a corrupted
+process the user can neither use nor quit. A process in that state is not
+an application state at all — it must be removed, not preserved.
 
 This slice sets the AppKit policy under which an uncaught main-thread
 exception terminates the process immediately and leaves a crash report,
@@ -41,11 +42,11 @@ Dock or Window → Main Window) are unchanged.
 ### Out of Scope
 
 - Quitting when the last window closes
-  (`applicationShouldTerminateAfterLastWindowClosed`) → withdrawn;
-  9-AA D5 stays; no destination.
-- Identifying the exception behind the shipped-app incident → not
-  recoverable (the unified log of that day has rotated away; the crash
-  report carries only the swallowed-exception marker). The policy exists so the
+  (`applicationShouldTerminateAfterLastWindowClosed`) → withdrawn by
+  Chen; 9-AA D5 stays; no destination.
+- Identifying the exception behind the 2026-09-22 incident → not
+  recoverable (the day's unified log is rotated away; the crash report
+  carries only the swallowed-exception marker). The policy exists so the
   next occurrence produces a report; the investigation opens from that
   report → BL-17A-02.
 - Recording the throw site (exception name, reason, call stack) of an
@@ -56,9 +57,9 @@ Dock or Window → Main Window) are unchanged.
 - Persisting `volume` and `activePlaylistIndex` at change time (today they
   reach disk only through `saveState()`) → BL-17A-01, its own v1.0.1
   slice.
-- The fatal error that eventually ended the corrupted process
-  (`_objc_fatal` during a SwiftUI button gesture) → a symptom, not
-  investigated separately; no destination.
+- The final 2026-09-29 fatal (`_objc_fatal` during a SwiftUI button
+  gesture) → a symptom of the corrupted process, not investigated
+  separately; no destination.
 - Any change to window lifecycle, Dock reopen, or the Mini Player
   exclusivity → 9-AA / the window-menu declarative draft, unchanged.
 - Version and build-number settings → release preparation for v1.0.1
@@ -83,17 +84,20 @@ Dock or Window → Main Window) are unchanged.
   `saveState()` does not run. Only `volume` and `activePlaylistIndex`
   changes since the last playlist mutation, repeat, or shuffle change can
   be lost; every other persisted value is written at change time. Accepted
-  for this slice: the corrupted process could not save either.
-  BL-17A-01 closes the window within the same release.
+  for this slice: the corrupted process could not save either (the 9/29
+  ⌘Q never reached termination). BL-17A-01 closes the window within the
+  same release.
 - **C4 — Debug-only trigger.** The raise trigger is compiled under
   `#if DEBUG` only; the Release binary contains neither the argument
   string nor the raise.
 - **C5 — Warning baseline.** `HarmoniaPlayerApp.swift` (14) and
   `AppDelegate.swift` (2) are re-measured after the change and keep their
   Slice 12 baseline counts; the new test file builds warning-free.
-- **C6 — Manual verification of termination.** Termination itself is
-  verified manually — an automated crash test would raise a macOS crash
-  dialog and write a report on every ⌘U.
+- **C6 — TDD.** Red-green; the red set is reported from the working tree;
+  "是請執行" gates the green phase; red, green, and docs land as one
+  atomic code commit (Slice 16 protocol). Termination itself is verified
+  manually (Slice 9-AA precedent) — an automated crash test would raise
+  a macOS crash dialog and write a report on every ⌘U.
 
 ### Dependencies
 
@@ -104,8 +108,8 @@ Dock or Window → Main Window) are unchanged.
 
 ### Release
 
-Ships in **v1.0.1**; the release's full contents are listed in the
-development plan §11.14.
+Ships in **v1.0.1** (Chen's decision, 2026-09-30); the release's full
+contents are listed in the development plan §11.14.
 
 ---
 
@@ -207,8 +211,9 @@ HarmoniaCore 5-area audit does not apply.
 
 1. BL-17A-01 — persist `volume` and `activePlaylistIndex` at change time
    (today only via `saveState()`), closing the C3 loss window. Target: its
-   own v1.0.1 slice, numbered when it opens (required for v1.0.1).
-2. BL-17A-02 — investigate the exception class behind the shipped-app
+   own v1.0.1 slice, numbered when it opens (required for v1.0.1 by
+   Chen's 2026-09-30 decision).
+2. BL-17A-02 — investigate the exception class behind the 2026-09-22
    incident once a crash report produced under this policy exists.
    Target: its own slice, opened when such a report arrives.
 
