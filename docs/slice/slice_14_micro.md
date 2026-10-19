@@ -64,6 +64,9 @@ in the same slice (plan §6.0 step 7).
   PlaybackController stage.
 - New store code builds warning-free under the Slice 12 baseline; this
   slice re-measures the files it touches (plan §6.0 step 5).
+- TDD red-green: red commit lands the failing tests against an
+  intentionally-unwired skeleton (the 9-L precedent); "是請執行" gates
+  the green phase.
 
 ### Dependencies
 
@@ -90,10 +93,11 @@ Deliberate choices frozen with it:
 
 - All track-dependent methods (`recheckLyrics` / `setLyricsSource` /
   `setLyricsLanguage` / `setLyricsEncoding` / `updateResolution`) take the
-  track explicitly. In AppState all four action methods read
-  `currentTrack`, not just the resolution update, so the parameter moves
-  to every one of them (plan §7.1: current-track access stays with the
-  caller).
+  track explicitly. File-state check finding folded into the freeze: in
+  today's AppState all four action methods read `currentTrack`, not just
+  the resolution update — the parameter therefore moves to every one of
+  them, and plan §7.1's "current-track access stays with the caller" is
+  honoured store-wide.
 - `recheckLyrics(for:)` stays on the store per the plan §7.1 method list
   as the user-intent entry point; it delegates to `updateResolution(for:)`.
 - `lyricsService` and `lyricsPreferenceStore` are exposed as internal
@@ -105,9 +109,9 @@ Deliberate choices frozen with it:
   the lyrics surface has zero internal readers (verified: no `AppState+*`
   extension, no Commands, no UITest, no other view or test touches it), so
   per plan §6.0 step 7 the facade surface for rows 12–13 is removed in
-  this same slice instead of being created dead. This deviates from the
-  13-A template shape, whose forwarders exist because alert state still
-  has un-migrated writers.
+  this same slice instead of being created dead. This is an agreed
+  deviation from the 13-A template shape, whose forwarders exist because
+  alert state still has un-migrated writers.
 
 **AppState changes:**
 
@@ -130,7 +134,7 @@ Deliberate choices frozen with it:
 | File | Change |
 | --- | --- |
 | `HarmoniaPlayerApp.swift` | main window scene adds `.environment(appState.lyricsStore)`; C3 audit result: the Mini Player, Equalizer, File Info, and Settings scene subtrees read no lyrics state and take no injection |
-| `ContentView.swift` | `@Environment(LyricsStore.self)`; the lyrics-column condition reads `lyricsStore.showLyrics` (`currentTrack` still via `appState`); a reader plan §7.1's view list omitted |
+| `ContentView.swift` | `@Environment(LyricsStore.self)`; the lyrics-column condition reads `lyricsStore.showLyrics` (`currentTrack` still via `appState`) — file-state check finding folded into the freeze: plan §7.1's view list omitted this reader |
 | `PlayerView.swift` | `@Environment(LyricsStore.self)`; the lyrics button icon reads `lyricsStore.showLyrics` and its action calls `lyricsStore.toggleLyrics()`; the disabled state still reads `appState.currentTrack` |
 | `LyricsPanel.swift` | `@Environment(LyricsStore.self)`; resolution reads, the source/language/encoding pickers, and the Recheck button retarget the store, passing `appState.currentTrack` explicitly; `reload()` reads `lyricsService` / `lyricsPreferenceStore` via the store; keeps `@EnvironmentObject appState` for `currentTrack` and `languageBundle` |
 
