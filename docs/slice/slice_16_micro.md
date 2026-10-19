@@ -95,6 +95,10 @@ and an upward-notification closure wired by the composition root
 - New store code builds warning-free under the Slice 12 baseline; this
   slice retires the baseline rows of the code it moves and re-measures
   every file it touches (plan §6.0 step 5).
+- TDD red-green: the failing tests run against an intentionally-unwired
+  skeleton (the 9-L precedent) and the red set is reported uncommitted;
+  "是請執行" gates the green phase; red, green, and docs land as one
+  atomic code commit.
 
 ### Dependencies
 
