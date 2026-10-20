@@ -1049,7 +1049,7 @@ contents item; rides on `main`.
 
 | Slice | Content | Status |
 |---|---|---|
-| 18 | Window-scene descriptions realigned with the shipped 9-AA design (dev guide §9.7, impl guide §6.1, AppDelegate header) | ⬜ |
+| 18 | Window-scene descriptions realigned with the shipped 9-AA design (dev guide §9.7, impl guide §6.1, AppDelegate header) | ✅ |
 
 ### 11.14 Version Targets
 

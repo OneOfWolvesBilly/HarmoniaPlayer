@@ -8,9 +8,10 @@
 //  window lifecycle.
 //
 //  The main window and the Mini Player are two modes of one player surface:
-//  opening the Mini Player hides the main window, and closing the Mini
-//  Player returns to the main window. Clicking the Dock icon shows the main
-//  window even when the Mini Player is still visible.
+//  opening the Mini Player closes the main window, and closing the Mini
+//  Player returns to the main window. Clicking the Dock icon brings the main
+//  window back only when neither the main window nor the Mini Player exists;
+//  while either exists, the click is a plain app activation.
 //
 //  In Debug builds, a launch argument raises a test exception on the main
 //  run loop so the crash-on-exception policy can be verified.

@@ -43,7 +43,7 @@ file layout.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 18-A | Correct the three window descriptions (development guide §9.7, implementation guide §6.1, `AppDelegate.swift` header) | Free | ⬜ |
+| 18-A | Correct the three window descriptions (development guide §9.7, implementation guide §6.1, `AppDelegate.swift` header) | Free | ✅ |
 
 ### Goals
 
@@ -112,7 +112,7 @@ whatever tag is cut next.
 
 ---
 
-## Slice 18-A: Correct the three window descriptions ⬜
+## Slice 18-A: Correct the three window descriptions ✅
 
 ### Goal
 

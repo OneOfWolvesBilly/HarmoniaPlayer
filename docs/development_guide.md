@@ -797,15 +797,23 @@ localized app name and changes per language and on rename.
 
 | Window | SwiftUI scene | Stable identifier |
 |--------|---------------|-------------------|
-| Main window | `WindowGroup { ContentView() }` | `main` |
+| Main window | `Window("Harmonia Player", id: "main")` | `main` |
 | MiniPlayer | `Window("Mini Player", id: "mini-player")` | `mini-player` |
 | Equalizer | `Window("Equalizer", id: "equalizer-window")` | `equalizer-window` |
 | File Info | `WindowGroup(for: Track.ID.self)` | keyed by `Track.ID` |
 
-The MiniPlayer and Equalizer scenes receive their identifier from `Window(id:)`.
-The main `WindowGroup` has no `id:`, so `ContentView` attaches a
-`MainWindowIdentitySetter` (`NSViewRepresentable`) that sets
-`window.identifier = "main"`.
+Every top-level `Window` scene receives its identifier from the `Window(id:)`
+it is declared with. macOS does not store that id verbatim: SwiftUI derives
+the `NSWindow.identifier` as `{id}-AppWindow-{n}` (for example
+`main-AppWindow-1`), so the app matches a window to a scene with the tolerant
+test `raw == id || raw.hasPrefix(id + "-")`. That test is the private function
+`windowMatchesScene(_:id:)`, defined separately in `HarmoniaPlayerApp.swift`,
+`AppDelegate.swift`, and `HarmoniaPlayerCommands.swift`; comparing against
+the bare id alone is not how lookups are done. An older helper still exists:
+`ContentView` attaches `MainWindowIdentitySetter` (an `NSViewRepresentable`),
+which overwrites the main window's identifier with the plain string `main`.
+The tolerant test matches both forms, so the helper is harmless today;
+removing it is part of the window-coordinator refactor.
 
 ---
 

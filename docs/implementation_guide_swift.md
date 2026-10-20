@@ -956,7 +956,12 @@ gating uses the fresh tier info.
 ### 6.1 App Entry Point
 
 `HarmoniaPlayerApp` builds `AppState` with production dependencies. The
-app entry uses `@StateObject` so AppState survives view redraws:
+app entry uses `@StateObject` so AppState survives view redraws. The
+application delegate receives `openWindow` and `appState` from the main
+window's `.onAppear`, because SwiftUI does not fill in `@Environment`
+values while `App.init` runs. The excerpt below leaves out the File Info
+`WindowGroup(for: Track.ID.self)` scene and the window-exclusivity
+observers registered in `init()`:
 
 ```swift
 import SwiftUI
@@ -964,66 +969,100 @@ import SwiftUI
 @main
 struct HarmoniaPlayerApp: App {
 
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @Environment(\.openWindow) private var openWindow
+
     init() {
         // Crash-on-exception policy: without it AppKit catches a main-thread
-        // NSException and keeps a corrupted, unquittable process alive. This
-        // is a user default read at exception time — an Info.plist entry
-        // has no effect. See development_guide.md §10.1.
+        // exception and keeps a corrupted, unquittable process alive. AppKit
+        // reads the value from user defaults when the exception occurs; an
+        // Info.plist entry has no effect. See development_guide.md §10.1.
         UserDefaults.standard.register(
             defaults: ["NSApplicationCrashOnExceptions": true]
         )
 
-        // Resolve UI language from persisted setting before any view loads.
-        let saved = UserDefaults.standard.string(forKey: "hp.selectedLanguage")
-        if let lang = saved, lang != "system" {
+        let savedLang = UserDefaults.standard.string(forKey: "hp.selectedLanguage")
+
+        if let lang = savedLang, lang != "system" {
+            // User has explicitly chosen a language — apply it.
             UserDefaults.standard.set([lang], forKey: "AppleLanguages")
-        } else if saved == nil {
+        } else if savedLang == nil {
+            // First launch — default to English so menus are consistent.
             UserDefaults.standard.set(["en"], forKey: "AppleLanguages")
             UserDefaults.standard.set("en", forKey: "hp.selectedLanguage")
+        }
+        // "system" → remove override, let OS decide.
+        if savedLang == "system" {
+            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
         }
     }
 
     @StateObject private var appState = AppState(
-        iapManager: StoreKitIAPManager(),
-        provider:   HarmoniaCoreProvider()
+        iapManager: FreeTierIAPManager(),
+        provider: HarmoniaCoreProvider()
     )
 
     var body: some Scene {
-        WindowGroup {
+        Window("Harmonia Player", id: "main") {
             ContentView()
                 .environmentObject(appState)
-                // Alert-surface store (Slice 13-A) — required by the main
-                // window subtree's @Environment(AlertCenter.self) readers.
+                // Alert-surface store — required by ContentView, PaywallView,
+                // and PlaylistView.
                 .environment(appState.alertCenter)
-                // Lyrics store (Slice 14-A) — required by ContentView,
-                // PlayerView, and LyricsPanel.
+                // Lyrics store — required by ContentView, PlayerView, and
+                // LyricsPanel.
                 .environment(appState.lyricsStore)
-                // Settings store (Slice 16-A) — required by PaywallView,
-                // presented as a sheet from ContentView.
+                // Settings store — required by PaywallView (presented as a
+                // sheet from ContentView).
                 .environment(appState.settingsStore)
                 .focusedSceneObject(appState)
-                .onReceive(NotificationCenter.default.publisher(
-                    for: NSApplication.willTerminateNotification
-                )) { _ in
+                // Hand the open-window action and the state container to
+                // the app delegate; SwiftUI does not populate @Environment
+                // values during App.init.
+                .onAppear {
+                    appDelegate.openWindow = openWindow
+                    appDelegate.appState = appState
+                }
+                .onReceive(
+                    NotificationCenter.default.publisher(
+                        for: NSApplication.willTerminateNotification
+                    )
+                ) { _ in
                     appState.saveState()
                 }
         }
-        .commands { HarmoniaPlayerCommands() }
+        .commandsRemoved()
+        .commands {
+            HarmoniaPlayerCommands()
+        }
 
+        // Mini Player — compact floating window (always on top).
         Window("Mini Player", id: "mini-player") {
-            MiniPlayerView().environmentObject(appState)
+            MiniPlayerView()
+                .environmentObject(appState)
         }
         .windowResizability(.contentSize)
+        .defaultPosition(.topTrailing)
+        .windowStyle(.hiddenTitleBar)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
 
+        // Equalizer — single-instance floating utility window.
         Window("Equalizer", id: "equalizer-window") {
-            EQWindow().environmentObject(appState)
+            EQWindow()
+                .environmentObject(appState)
         }
         .windowResizability(.contentMinSize)
+        .defaultLaunchBehavior(.suppressed)
+        .commandsRemoved()
 
         Settings {
-            // SettingsView reads only the settings store (Slice 16-A).
-            SettingsView().environment(appState.settingsStore)
+            // SettingsView reads only the settings store; nothing in this
+            // subtree reads AppState.
+            SettingsView()
+                .environment(appState.settingsStore)
         }
+        .windowResizability(.contentMinSize)
     }
 }
 ```
