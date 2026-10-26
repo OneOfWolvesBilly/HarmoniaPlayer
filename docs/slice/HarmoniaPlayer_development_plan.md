@@ -1080,6 +1080,19 @@ Deferred past v1.0.1: legacy tag-text encoding (ID3 text without a
 declared Unicode encoding) — no operational impact while tag editing
 does not exist.
 
+**Pre-Pro milestone candidates** (Free, no version label, numbered at
+open):
+
+- Window-menu declarative semantics.
+- Lyrics expansion backlog (the Slice 9-J deferred list).
+- BL-15A-01 — remove an attached `.lrc` sidecar. Slice 15 copies the
+  dropped file next to the audio file and persists the `.lrc`
+  preference, but offers no way to undo it: a wrongly attached file
+  keeps resolving for that track until the user deletes the sidecar in
+  Finder. Needs a detach action on `LyricsStore` (coordinated delete of
+  the sidecar, preference cleared, resolution refreshed) behind a
+  confirmation in the lyrics panel.
+
 Release base: `main`. Releases are cut by tagging `main`; no release
 branch is used. v1.0.1 therefore carries everything on `main` at the
 tag — the AppState-refactor stages completed by then and Slice 15
