@@ -1085,13 +1085,34 @@ open):
 
 - Window-menu declarative semantics.
 - Lyrics expansion backlog (the Slice 9-J deferred list).
-- BL-15A-01 — remove an attached `.lrc` sidecar. Slice 15 copies the
-  dropped file next to the audio file and persists the `.lrc`
-  preference, but offers no way to undo it: a wrongly attached file
-  keeps resolving for that track until the user deletes the sidecar in
-  Finder. Needs a detach action on `LyricsStore` (coordinated delete of
-  the sidecar, preference cleared, resolution refreshed) behind a
-  confirmation in the lyrics panel.
+- Lyrics panel context menu (one slice; folds in BL-15A-01 and
+  BL-9J-01). The lyrics text becomes display-only: `.textSelection(.enabled)`
+  is dropped, because AppKit backs selectable text with an `NSTextView`
+  whose right-click menu (Cut / Paste greyed, Font, Writing Tools,
+  Summarize, Spelling and Grammar, Substitutions, Speech) is not player
+  functionality. A `.contextMenu` on the panel carries exactly two items:
+  - **Clear lyrics** (BL-15A-01). Slice 15 copies the dropped file next
+    to the audio file and persists the `.lrc` preference, but offers no
+    way to undo it: a wrongly attached file keeps resolving for that
+    track until the user deletes the sidecar in Finder. Needs a detach
+    action on `LyricsStore` (coordinated delete of the sidecar,
+    preference cleared, resolution refreshed) behind a confirmation.
+  - **Choose lyrics file** (BL-9J-01, the Slice 9-J deferred custom file
+    selection). An `NSOpenPanel` limited to `.lrc`; the chosen file goes
+    through the Slice 15 install path (copy to the sidecar position,
+    replace confirmation when one exists), so no `customPath` no-copy
+    mode is introduced.
+  Time-synchronised ("dynamic") lyrics and a karaoke mode are not in the
+  menu: each is added to it by its own slice when it ships
+  (`slice_pro_micro_draft.md` stage P5; karaoke is post-v2.0.0).
+- Lyrics editor. A dedicated editing page for the current track's
+  lyrics that shows each line's timestamp apart from its text, so the
+  words can be corrected without touching the timing, and writes the
+  result back to the sidecar `.lrc`. Decided at open: the tier (Free, or
+  the Pro Tag Editor's lyrics tab), its entry point, and whether embedded
+  USLT lyrics are written back here — `slice_pro_micro_draft.md` stage
+  P4 currently places lyrics write-back in the Pro Tag Editor and defers
+  timestamp editing past v2.0.0, so one of the two must move.
 
 Release base: `main`. Releases are cut by tagging `main`; no release
 branch is used. v1.0.1 therefore carries everything on `main` at the
