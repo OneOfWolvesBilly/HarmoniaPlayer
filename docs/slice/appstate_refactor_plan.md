@@ -35,10 +35,11 @@ test targets from the Swift 5 language mode to Swift 6.
   Execution order is the table order, strictly sequential. Stores are
   extracted small → large so the strangler mechanics are proven on the
   cheapest store first.
-- **Version attribution: v1.1.0** — this program is the core of the
-  v1.1.0 Free minor. The older v2.0.0 labels in the
-  development plan and the harmonia-dev-workflow skill were stale records,
-  corrected together with this section. The v1.1.0 Free minor also
+- **Version attribution: none.** This program is a pre-Pro internal
+  milestone: it precedes the Pro tier (v2.0.0) but carries no version
+  label of its own. Releases are cut by tagging `main`, so each completed
+  stage ships with whichever release is tagged after it lands
+  (`HarmoniaPlayer_development_plan.md` §11.14). The same milestone also
   carries candidate slices outside this program (window-menu declarative
   semantics, lyrics expansion backlog, …), numbered when they open.
 - **Out of scope.** HarmoniaCore (hexagonal architecture is clean; only

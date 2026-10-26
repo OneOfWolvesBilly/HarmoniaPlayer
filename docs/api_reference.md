@@ -325,7 +325,7 @@ struct LyricsPreference: Codable, Equatable {
     var source: LyricsSource     // .embedded or .lrc
     var encoding: String         // IANA charset name; "auto" = auto-detect
     var languageCode: String?    // ISO 639-2; nil = auto (locale match)
-    var customPath: String?      // Reserved for v1.1.0 custom file selection; always nil in 9-J
+    var customPath: String?      // reserved for custom file selection, always nil
 
     init(source: LyricsSource,
          encoding: String = "auto",
@@ -784,7 +784,7 @@ protocol LyricsPreferenceStore: AnyObject {
 
 Implementations: `DefaultLyricsPreferenceStore` (production).
 
-Slice 9-J. UserDefaults-backed, keyed by absolute file path with optional `#track=<n>` suffix for CUE virtual tracks (latent in 9-J, activated v1.1.0). Preferences are shared across playlists — the same file in playlist A and playlist B uses the same preference. See §8 for the full key format.
+Slice 9-J. UserDefaults-backed, keyed by absolute file path with optional `#track=<n>` suffix for CUE virtual tracks (latent in 9-J; activated when CUE-sheet support lands). Preferences are shared across playlists — the same file in playlist A and playlist B uses the same preference. See §8 for the full key format.
 
 ### 4.7 NowPlayingService
 
@@ -959,7 +959,7 @@ nonisolated enum EQSchemaMigrator {
 }
 ```
 
-9-K ships only schema version 1, so the migrator currently only handles `fromVersion == toVersion` as identity; any non-matching `fromVersion` falls through to `EQPersistedState.defaults` rather than risking corruption. Future slices (e.g. v1.1.0 per-track EQ, v1.1.0/v2.0.0 user-adjustable Q) bump the version and add migration steps here.
+9-K ships only schema version 1, so the migrator currently only handles `fromVersion == toVersion` as identity; any non-matching `fromVersion` falls through to `EQPersistedState.defaults` rather than risking corruption. Future slices (e.g. per-track EQ, user-adjustable Q) bump the version and add migration steps here.
 
 ### 5.8 EQCoordinator
 
@@ -1065,7 +1065,7 @@ struct FilePlaylistStore: PlaylistStore {
 
 **Location:** `Shared/Models/AlertCenter.swift`
 
-**Purpose:** `@MainActor @Observable` store owning the alert, paywall, and File Info request presentation state — the first feature store extracted from AppState under the v1.1.0 decomposition program (Slice 13-A). Lives in `Shared/Models/` for the same reason `EQCoordinator` does: a state-bearing observable object, not a stateless service. No persistence, no service dependencies. Views whose body reads alert state observe it via `@Environment(AlertCenter.self)` (injected on the main window scene by `HarmoniaPlayerApp`), with `@Bindable` providing sheet/alert bindings; `HarmoniaPlayerCommands` reaches it via the focused `appState.alertCenter` path because Commands receive no SwiftUI environment.
+**Purpose:** `@MainActor @Observable` store owning the alert, paywall, and File Info request presentation state — the first feature store extracted from AppState under the AppState decomposition program (Slice 13-A). Lives in `Shared/Models/` for the same reason `EQCoordinator` does: a state-bearing observable object, not a stateless service. No persistence, no service dependencies. Views whose body reads alert state observe it via `@Environment(AlertCenter.self)` (injected on the main window scene by `HarmoniaPlayerApp`), with `@Bindable` providing sheet/alert bindings; `HarmoniaPlayerCommands` reaches it via the focused `appState.alertCenter` path because Commands receive no SwiftUI environment.
 
 ```swift
 @MainActor @Observable
@@ -1113,7 +1113,7 @@ final class AlertCenter {
 
 **Location:** `Shared/Models/LyricsStore.swift`
 
-**Purpose:** `@MainActor @Observable` store owning the lyrics panel visibility, the current track's lyrics resolution, and the lyrics service dependencies — the second feature store extracted from AppState under the v1.1.0 decomposition program (Slice 14-A). Lives in `Shared/Models/` for the same reason `AlertCenter` does: a state-bearing observable object, not a stateless service. Views whose body reads lyrics state (`ContentView`'s lyrics-column condition, `PlayerView`'s lyrics button, `LyricsPanel`) observe it via `@Environment(LyricsStore.self)`, injected on the main window scene by `HarmoniaPlayerApp`.
+**Purpose:** `@MainActor @Observable` store owning the lyrics panel visibility, the current track's lyrics resolution, and the lyrics service dependencies — the second feature store extracted from AppState under the AppState decomposition program (Slice 14-A). Lives in `Shared/Models/` for the same reason `AlertCenter` does: a state-bearing observable object, not a stateless service. Views whose body reads lyrics state (`ContentView`'s lyrics-column condition, `PlayerView`'s lyrics button, `LyricsPanel`) observe it via `@Environment(LyricsStore.self)`, injected on the main window scene by `HarmoniaPlayerApp`.
 
 ```swift
 @MainActor @Observable
@@ -1172,7 +1172,7 @@ final class LyricsStore {
 
 **Location:** `Shared/Models/SettingsStore.swift`
 
-**Purpose:** `@MainActor @Observable` store owning the user settings, the Free/Pro tier state, and the UI string bundle — the third feature store extracted from AppState under the v1.1.0 decomposition program (Slice 16-A). Owns the `IAPManager` and the settings `UserDefaults` keys. Lives in `Shared/Models/` for the same reason `AlertCenter` does. Views whose body reads settings state (`SettingsView`, `PaywallView`) observe it via `@Environment(SettingsStore.self)` — injected on the main window scene (PaywallView is a sheet there) and on the Settings scene by `HarmoniaPlayerApp` — with `@Bindable` providing the toggle and picker bindings.
+**Purpose:** `@MainActor @Observable` store owning the user settings, the Free/Pro tier state, and the UI string bundle — the third feature store extracted from AppState under the AppState decomposition program (Slice 16-A). Owns the `IAPManager` and the settings `UserDefaults` keys. Lives in `Shared/Models/` for the same reason `AlertCenter` does. Views whose body reads settings state (`SettingsView`, `PaywallView`) observe it via `@Environment(SettingsStore.self)` — injected on the main window scene (PaywallView is a sheet there) and on the Settings scene by `HarmoniaPlayerApp` — with `@Bindable` providing the toggle and picker bindings.
 
 ```swift
 @MainActor @Observable
@@ -1378,7 +1378,7 @@ with `hp.` prefix keys.
 
 **EQ schema versioning (Slice 9-K).** The `hp.eq.*` keys are managed by `EQPersistenceStore` (see §5.6), independent of `AppState.saveState()`. Current schema version is `1`. On `load()`, an absent `hp.eq.schemaVersion` indicates a fresh install — the store stamps version 1 and returns `EQPersistedState.defaults`. A present version is decoded and lifted to the current version via `EQSchemaMigrator.migrate(...)` (see §5.7). Future slices (per-track EQ, user-adjustable Q) bump the version; older builds reading a newer version fall back to defaults rather than corrupting state.
 
-**Lyrics preferences (Slice 9-J).** The `hp.lyrics.prefs.*` keys are managed by `DefaultLyricsPreferenceStore` (see §4.6), independent of `AppState.saveState()`. The key prefix is `hp.lyrics.prefs.` followed by the track's absolute file path, with an optional `#track=<n>` suffix for CUE virtual tracks. The CUE suffix branch is **latent in 9-J** — `Track` does not yet carry a `cueTrackNumber` field, so the key generator currently emits the non-CUE form only; v1.1.0 activates the suffix when CUE support lands. Preferences are keyed by file path (and CUE track number when applicable), so the same file appearing in playlist A and playlist B uses identical preference. Failures during save (encoder errors) are silently ignored — preferences are best-effort and must not break playback.
+**Lyrics preferences (Slice 9-J).** The `hp.lyrics.prefs.*` keys are managed by `DefaultLyricsPreferenceStore` (see §4.6), independent of `AppState.saveState()`. The key prefix is `hp.lyrics.prefs.` followed by the track's absolute file path, with an optional `#track=<n>` suffix for CUE virtual tracks. The CUE suffix branch is **latent in 9-J** — `Track` does not yet carry a `cueTrackNumber` field, so the key generator currently emits the non-CUE form only; the suffix is activated when CUE-sheet support lands. Preferences are keyed by file path (and CUE track number when applicable), so the same file appearing in playlist A and playlist B uses identical preference. Failures during save (encoder errors) are silently ignored — preferences are best-effort and must not break playback.
 
 **Settings keys (Slice 16-A).** `hp.allowDuplicateTracks`, `hp.selectedLanguage`, and `hp.replayGainMode` are owned by `SettingsStore` (see §5.13), independent of `AppState.saveState()`: restored in the store's `init`, written by each property's `didSet` at change time.
 

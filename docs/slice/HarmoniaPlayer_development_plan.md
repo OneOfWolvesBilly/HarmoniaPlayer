@@ -805,12 +805,15 @@ Slice 6, the gate moved twice as scope expanded:
   longer done. Slice 9's growth to 28 sub-slices (9-A…9-AB) came from
   bundling distinct concerns into one slice — each concern now gets its
   own numbered slice instead.
-- **AppState decomposition refactor (v1.1.0)** — the program that precedes
-  the Pro tier. Design authority: `docs/slice/appstate_refactor_plan.md`.
+- **AppState decomposition refactor (pre-Pro milestone)** — the program
+  that precedes the Pro tier. It carries no version label of its own:
+  releases are cut by tagging `main` (§11.14), so each completed stage
+  ships with whichever release is tagged after it lands. Design
+  authority: `docs/slice/appstate_refactor_plan.md`.
   Opened stages: Slice 10 (token cleanup), Slice 12 (strict-concurrency
   baseline), Slice 13 (AlertCenter extraction), Slice 14 (LyricsStore
   extraction); later stages are numbered as they open. Slice 11 sits between them and is not part of this
-  program — see §11.6. The v1.1.0 Free minor also carries further candidate
+  program — see §11.6. The pre-Pro milestone also carries further candidate
   slices outside this program (window-menu declarative semantics, lyrics
   expansion backlog, …) — likewise numbered when they open. Slice 15
   (drag-and-drop lyrics attach) is the first slice drawn from the lyrics
@@ -898,7 +901,7 @@ numbered when it opens).
 
 **v1.0.0 gate:** Slice 9 complete (through the post-close-out fix sub-slices, 9-Q…9-AB).
 
-### 11.5 Slice 10: Slice/Version Token Cleanup (v1.1.0; AppState Refactor Program)
+### 11.5 Slice 10: Slice/Version Token Cleanup (pre-Pro milestone; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_10_micro.md`
 
@@ -919,8 +922,8 @@ Patch release against shipped v1.0.0, and not part of the AppState
 decomposition refactor program that surrounds it. After a system sleep/wake
 cycle playback never resumes, yet `AppState.playbackState` stays
 `.playing`, so the window, Control Center and the lock screen all report
-playing with no audio. Scheduled ahead of the remaining v1.1.0 program
-stages so the later `PlaybackController` extraction moves corrected
+playing with no audio. Scheduled ahead of the remaining AppState-refactor
+program stages so the later `PlaybackController` extraction moves corrected
 behaviour rather than carrying the defect through five store extractions.
 
 | Sub-slice | Content | Status |
@@ -934,7 +937,7 @@ Slice 11 states only the behavioural contract HarmoniaPlayer depends on
 as an SPM pin — it does not specify HarmoniaCore ports, adapters or
 services.
 
-### 11.7 Slice 12: Strict-Concurrency Warning Baseline (v1.1.0; AppState Refactor Program)
+### 11.7 Slice 12: Strict-Concurrency Warning Baseline (pre-Pro milestone; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_12_micro.md`
 
@@ -947,7 +950,7 @@ that later stages burn down.
 |---|---|---|
 | 12 | Complete strict-concurrency checking + warning baseline | ✅ |
 
-### 11.8 Slice 13: Extract AlertCenter (v1.1.0; AppState Refactor Program)
+### 11.8 Slice 13: Extract AlertCenter (pre-Pro milestone; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_13_micro.md`
 
@@ -960,7 +963,7 @@ extractions.
 |---|---|---|
 | 13 | AlertCenter extraction + @Environment view migration + test migration | ✅ |
 
-### 11.9 Slice 14: Extract LyricsStore (v1.1.0; AppState Refactor Program)
+### 11.9 Slice 14: Extract LyricsStore (pre-Pro milestone; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_14_micro.md`
 
@@ -977,11 +980,11 @@ when they open — scope freezes live in `appstate_refactor_plan.md` §7.
 |---|---|---|
 | 14 | LyricsStore extraction + @Environment view migration + test migration | ✅ |
 
-### 11.10 Slice 15: Drag-and-Drop Lyrics Attach (v1.1.0)
+### 11.10 Slice 15: Drag-and-Drop Lyrics Attach (pre-Pro milestone)
 
 **Spec:** `docs/slice/slice_15_micro.md`
 
-First slice drawn from the v1.1.0 lyrics expansion backlog, outside the
+First slice drawn from the pre-Pro lyrics expansion backlog, outside the
 AppState decomposition refactor program. Dropping a `.lrc` file onto the
 now-playing surface copies it to the track's sidecar position via a
 Related-Items coordinated write, persists the preference, and shows the
@@ -992,7 +995,7 @@ lyrics immediately without interrupting playback. Builds on the Slice 14
 |---|---|---|
 | 15 | Drag-and-drop `.lrc` attach (copy-to-sidecar) + confirm/error surfaces | ✅ |
 
-### 11.11 Slice 16: Extract SettingsStore (v1.1.0; AppState Refactor Program)
+### 11.11 Slice 16: Extract SettingsStore (pre-Pro milestone; AppState Refactor Program)
 
 **Spec:** `docs/slice/slice_16_micro.md`
 
@@ -1056,9 +1059,8 @@ contents item; rides on `main`.
 | Version | Gate | Description |
 |---|---|---|
 | v1.0.0 | Slice 9 complete | Free tier feature complete; first public release |
-| v1.0.1 | Every v1.0.1 item below complete | Free patch: defect fixes and responsiveness against shipped v1.0.0 (see the v1.0.1 contents table) |
-| v1.1.0 | Slices 10, 12, 13 + remaining AppState-refactor stages complete (numbered at open); further v1.1.0 candidate slices numbered at open | Free minor: AppState decomposition refactor (five @Observable stores, Swift 6 language mode) + Free-tier candidate slices (window-menu declarative semantics, lyrics expansion backlog, …) |
-| v2.0.0 | Pro tier slice complete (numbered when it opens) | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
+| v1.0.1 | Every v1.0.1 item below complete | Free patch: defect fixes and responsiveness against shipped v1.0.0 (see the v1.0.1 contents table); tagged on `main`, so everything on `main` at the tag ships with it |
+| v2.0.0 | Pro tier program complete (P0–P6); the pre-Pro milestone (AppState decomposition refactor + Free candidate slices, no version label) and v1.0.1 are complete first | Pro tier; Tag Editor + FLAC/DSD playback via App Store IAP |
 
 **v1.0.1 contents.** v1.0.1 is released once every
 item below is complete. Items are listed in handling order; an item whose

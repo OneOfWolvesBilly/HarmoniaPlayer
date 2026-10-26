@@ -44,20 +44,20 @@ At a high level, the codebase is divided into the following logical modules.
      participant, not stateless service). Slice 9-L. See §4.5.
    - `AlertCenter` — `@MainActor @Observable` feature store owning the
      alert, paywall, and File Info request presentation state; the first
-     store extracted from AppState under the v1.1.0 decomposition
+     store extracted from AppState under the AppState decomposition
      program. Lives in `Shared/Models/` parallel to `AppState`
      (state-bearing observable, not stateless service). Slice 13-A.
      See §4.8.
    - `LyricsStore` — `@MainActor @Observable` feature store owning the
      lyrics panel visibility, the lyrics resolution, and the
      `LyricsService` / `LyricsPreferenceStore` dependencies; the second
-     store extracted from AppState under the v1.1.0 decomposition
+     store extracted from AppState under the AppState decomposition
      program. Lives in `Shared/Models/` parallel to `AlertCenter`.
      Slice 14-A. See §4.4(a).
    - `SettingsStore` — `@MainActor @Observable` feature store owning the
      persisted user settings, `viewPreferences`, the Free/Pro tier state,
      the UI string bundle, and the `IAPManager` dependency; the third
-     store extracted from AppState under the v1.1.0 decomposition
+     store extracted from AppState under the AppState decomposition
      program. Lives in `Shared/Models/` parallel to `AlertCenter`.
      Slice 16-A. See §4.9.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
@@ -330,7 +330,7 @@ choices can be read side by side.
 Slice 9-J originally kept the two lyrics properties inline on `AppState`
 (the surface was too small to justify a coordinator). Slice 14-A moved
 them into `LyricsStore` — a `@MainActor @Observable` feature store under
-the v1.1.0 decomposition program — which owns `showLyrics`,
+the AppState decomposition program — which owns `showLyrics`,
 `lyricsResolution`, and the `lyricsService` / `lyricsPreferenceStore`
 dependencies, plus the mutator methods (`toggleLyrics`,
 `recheckLyrics(for:)`, `setLyricsSource(_:for:)`,
@@ -503,7 +503,7 @@ Now Playing surface — can never disagree with actual playback.
 ### 4.8 AlertCenter Store Placement and Strangler Facade
 
 Slice 13-A extracted the first `@MainActor @Observable` feature store from
-AppState under the v1.1.0 decomposition program
+AppState under the AppState decomposition program
 (`docs/slice/appstate_refactor_plan.md`). Three boundary nuances:
 
 **(a) Why `AlertCenter` lives in `Shared/Models/`.** Same rule as
