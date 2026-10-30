@@ -807,7 +807,7 @@ Slice 6, the gate moved twice as scope expanded:
   own numbered slice instead.
 - **AppState decomposition refactor (pre-Pro milestone)** — the program
   that precedes the Pro tier. It carries no version label of its own:
-  releases are cut by tagging `main` (§11.14), so each completed stage
+  releases are cut by tagging `main` (§11.15), so each completed stage
   ships with whichever release is tagged after it lands. Design
   authority: `docs/slice/appstate_refactor_plan.md`.
   Opened stages: Slice 10 (token cleanup), Slice 12 (strict-concurrency
@@ -1024,7 +1024,7 @@ main-thread exception terminates the process and writes a crash report,
 adds a Debug-only launch-argument trigger to verify it in the real app,
 and guards the registration with a hosted unit test. The Slice 9-AA
 window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
-(see §11.14).
+(see §11.15).
 
 | Slice | Content | Status |
 |---|---|---|
@@ -1054,7 +1054,27 @@ contents item; rides on `main`.
 |---|---|---|
 | 18 | Window-scene descriptions realigned with the shipped 9-AA design (dev guide §9.7, impl guide §6.1, AppDelegate header) | ✅ |
 
-### 11.14 Version Targets
+### 11.14 Slice 19: Extract PlaybackController (pre-Pro milestone; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_19_micro.md`
+
+Sixth stage of the AppState decomposition refactor program: the fourth
+and largest store extraction (`@MainActor @Observable PlaybackController`
+behind the AppState strangler facade). Takes ownership of the playback
+service, the transport / navigation / polling / ReplayGain / error-mapping
+/ sleep-wake code, and the three playback persistence keys; replaces the
+last Combine sinks and publisher hand-offs in AppState init with
+store-side `didSet` logic, root-wired closures, and store-owned
+publishers; introduces the transitional `PlaylistContext` protocol;
+migrates the four views that read playback state; and re-homes the
+playback test files on the store. Facade forwarders survive only for
+members with remaining internal or un-migrated-view readers.
+
+| Slice | Content | Status |
+|---|---|---|
+| 19 | PlaybackController extraction + PlaylistContext + Combine replacement + persistence split + @Environment view migration + test migration | ⬜ |
+
+### 11.15 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|

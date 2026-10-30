@@ -28,7 +28,7 @@ test targets from the Swift 5 language mode to Swift 6.
   | Extract AlertCenter | **13** | `slice_13_micro.md` |
   | Extract LyricsStore | **14** | `slice_14_micro.md` |
   | Extract SettingsStore | **16** | `slice_16_micro.md` |
-  | Extract PlaybackController | — | §7.3 scope freeze |
+  | Extract PlaybackController | **19** | `slice_19_micro.md` |
   | Extract PlaylistCollection (incl. M3U8) | — | §7.4 scope freeze |
   | Swift 6 language-mode switch + close-out | — | §7.5 scope freeze |
 
@@ -39,7 +39,7 @@ test targets from the Swift 5 language mode to Swift 6.
   milestone: it precedes the Pro tier (v2.0.0) but carries no version
   label of its own. Releases are cut by tagging `main`, so each completed
   stage ships with whichever release is tagged after it lands
-  (`HarmoniaPlayer_development_plan.md` §11.14). The same milestone also
+  (`HarmoniaPlayer_development_plan.md` §11.15). The same milestone also
   carries candidate slices outside this program (window-menu declarative
   semantics, lyrics expansion backlog, …), numbered when they open.
 - **Out of scope.** HarmoniaCore (hexagonal architecture is clean; only
