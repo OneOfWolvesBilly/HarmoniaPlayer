@@ -44,9 +44,9 @@ final class LyricsPreferenceStoreTests: XCTestCase {
     }
 
     func testPreferenceStore_KeyUsesAbsolutePath() {
-        let t = track(at: "/Users/test/Library/Audio/file.flac")
+        let t = track(at: "/Media/Library/Audio/file.flac")
         XCTAssertEqual(sut.key(for: t),
-            "hp.lyrics.prefs./Users/test/Library/Audio/file.flac")
+            "hp.lyrics.prefs./Media/Library/Audio/file.flac")
     }
 
     // MARK: - load / save round-trip

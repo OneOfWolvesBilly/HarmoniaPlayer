@@ -12,7 +12,7 @@ final class ErrorReportServiceTests: XCTestCase {
 
     // MARK: - Fixtures
 
-    private let sampleDetail = "failedToDecode: /Users/test/song.mp3"
+    private let sampleDetail = "failedToDecode: /Music/song.mp3"
     private let sampleAppVersion = "0.1.0"
     private let sampleOSVersion = "Version 15.6 (Build 24G84)"
 

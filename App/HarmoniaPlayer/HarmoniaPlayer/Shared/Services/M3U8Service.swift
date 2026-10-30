@@ -9,7 +9,7 @@ import Foundation
 
 /// Controls how file paths are written in the exported M3U8 string.
 enum M3U8PathStyle {
-    /// Write absolute POSIX paths (e.g. `/Users/chen/Music/track.mp3`).
+    /// Write absolute POSIX paths (e.g. `/Music/track.mp3`).
     case absolute
 
     /// Write paths relative to the given `.m3u8` file URL.
