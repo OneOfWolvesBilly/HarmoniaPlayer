@@ -643,7 +643,7 @@ Test target:
 // AppState+Playback internal helper
 private func makeErrorDetail(code: PlaybackError, track: Track?) -> String
 // Examples:
-//   makeErrorDetail(code: .failedToDecode, track: t)  -> "failedToDecode: /Users/x/song.mp3"
+//   makeErrorDetail(code: .failedToDecode, track: t)  -> "failedToDecode: /Music/song.mp3"
 //   makeErrorDetail(code: .invalidState,   track: nil) -> "invalidState: (no active track)"
 
 // ErrorReportService — Application Layer, pure struct

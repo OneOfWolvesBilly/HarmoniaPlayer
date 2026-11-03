@@ -409,7 +409,7 @@ The current pin uses `kind = revision` (an exact commit SHA) rather than a
 tag. Pinned revision of HarmoniaCore-Swift:
 
 ```
-b4624987ab91a4c6a1cccc8c6285030f67510840
+1ccbbbfad90399070612020d83cd061f274160e0
 ```
 
 To bump the pin: edit the `XCRemoteSwiftPackageReference
