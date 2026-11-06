@@ -22,7 +22,7 @@ PlaylistCollection stage replaces it.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 19-A | Extract `PlaybackController` + `PlaylistContext` + Combine sink / publisher replacement + persistence split + `@Environment` view migration + test migration | — | ⬜ |
+| 19-A | Extract `PlaybackController` + `PlaylistContext` + Combine sink / publisher replacement + persistence split + `@Environment` view migration + test migration | — | ✅ |
 
 ### Goals
 
@@ -70,8 +70,8 @@ PlaylistCollection stage replaces it.
   PlaylistCollection stage (plan §7.4).
 - Replacing `PlaylistContext` with `PlaylistCollection` and turning the
   controller's context into an init parameter → plan §7.4.
-- Change-time persistence of `volume` (BL-17A-01) → v1.0.1 item
-  (`HarmoniaPlayer_development_plan.md` §11.15), handled after §7.4; this
+- Change-time persistence of `volume` (BL-17A-01) → v1.0.1 item (the
+  development plan's Version Targets section), handled after §7.4; this
   slice keeps the terminate-time write (see Scope, persistence).
 - Deleting the facade forwarders that survive this slice (`currentTrack`,
   `playbackState`, `currentTime`, `playingPlaylistID`, `repeatMode`,
@@ -144,7 +144,7 @@ PlaylistCollection stage replaces it.
 
 ---
 
-## Slice 19-A: Extract PlaybackController ⬜
+## Slice 19-A: Extract PlaybackController ✅
 
 ### Goal
 
@@ -619,6 +619,54 @@ against the skeleton (rows 1–110 plus the retargeted
   103 (13-A amendment precedent — forcing them red would need a
   deliberately-wrong skeleton body).
 - Expected red (89): every other row.
+
+Execution amendments (recorded at close-out):
+
+- **`import Combine` stays in `AppState.swift`.** The Goals, the Scope
+  "Deleted" list, and AC2 say the import leaves the file. It cannot:
+  `AppState` is still an `ObservableObject` with four `@Published`
+  properties (the playlist rows), and both are Combine declarations — a
+  build without the import fails with "missing import of defining module
+  'Combine'". `cancellables` and every sink did leave. The import goes
+  when the playlist rows leave AppState (plan §7.4). AC2's
+  `import Combine` clause is therefore not met and not meetable in this
+  slice.
+- **AC2 `@Published` count.** The thirteen `@Published` declarations drop
+  to four (nine removed), as specified. The literal
+  `grep -c "@Published" AppState.swift` drops by ten (15 → 5), because
+  one of the two doc-comment lines that mention the attribute — the old
+  `nowPlayingCoordinator` comment — was rewritten with the property.
+- **`alertCenter` is module-internal on the controller**, not `private`
+  as the Scope states: the navigation code lives in
+  `PlaybackController+Navigation.swift`, and a `private` member is not
+  visible to an extension in another file. `settingsStore` and
+  `userDefaults` stay `private`.
+- **Red set.** Observed 93 red of the 111 rows run against the skeleton
+  (prediction: 89). Eight rows predicted vacuously green were red because
+  their fixture asserts a precondition the skeleton cannot satisfy or
+  unwraps a value it never sets (rows 16, 28, 42, 44, 74, 79, 95, 103);
+  four rows predicted red were vacuously green (rows 9, 67, 73, 97). The
+  six default-value guards matched.
+- **Green.** 531 passed / 5 skipped / 0 failed — exactly pre-slice
+  519 − 5 + 17 (AC5).
+- **Baseline merge.** `main` gained two commits while the slice was open
+  (the HarmoniaCore-Swift repin to `1ccbbbfa`, whose tree is identical to
+  the previous pin, and neutral example paths) and was merged into the
+  branch before the red phase; the suite re-measured at 519 / 5 / 0 on the
+  merged tree, so the AC5 baseline is unchanged. The HC 5-area audit read
+  the pinned revision's tree directly: Ports (8), Adapters (9), Services
+  (`PlaybackService`, `DefaultPlaybackService`), Models (5), and
+  `CoreError` (6 cases) match `architecture.md` §2 and §5 — no HC-side
+  change to surface.
+- **Warning re-measurement** used clean builds of the pre-slice and
+  post-slice trees with an identical counting method: only the seven
+  deleted files' rows disappear; every other file measures the same
+  before and after (AC6).
+- `AppState.replayGainMode` (the Slice 16 get + set forwarder) has no
+  internal reader left once `applyReplayGainVolume` reads the store; it
+  is not in this slice's Scope and stays for the facade clean-up
+  (plan §7.5).
+- BL-19A-02 stays open until the manual check AC7(i) is run.
 
 ### Public API shape
 

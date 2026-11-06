@@ -1072,7 +1072,7 @@ members with remaining internal or un-migrated-view readers.
 
 | Slice | Content | Status |
 |---|---|---|
-| 19 | PlaybackController extraction + PlaylistContext + Combine replacement + persistence split + @Environment view migration + test migration | ⬜ |
+| 19 | PlaybackController extraction + PlaylistContext + Combine replacement + persistence split + @Environment view migration + test migration | ✅ |
 
 ### 11.15 Version Targets
 
