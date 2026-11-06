@@ -1,14 +1,15 @@
 //
-//  AppState+Navigation.swift
+//  PlaybackController+Navigation.swift
 //  HarmoniaPlayer / Shared / Models
 //
-//  PURPOSE: Track navigation (next/previous/auto-advance on track completion)
-//  and Mini Player playlist switching.
+//  SPDX-License-Identifier: MIT
 //
 
 import Foundation
 
-extension AppState {
+/// Track navigation: next / previous, natural track completion, and the
+/// shuffle queue.
+extension PlaybackController {
 
     // MARK: - Navigation
 
@@ -21,7 +22,9 @@ extension AppState {
     ///
     /// No-op if playlist is empty.
     func playNextTrack() async {
-        guard !playlists[activePlaylistIndex].tracks.isEmpty else { return }
+        guard let context = playlistContext else { return }
+        let tracks = context.playlists[context.activePlaylistIndex].tracks
+        guard !tracks.isEmpty else { return }
 
         // repeatMode == .one does NOT intercept Next/Previous button presses.
         // The button should navigate the playlist; repeat-one only applies to
@@ -47,20 +50,20 @@ extension AppState {
         }
 
         guard let current = currentTrack,
-              let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
+              let currentIndex = tracks.firstIndex(where: { $0.id == current.id })
         else {
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
+            await play(trackID: tracks[0].id)
             return
         }
 
         let nextIndex = currentIndex + 1
-        if nextIndex < playlists[activePlaylistIndex].tracks.count {
-            await play(trackID: playlists[activePlaylistIndex].tracks[nextIndex].id)
+        if nextIndex < tracks.count {
+            await play(trackID: tracks[nextIndex].id)
         } else {
             // At last track — always wrap to first regardless of repeatMode.
             // Natural completion (trackDidFinishPlaying) respects repeatMode;
             // manual Next button always wraps for better user experience.
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
+            await play(trackID: tracks[0].id)
         }
     }
 
@@ -71,7 +74,9 @@ extension AppState {
     ///
     /// No-op if playlist is empty.
     func playPreviousTrack() async {
-        guard !playlists[activePlaylistIndex].tracks.isEmpty else { return }
+        guard let context = playlistContext else { return }
+        let tracks = context.playlists[context.activePlaylistIndex].tracks
+        guard !tracks.isEmpty else { return }
 
         if isShuffled {
             if shuffleQueue.isEmpty { buildShuffleQueue(startingWith: currentTrack?.id) }
@@ -91,36 +96,38 @@ extension AppState {
         }
 
         guard let current = currentTrack,
-              let currentIndex = playlists[activePlaylistIndex].tracks.firstIndex(where: { $0.id == current.id })
+              let currentIndex = tracks.firstIndex(where: { $0.id == current.id })
         else {
-            await play(trackID: playlists[activePlaylistIndex].tracks[0].id)
+            await play(trackID: tracks[0].id)
             return
         }
 
         if currentIndex > 0 {
-            await play(trackID: playlists[activePlaylistIndex].tracks[currentIndex - 1].id)
+            await play(trackID: tracks[currentIndex - 1].id)
         } else {
             do {
                 try await playbackService.seek(to: 0)
                 currentTime = 0
             } catch {
-                lastError = mapToPlaybackError(error)
+                alertCenter.lastError = mapToPlaybackError(error)
             }
             await play(trackID: current.id)
         }
     }
 
-    /// Called by the View layer when natural playback completion is detected.
+    /// Called when natural playback completion is detected by the polling loop.
     ///
     /// Dispatches based on `repeatMode`:
-    /// - `.off`: `playNextTrack()` (stop if at last).
-    /// - `.all`: `playNextTrack()` (loop if at last).
-    /// - `.one`: `play(trackID:)` for `currentTrack`.
+    /// - `.off`: advance to the next playable track; stop if at last.
+    /// - `.all`: advance to the next playable track; loop if at last.
+    /// - `.one`: replay the last played track.
     ///
-    /// No-op if `currentTrack` is `nil`.
+    /// Inaccessible tracks are skipped and listed in the file-not-found
+    /// alert. No-op if no track has been played.
     func trackDidFinishPlaying() async {
+        guard let context = playlistContext else { return }
         guard let lastID = lastPlayedTrackID else { return }
-        guard let playingIndex = playlists.firstIndex(where: { $0.id == playingPlaylistID }) else {
+        guard let playingIndex = context.playlists.firstIndex(where: { $0.id == playingPlaylistID }) else {
             await stop()
             currentTrack = nil
             return
@@ -134,14 +141,14 @@ extension AppState {
                 var nextIndex = shuffleQueueIndex + 1
                 while nextIndex < shuffleQueue.count {
                     guard let trackID = shuffleQueue[safe: nextIndex],
-                          let next = playlists[playingIndex].tracks.first(where: { $0.id == trackID })
+                          let next = context.playlists[playingIndex].tracks.first(where: { $0.id == trackID })
                     else { nextIndex += 1; continue }
 
-                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
+                    // Format gate disabled — Pro formats cannot enter the playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
                     // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    // if isFormatGated && paywallDismissedThisSession {
+                    // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                    // if isFormatGated && alertCenter.paywallDismissedThisSession {
                     //     nextIndex += 1
                     //     continue
                     // }
@@ -150,24 +157,24 @@ extension AppState {
                         shuffleQueueIndex = nextIndex
                         await play(trackID: next.id)
                         if case .error(.failedToOpenFile) = playbackState {
-                            skipped.append(displayName(for: next))
+                            skipped.append(next.displayName)
                             nextIndex += 1
                             continue
                         }
                         if !skipped.isEmpty {
-                            skippedInaccessibleNames = skipped
-                            showFileNotFoundAlert = true
+                            alertCenter.skippedInaccessibleNames = skipped
+                            alertCenter.showFileNotFoundAlert = true
                         }
                         return
                     } else {
-                        skipped.append(displayName(for: next))
+                        skipped.append(next.displayName)
                     }
                     nextIndex += 1
                 }
                 // Queue exhausted — show popup and stop.
                 if !skipped.isEmpty {
-                    skippedInaccessibleNames = skipped
-                    showFileNotFoundAlert = true
+                    alertCenter.skippedInaccessibleNames = skipped
+                    alertCenter.showFileNotFoundAlert = true
                 }
                 await stop()
                 currentTrack = nil
@@ -176,18 +183,18 @@ extension AppState {
             } else {
                 // Normal mode: skip inaccessible tracks and format-gated tracks
                 // (when paywallDismissedThisSession is true).
-                guard let currentIndex = playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
+                guard let currentIndex = context.playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
                 else { return }
                 var skipped: [String] = []
                 var nextIndex = currentIndex + 1
-                while nextIndex < playlists[playingIndex].tracks.count {
-                    let next = playlists[playingIndex].tracks[nextIndex]
+                while nextIndex < context.playlists[playingIndex].tracks.count {
+                    let next = context.playlists[playingIndex].tracks[nextIndex]
 
-                    // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
+                    // Format gate disabled — Pro formats cannot enter the playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
                     // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                    // if isFormatGated && paywallDismissedThisSession {
+                    // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                    // if isFormatGated && alertCenter.paywallDismissedThisSession {
                     //     nextIndex += 1
                     //     continue
                     // }
@@ -195,24 +202,24 @@ extension AppState {
                     if next.isAccessible {
                         await play(trackID: next.id)
                         if case .error(.failedToOpenFile) = playbackState {
-                            skipped.append(displayName(for: next))
+                            skipped.append(next.displayName)
                             nextIndex += 1
                             continue
                         }
                         if !skipped.isEmpty {
-                            skippedInaccessibleNames = skipped
-                            showFileNotFoundAlert = true
+                            alertCenter.skippedInaccessibleNames = skipped
+                            alertCenter.showFileNotFoundAlert = true
                         }
                         return
                     } else {
-                        skipped.append(displayName(for: next))
+                        skipped.append(next.displayName)
                     }
                     nextIndex += 1
                 }
                 // No more playable tracks — show popup and stop.
                 if !skipped.isEmpty {
-                    skippedInaccessibleNames = skipped
-                    showFileNotFoundAlert = true
+                    alertCenter.skippedInaccessibleNames = skipped
+                    alertCenter.showFileNotFoundAlert = true
                 }
                 await stop()
                 currentTrack = nil
@@ -220,20 +227,20 @@ extension AppState {
         case .all:
             // Wrap around skipping inaccessible tracks and format-gated tracks
             // (when paywallDismissedThisSession is true).
-            guard let currentIndex = playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
+            guard let currentIndex = context.playlists[playingIndex].tracks.firstIndex(where: { $0.id == lastID })
             else { return }
-            let count = playlists[playingIndex].tracks.count
+            let count = context.playlists[playingIndex].tracks.count
             var nextIndex = (currentIndex + 1) % count
             var attempts = 0
             var skipped: [String] = []
             while attempts < count {
-                let next = playlists[playingIndex].tracks[nextIndex]
+                let next = context.playlists[playingIndex].tracks[nextIndex]
 
-                // v0.1 frozen: format gate disabled — Pro formats cannot enter playlist.
+                // Format gate disabled — Pro formats cannot enter the playlist.
                 // Silently skip format-gated tracks if user dismissed paywall this session.
                 // let nextExt = next.url.pathExtension.lowercased()
-                // let isFormatGated = Self.proOnlyFormats.contains(nextExt) && !featureFlags.supportsFLAC
-                // if isFormatGated && paywallDismissedThisSession {
+                // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                // if isFormatGated && alertCenter.paywallDismissedThisSession {
                 //     nextIndex = (nextIndex + 1) % count
                 //     attempts += 1
                 //     continue
@@ -242,35 +249,35 @@ extension AppState {
                 if next.isAccessible {
                     await play(trackID: next.id)
                     if case .error(.failedToOpenFile) = playbackState {
-                        skipped.append(displayName(for: next))
+                        skipped.append(next.displayName)
                         nextIndex = (nextIndex + 1) % count
                         attempts += 1
                         continue
                     }
                     if !skipped.isEmpty {
-                        skippedInaccessibleNames = skipped
-                        showFileNotFoundAlert = true
+                        alertCenter.skippedInaccessibleNames = skipped
+                        alertCenter.showFileNotFoundAlert = true
                     }
                     return
                 } else {
-                    skipped.append(displayName(for: next))
+                    skipped.append(next.displayName)
                 }
                 nextIndex = (nextIndex + 1) % count
                 attempts += 1
             }
             // All tracks inaccessible — show popup and stop.
             if !skipped.isEmpty {
-                skippedInaccessibleNames = skipped
-                showFileNotFoundAlert = true
+                alertCenter.skippedInaccessibleNames = skipped
+                alertCenter.showFileNotFoundAlert = true
             }
             await stop()
             currentTrack = nil
         case .one:
-            guard let current = playlists[playingIndex].tracks.first(where: { $0.id == lastID })
+            guard let current = context.playlists[playingIndex].tracks.first(where: { $0.id == lastID })
             else { return }
             if !current.isAccessible {
-                failedTrackName = displayName(for: current)
-                showFileNotFoundAlert = true
+                alertCenter.failedTrackName = current.displayName
+                alertCenter.showFileNotFoundAlert = true
                 await stop()
                 currentTrack = nil
             } else {
@@ -279,23 +286,24 @@ extension AppState {
         }
     }
 
-    // MARK: - Mini Player
+    // MARK: - Shuffle queue
 
-    /// Switches the active playlist from Mini Player and starts playing from the first track.
+    /// Builds a shuffled queue of all accessible track IDs of the active
+    /// playlist.
     ///
-    /// Called by MiniPlayerView when the user selects a different playlist.
-    /// Stops current playback, switches activePlaylistIndex, then plays the
-    /// first track in the new playlist. No-op if index is out of range.
-    ///
-    /// - Parameter index: Index of the playlist to switch to.
-    func switchMiniPlayerPlaylist(to index: Int) async {
-        guard playlists.indices.contains(index) else { return }
-        await stop()
-        activePlaylistIndex = index
-        // Clear undo stack: switched playlist context.
-        undoManager.removeAllActions()
-        if let first = playlists[index].tracks.first {
-            await play(trackID: first.id)
+    /// If `startID` is provided, places it first so the currently playing
+    /// track stays at the head of the new queue.
+    func buildShuffleQueue(startingWith startID: Track.ID? = nil) {
+        guard let context = playlistContext else { return }
+        var ids = context.playlists[context.activePlaylistIndex].tracks
+            .filter { $0.isAccessible }
+            .map { $0.id }
+        ids.shuffle()
+        if let startID, let idx = ids.firstIndex(of: startID) {
+            ids.remove(at: idx)
+            ids.insert(startID, at: 0)
         }
+        shuffleQueue = ids
+        shuffleQueueIndex = 0
     }
 }

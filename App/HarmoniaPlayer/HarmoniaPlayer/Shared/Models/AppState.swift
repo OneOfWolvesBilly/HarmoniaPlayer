@@ -20,11 +20,8 @@ extension Array {
 private enum PersistenceKey {
     static let playlists           = "hp.playlists"
     static let activePlaylistIndex = "hp.activePlaylistIndex"
-    static let volume              = "hp.volume"
     static let sortKey             = "hp.sortKey"
     static let sortAscending       = "hp.sortAscending"
-    static let repeatMode          = "hp.repeatMode"
-    static let isShuffled          = "hp.isShuffled"
 }
 
 /// Central application state container.
@@ -79,10 +76,18 @@ final class AppState: ObservableObject {
     /// observe it via `@Environment(SettingsStore.self)`.
     let settingsStore: SettingsStore
 
+    /// Playback controller — owns the transport state, the playback
+    /// service, the repeat / shuffle modes, and the playback persistence
+    /// keys. Views whose body reads playback state observe it via
+    /// `@Environment(PlaybackController.self)`.
+    let playbackController: PlaybackController
+
     // MARK: - Services
 
-    /// Playback service
-    let playbackService: PlaybackService
+    /// Playback service. Read-only forwarder to
+    /// `playbackController.playbackService`; the playlist code calls
+    /// `playbackService.stop()` when it removes the playing track.
+    var playbackService: PlaybackService { playbackController.playbackService }
 
     /// Tag reader service
     let tagReaderService: TagReaderService
@@ -97,45 +102,24 @@ final class AppState: ObservableObject {
     /// `@Published` properties or methods.
     let eqCoordinator: EQCoordinator
 
-    /// NowPlaying coordinator (Slice 9-L) — owns all wiring between
-    /// AppState publishers, AppState action methods, and the system
+    /// NowPlaying coordinator — owns all wiring between the playback
+    /// controller's publishers, its transport methods, and the system
     /// Now Playing surface (Control Center widget, lock screen,
     /// AirPods, media keys, Siri).
     ///
-    /// AppState holds only this reference and never has any
-    /// NowPlaying-specific @Published properties, observation logic,
-    /// or callback assignment of its own. The coordinator subscribes
-    /// to AppState's publishers via closures captured in `init` and
-    /// receives one direct notification —
-    /// `notifySeekCompleted(at:)` — from `AppState.seek(to:)`
-    /// after a successful seek.
-    ///
-    /// **Why `private(set) var ...!` instead of `let`:** the seven
-    /// action closures injected into the coordinator must capture
-    /// `[weak self]`, but Swift's two-phase init forbids capturing
-    /// `self` until every stored property is initialised. This is a
-    /// chicken-and-egg situation: a `let` coordinator would have to
-    /// be assigned before `self` is complete, but the closures need
-    /// `self` to already be complete. The implicitly-unwrapped
-    /// `private(set) var` keeps the coordinator effectively
-    /// immutable from outside the class while permitting assignment
-    /// at the end of `init` after every other stored property is
-    /// settled.
-    ///
-    /// EQCoordinator uses `let` because it has no self-capture
-    /// requirement; that contrast does not apply here.
-    private(set) var nowPlayingCoordinator: NowPlayingCoordinator!
+    /// AppState holds only this reference. The coordinator is built from
+    /// `playbackController`'s publishers and seven action closures that
+    /// capture the controller; it receives one direct notification —
+    /// `notifySeekCompleted(at:)` — through the controller's
+    /// `onSeekCompleted` closure after a successful seek. The controller is
+    /// constructed first, so the coordinator can be a `let`.
+    let nowPlayingCoordinator: NowPlayingCoordinator
 
     // MARK: - Published State
 
     /// Whether Pro features are unlocked.
     /// Read-only forwarder to `settingsStore.isProUnlocked`.
     var isProUnlocked: Bool { settingsStore.isProUnlocked }
-
-    /// Read-only mirror of `eqCoordinator.isEnabled` so SwiftUI views bound to
-    /// `AppState` re-render when EQ enable is toggled. The coordinator remains
-    /// the source of truth; this property is fed by a sink in `init`.
-    @Published private(set) var eqEnabled: Bool
 
     // MARK: - Playlist State
 
@@ -158,13 +142,6 @@ final class AppState: ObservableObject {
     /// `playlists[activePlaylistIndex].xxx` directly.
     var playlist: Playlist { playlists[activePlaylistIndex] }
 
-    /// Currently selected track.
-    ///
-    /// `nil` when no track is selected, or after the selected track
-    /// is removed from the playlist or the playlist is cleared.
-    /// Set via `play(trackID:)`. Does not trigger audio playback.
-    @Published var currentTrack: Track?
-
     /// IDs of tracks currently selected in PlaylistView's Table.
     ///
     /// Promoted from PlaylistView `@State` so that `play()` can access
@@ -172,35 +149,54 @@ final class AppState: ObservableObject {
     /// Selection does NOT follow playback — it reflects user clicks only.
     @Published var selectedTrackIDs = Set<Track.ID>()
 
-    // MARK: - Playback State
+    // MARK: - Playback State (facade → PlaybackController)
 
-    /// Current playback state.
-    ///
-    /// Initialised to `.idle`. Updated by playback control methods
-    /// (`play()`, `pause()`, `stop()`, `play(trackID:)`).
-    @Published var playbackState: PlaybackState = .idle
+    /// Currently selected track. Forwards to `playbackController.currentTrack`;
+    /// the playlist code clears it when the playing track is removed.
+    var currentTrack: Track? {
+        get { playbackController.currentTrack }
+        set { playbackController.currentTrack = newValue }
+    }
+
+    /// Current playback state. Forwards to `playbackController.playbackState`.
+    var playbackState: PlaybackState {
+        get { playbackController.playbackState }
+        set { playbackController.playbackState = newValue }
+    }
+
+    /// Current playback position in seconds. Forwards to
+    /// `playbackController.currentTime`.
+    var currentTime: TimeInterval {
+        get { playbackController.currentTime }
+        set { playbackController.currentTime = newValue }
+    }
 
     /// ID of the playlist that contains the currently playing track.
-    ///
-    /// Set to `playlists[activePlaylistIndex].id` when `play(trackID:)` succeeds.
-    /// Cleared to `nil` by `stop()` and when the last track finishes naturally.
-    /// Uses `Playlist.ID` (UUID) so it remains valid after tab reordering.
-    @Published var playingPlaylistID: Playlist.ID?
+    /// Read-only forwarder to `playbackController.playingPlaylistID`.
+    var playingPlaylistID: Playlist.ID? { playbackController.playingPlaylistID }
 
-    /// Current playback position in seconds.
-    ///
-    /// Initialised to `0`. Updated on successful `seek(to:)` and
-    /// reset to `0` by `stop()`.
-    @Published var currentTime: TimeInterval = 0
+    /// Current repeat mode. Read-only forwarder to
+    /// `playbackController.repeatMode`.
+    var repeatMode: RepeatMode { playbackController.repeatMode }
 
-    /// Position the user has seeked to while stopped or paused.
-    /// Used by play() to resume from the correct position.
-    var pendingSeekTime: TimeInterval = 0
+    /// Whether shuffle mode is enabled. Read-only forwarder to
+    /// `playbackController.isShuffled`.
+    var isShuffled: ShuffleMode { playbackController.isShuffled }
 
-    /// Duration of the currently loaded track in seconds.
-    ///
-    /// Initialised to `0`. Updated after a successful `load` in `play(trackID:)`.
-    @Published var duration: TimeInterval = 0
+    /// Pre-shuffled track ID order used when shuffle is enabled. Forwards to
+    /// `playbackController.shuffleQueue`; the playlist code keeps the queue
+    /// in step with track insertions and removals.
+    var shuffleQueue: [Track.ID] {
+        get { playbackController.shuffleQueue }
+        set { playbackController.shuffleQueue = newValue }
+    }
+
+    /// Current position in `shuffleQueue`. Forwards to
+    /// `playbackController.shuffleQueueIndex`.
+    var shuffleQueueIndex: Int {
+        get { playbackController.shuffleQueueIndex }
+        set { playbackController.shuffleQueueIndex = newValue }
+    }
 
     // MARK: - Error State (facade → AlertCenter)
 
@@ -306,30 +302,11 @@ final class AppState: ObservableObject {
         set { settingsStore.allowDuplicateTracks = newValue }
     }
 
-    // MARK: - Volume State
-
-    /// Current output volume in the range 0.0 (silent) to 1.0 (full).
-    ///
-    /// Default: `1.0`. Updated by `setVolume(_:)`.
-    /// Persisted across launches by Slice 7-E (persistence).
-    @Published var volume: Float = 1.0
-
     // MARK: - Language (facade → SettingsStore)
 
     /// The `Bundle` used for all `NSLocalizedString(bundle:)` calls.
     /// Read-only forwarder to `settingsStore.languageBundle`.
     var languageBundle: Bundle { settingsStore.languageBundle }
-
-    // MARK: - Repeat Mode State
-
-    /// Current repeat mode.
-    ///
-    /// Defaults to `.off` on launch. Updated by `cycleRepeatMode()`.
-    /// Controls behaviour of `playNextTrack()` and `trackDidFinishPlaying()`.
-    @Published var repeatMode: RepeatMode = .off
-
-    /// Whether shuffle mode is enabled. See `ShuffleMode` for semantics.
-    @Published var isShuffled: ShuffleMode = .off
 
     // MARK: - ReplayGain (facade → SettingsStore)
 
@@ -340,21 +317,6 @@ final class AppState: ObservableObject {
         get { settingsStore.replayGainMode }
         set { settingsStore.replayGainMode = newValue }
     }
-
-    /// Pre-shuffled track ID order used when shuffle is enabled.
-    ///
-    /// Contains a permutation of all track IDs in `playlists[activePlaylistIndex].tracks`.
-    /// Rebuilt whenever shuffle is toggled on or the playlist changes.
-    /// `shuffleQueueIndex` points to the current position in this queue.
-    var shuffleQueue: [Track.ID] = []
-    var shuffleQueueIndex: Int = 0
-
-    /// The ID of the last successfully played track.
-    ///
-    /// Set after `playbackService.play()` succeeds in `play(trackID:)`.
-    /// Used by `trackDidFinishPlaying()` to find the current position in the playlist
-    /// when `currentTrack` has been cleared (e.g. after a failed play attempt).
-    var lastPlayedTrackID: Track.ID?
 
     // MARK: - Format Classification
 
@@ -375,48 +337,21 @@ final class AppState: ObservableObject {
     /// Provides crash safety for large imports without saving on every track.
     static let saveBatchSize = 5
 
-    // MARK: - Sleep/Wake
+    // MARK: - Transport (facade → PlaybackController)
 
-    /// Whether playback was active at the moment the system began sleeping.
-    ///
-    /// Recorded by `handleSystemWillSleep()` and consumed (then cleared) by
-    /// `handleSystemDidWake()` to decide whether playback resumes
-    /// automatically after the Mac wakes. Captured at the will-sleep
-    /// notification rather than inferred from the polling loop, because the
-    /// ordering of the did-wake notification against a polling tick is
-    /// undefined.
-    private(set) var wasPlayingBeforeSleep: Bool = false
-
-    /// Records whether playback is active at the moment the system sleeps.
-    ///
-    /// Called by `AppDelegate` when `NSWorkspace.willSleepNotification`
-    /// fires.
-    func handleSystemWillSleep() {
-        wasPlayingBeforeSleep = (playbackState == .playing)
+    /// Stops playback. Forwards to `playbackController.stop()`; called by
+    /// the playlist code when the playing playlist is deleted or switched
+    /// from the Mini Player.
+    func stop() async {
+        await playbackController.stop()
     }
 
-    /// Resumes playback after the system wakes if it was playing before
-    /// sleep.
-    ///
-    /// Called by `AppDelegate` when `NSWorkspace.didWakeNotification`
-    /// fires. Clears `wasPlayingBeforeSleep` in all cases; when it was
-    /// `true`, calls `play()` — re-preparation of the audio pipeline
-    /// happens inside the playback service, so no further call is needed.
-    func handleSystemDidWake() async {
-        let shouldResume = wasPlayingBeforeSleep
-        wasPlayingBeforeSleep = false
-        if shouldResume {
-            await play()
-        }
+    /// Loads and plays the track matching `trackID`. Forwards to
+    /// `playbackController.play(trackID:)`; called by the playlist code
+    /// after removing the playing track and by the Mini Player switch.
+    func play(trackID: Track.ID) async {
+        await playbackController.play(trackID: trackID)
     }
-
-    // MARK: - Polling
-
-    /// Task that polls playback state and currentTime while playing.
-    var pollingTask: Task<Void, Never>?
-
-    /// Combine subscriptions retained for the lifetime of AppState.
-    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
@@ -464,7 +399,7 @@ final class AppState: ObservableObject {
         )
 
         // Step 4: Create services via factory
-        self.playbackService = coreFactory.makePlaybackService()
+        let playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService = FileDropService()
         let lyricsService = coreFactory.makeLyricsService()
@@ -481,16 +416,50 @@ final class AppState: ObservableObject {
                 store: EQPersistenceStore(defaults: userDefaults)
             )
 
-        // Mirror the EQ coordinator's enabled state for the toolbar button.
-        // The coordinator stays the source of truth; eqEnabled is a read-only
-        // UI mirror so PlayerView re-renders when Enable is toggled.
-        self.eqEnabled = self.eqCoordinator.isEnabled
-
         // Step 4c: Construct the lyrics store, which takes ownership of the
         // lyrics service and preference store created in Step 4.
         self.lyricsStore = LyricsStore(
             lyricsService: lyricsService,
             lyricsPreferenceStore: lyricsPreferenceStore
+        )
+
+        // Step 4d: Construct the playback controller from the playback
+        // service and the stores it reports to. It restores its own
+        // persistence keys. Its playlist context is assigned at the end of
+        // init, once `self` is fully initialised.
+        let playbackController = PlaybackController(
+            playbackService: playbackService,
+            alertCenter: self.alertCenter,
+            settingsStore: self.settingsStore,
+            userDefaults: userDefaults
+        )
+        self.playbackController = playbackController
+
+        // Step 4e: Construct the NowPlayingCoordinator from the controller's
+        // publishers and transport methods. The coordinator never holds an
+        // AppState reference; it sees only the publishers, the currentTime
+        // getter, and the seven action closures, which capture the
+        // controller. Production resolves the NowPlayingService factory to
+        // MPNowPlayingAdapter; tests resolve it to FakeNowPlayingService via
+        // FakeCoreProvider.
+        self.nowPlayingCoordinator = NowPlayingCoordinator(
+            service: coreFactory.makeNowPlayingService(),
+            currentTrackPublisher: playbackController.currentTrackPublisher,
+            playbackStatePublisher: playbackController.playbackStatePublisher,
+            currentTimeProvider: { playbackController.currentTime },
+            play: { await playbackController.play() },
+            pause: { await playbackController.pause() },
+            stop: { await playbackController.stop() },
+            seek: { seconds in await playbackController.seek(to: seconds) },
+            next: { await playbackController.playNextTrack() },
+            previous: { await playbackController.playPreviousTrack() },
+            togglePlayPause: {
+                if playbackController.playbackState == .playing {
+                    await playbackController.pause()
+                } else {
+                    await playbackController.play()
+                }
+            }
         )
 
         // Step 5: Store UndoManager.
@@ -503,7 +472,6 @@ final class AppState: ObservableObject {
 
         // Step 7: Initialise playlist state
         self.playlists = [Playlist(name: "Playlist 1")]
-        self.currentTrack = nil
 
         // Step 8: Store UserDefaults instance
         self.userDefaults = userDefaults
@@ -517,88 +485,37 @@ final class AppState: ObservableObject {
         // Step 10: Restore persisted state (overrides Step 7 defaults if data exists)
         restoreState()
 
-        // Step 11: Wire the settings store's notifications. A ReplayGain mode
-        // change re-applies the effective volume during active playback, so
-        // the change is audible without restarting the track; a paywall
-        // request is presented through the alert store.
-        settingsStore.onReplayGainModeChanged = { [weak self] _ in
-            guard let self else { return }
-            Task { @MainActor in await self.applyReplayGainVolume(requiresActivePlayback: true) }
+        // Step 11: Wire the stores' notifications. Every closure captures the
+        // store it targets, never `self`.
+        //
+        // - The playback controller reads and writes playlist state through
+        //   its PlaylistContext, which is AppState until the playlist state
+        //   moves into its own store.
+        // - A ReplayGain mode change re-applies the effective volume during
+        //   active playback, so the change is audible without restarting the
+        //   track.
+        // - A current-track change refreshes the lyrics store's resolution.
+        // - A completed seek re-anchors the system Now Playing scrubber.
+        // - Dismissing an error alert returns playback from .error to .stopped.
+        // - A paywall request is presented through the alert store.
+        playbackController.playlistContext = self
+        settingsStore.onReplayGainModeChanged = { _ in
+            Task { @MainActor in
+                await playbackController.applyReplayGainVolume(requiresActivePlayback: true)
+            }
+        }
+        playbackController.onCurrentTrackChanged = { [lyricsStore] track in
+            lyricsStore.updateResolution(for: track)
+        }
+        playbackController.onSeekCompleted = { [weak nowPlayingCoordinator] seconds in
+            nowPlayingCoordinator?.notifySeekCompleted(at: seconds)
+        }
+        alertCenter.onErrorCleared = {
+            playbackController.recoverFromError()
         }
         settingsStore.onPaywallRequested = { [weak alertCenter = self.alertCenter] in
             alertCenter?.presentPaywall()
         }
-
-        // Step 12: Persist repeatMode and isShuffled whenever they change.
-        // Callers must not call saveState() directly — persistence is
-        // AppState's responsibility.
-        $repeatMode
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.saveState() }
-            .store(in: &cancellables)
-
-        $isShuffled
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.saveState() }
-            .store(in: &cancellables)
-
-        // Step 13: Update the lyrics store's resolution whenever currentTrack
-        // changes. dropFirst skips the initial nil emission at subscription
-        // time; initial resolution is set when play(trackID:) sets
-        // currentTrack.
-        $currentTrack
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] track in
-                self?.lyricsStore.updateResolution(for: track)
-            }
-            .store(in: &cancellables)
-
-        // Step 13b: Keep the eqEnabled mirror in sync after launch. dropFirst
-        // skips the value at subscription time; the initial mirror is set in
-        // Step 4b. Delivered on RunLoop.main so the toolbar button re-renders.
-        self.eqCoordinator.$isEnabled
-            .dropFirst()
-            .receive(on: RunLoop.main)
-            .sink { [weak self] in self?.eqEnabled = $0 }
-            .store(in: &cancellables)
-
-        // Step 14: Construct the NowPlayingCoordinator (Slice 9-L).
-        //
-        // Placed last so all stored properties are fully initialised
-        // before the seven action closures capture `[weak self]`.
-        // The coordinator never holds an AppState reference; it sees
-        // only the publishers, the currentTime getter, and the seven
-        // injected action closures. Production resolves the
-        // NowPlayingService factory to MPNowPlayingAdapter; tests
-        // resolve it to FakeNowPlayingService via FakeCoreProvider.
-        //
-        // Red phase: the coordinator init body intentionally does
-        // NOT subscribe to publishers, assign callbacks, or push to
-        // the service. Tests will fail until the Green phase wires
-        // these up.
-        self.nowPlayingCoordinator = NowPlayingCoordinator(
-            service: coreFactory.makeNowPlayingService(),
-            currentTrackPublisher: $currentTrack.eraseToAnyPublisher(),
-            playbackStatePublisher: $playbackState.eraseToAnyPublisher(),
-            currentTimeProvider: { [weak self] in self?.currentTime ?? 0 },
-            play: { [weak self] in await self?.play() },
-            pause: { [weak self] in await self?.pause() },
-            stop: { [weak self] in await self?.stop() },
-            seek: { [weak self] seconds in await self?.seek(to: seconds) },
-            next: { [weak self] in await self?.playNextTrack() },
-            previous: { [weak self] in await self?.playPreviousTrack() },
-            togglePlayPause: { [weak self] in
-                guard let self else { return }
-                if self.playbackState == .playing {
-                    await self.pause()
-                } else {
-                    await self.play()
-                }
-            }
-        )
     }
 
     // WORKAROUND: Xcode 26 beta — swift::TaskLocal::StopLookupScope crash on deinit.
@@ -606,40 +523,7 @@ final class AppState: ObservableObject {
     // Remove when Xcode 26 stable is released.
     nonisolated deinit {}
 
-    // MARK: - Display Name
-
-    /// Returns a human-readable display name for a track.
-    ///
-    /// Priority:
-    /// 1. title + artist → "title - artist"
-    /// 2. title only    → "title"
-    /// 3. artist only   → "artist"
-    /// 4. neither       → filename from originalPath (no extension)
-    func displayName(for track: Track) -> String {
-        let hasTitle = !track.title.isEmpty
-        let hasArtist = !track.artist.isEmpty
-        switch (hasTitle, hasArtist) {
-        case (true, true):   return "\(track.title) - \(track.artist)"
-        case (true, false):  return track.title
-        case (false, true):  return track.artist
-        case (false, false): return URL(fileURLWithPath: track.originalPath)
-                                 .deletingPathExtension().lastPathComponent
-        }
-    }
-
-    // MARK: - Error Helpers
-
-    /// Clears the last playback error. Called when the user dismisses an error alert.
-    ///
-    /// Delegates the alert-surface reset to `alertCenter.clearLastError()`;
-    /// the `playbackState` `.error → .stopped` transition stays here because
-    /// playback state is AppState's, not the alert store's.
-    func clearLastError() {
-        alertCenter.clearLastError()
-        if case .error = playbackState {
-            playbackState = .stopped
-        }
-    }
+    // MARK: - File Info
 
     /// Requests the File Info window to open for the track with the given ID.
     ///
@@ -667,23 +551,21 @@ final class AppState: ObservableObject {
 
     // MARK: - Persistence
 
-    /// Saves playlist, activePlaylistIndex, volume, repeatMode, and isShuffled.
-    /// Settings keys are persisted by `SettingsStore` at change time.
+    /// Saves playlists, activePlaylistIndex, and — through
+    /// `playbackController.saveVolume()` — the volume. Settings keys, repeat
+    /// mode, and shuffle mode are persisted by their stores at change time.
     ///
     /// Called by the app entry point when `NSApplication.willTerminateNotification` fires.
     func saveState() {
+        playbackController.saveVolume()
         try? playlistStore.save(playlists)
         userDefaults.set(activePlaylistIndex, forKey: PersistenceKey.activePlaylistIndex)
-        userDefaults.set(volume, forKey: PersistenceKey.volume)
-        if let repeatData = try? JSONEncoder().encode(repeatMode) {
-            userDefaults.set(repeatData, forKey: PersistenceKey.repeatMode)
-        }
-        userDefaults.set(isShuffled, forKey: PersistenceKey.isShuffled)
     }
 
-    /// Restores previously saved state from UserDefaults.
+    /// Restores previously saved playlist state.
     ///
-    /// Called once in `init` after services are wired.
+    /// Called once in `init` after services are wired. The playback
+    /// controller restores its own keys in its init.
     /// When no persisted data exists, the default values set in `init` are preserved.
     func restoreState() {
         // Load playlists from the file-backed store. When the store has nothing
@@ -717,17 +599,6 @@ final class AppState: ObservableObject {
                 }
             }
         }
-        if userDefaults.object(forKey: PersistenceKey.volume) != nil {
-            volume = userDefaults.float(forKey: PersistenceKey.volume)
-        }
-        if let repeatData = userDefaults.data(forKey: PersistenceKey.repeatMode),
-           let decoded = try? JSONDecoder().decode(RepeatMode.self, from: repeatData) {
-            repeatMode = decoded
-        }
-        if userDefaults.object(forKey: PersistenceKey.isShuffled) != nil {
-            isShuffled = userDefaults.bool(forKey: PersistenceKey.isShuffled)
-        }
-
         // Background metadata refresh: re-reads fields for tracks that were
         // saved by an older version of the metadata reading logic.
         Task { await refreshMetadataIfNeeded() }

@@ -33,14 +33,14 @@ At a high level, the codebase is divided into the following logical modules.
 1. **UI Layer (Views)**
    - SwiftUI views under `Shared/Views/` and platform-specific view wrappers.
 2. **Application Layer (State & Models)**
-   - `AppState` (central observable state, split across 5 files)
+   - `AppState` (central observable state, split across 3 files)
    - `EQCoordinator` — `@MainActor` `ObservableObject` owning all EQ-related
      observable state. Lives in `Shared/Models/` parallel to `AppState`
      (state-bearing observable, not stateless service). Slice 9-K. See §4.3.
    - `NowPlayingCoordinator` — `@MainActor` class that owns NowPlaying
-     wiring between AppState publishers, AppState action closures, and
-     the system Now Playing surface via `NowPlayingService`. Lives in
-     `Shared/Models/` parallel to `EQCoordinator` (lifecycle
+     wiring between the playback controller's publishers, its transport
+     closures, and the system Now Playing surface via `NowPlayingService`.
+     Lives in `Shared/Models/` parallel to `EQCoordinator` (lifecycle
      participant, not stateless service). Slice 9-L. See §4.5.
    - `AlertCenter` — `@MainActor @Observable` feature store owning the
      alert, paywall, and File Info request presentation state; the first
@@ -60,6 +60,14 @@ At a high level, the codebase is divided into the following logical modules.
      store extracted from AppState under the AppState decomposition
      program. Lives in `Shared/Models/` parallel to `AlertCenter`.
      Slice 16-A. See §4.9.
+   - `PlaybackController` — `@MainActor @Observable` feature store owning
+     the transport state, the `PlaybackService` dependency, navigation,
+     polling, ReplayGain, error mapping, sleep/wake handling, and the
+     playback persistence keys; the fourth store extracted from AppState
+     under the AppState decomposition program. Lives in `Shared/Models/`
+     parallel to `AlertCenter`. Reads and writes playlist state through
+     the `PlaylistContext` protocol, which `AppState` conforms to until
+     the playlist state moves into its own store. See §4.10.
    - UI-facing models (`Track`, `Playlist`, `ViewPreferences`, `AudioFileItem`,
      `PlaylistReorderItem`, `EQBand`, `EQBandState`, `EQPreset`, `EQPresets`,
      `LyricsLanguageVariant`, `LyricsSource`, `LyricsPreference`,
@@ -153,7 +161,7 @@ TagReaderPort, etc.)]
 
 1. **UI Layer** may depend on:
    - Application Layer (AppState, feature stores such as `AlertCenter` /
-     `LyricsStore` / `SettingsStore`, UI models).
+     `LyricsStore` / `SettingsStore` / `PlaybackController`, UI models).
    - Standard Apple frameworks (SwiftUI, Combine, Foundation) for rendering and binding.
 
    UI Layer **must not**:
@@ -265,7 +273,7 @@ static func mapCoreError(_ error: CoreError) -> PlaybackError {
     }
 }
 
-// In AppState (Application Layer) — simplified fallback only
+// In PlaybackController (Application Layer) — simplified fallback only
 func mapToPlaybackError(_ error: Error) -> PlaybackError {
     if let playbackError = error as? PlaybackError { return playbackError }
     return .invalidState
@@ -339,11 +347,12 @@ dependencies, plus the mutator methods (`toggleLyrics`,
 `attachLyricsFile(_:for:)` / `confirmPendingAttach()` /
 `cancelPendingAttach()`). The store never reads current-track state:
 every track-dependent method takes the track explicitly, supplied by the
-caller (the `AppState` `$currentTrack` sink, or a view passing
-`appState.currentTrack`). Unlike `AlertCenter` (§4.8(b)), AppState keeps
-**no** facade forwarders for the lyrics surface — after the Slice 14-A
-view and test migration it has no internal readers — so AppState only
-constructs the store and retargets its `$currentTrack` sink to
+caller (the `PlaybackController.onCurrentTrackChanged` closure wired by
+AppState, or a view passing `playbackController.currentTrack`). Unlike
+`AlertCenter` (§4.8(b)), AppState keeps **no** facade forwarders for the
+lyrics surface — after the Slice 14-A view and test migration it has no
+internal readers — so AppState only constructs the store and wires
+`playbackController.onCurrentTrackChanged` to
 `lyricsStore.updateResolution(for:)`. Views reading lyrics state
 (`ContentView`'s lyrics-column condition, `PlayerView`'s lyrics button,
 `LyricsPanel`) observe the store via `@Environment(LyricsStore.self)`,
@@ -385,12 +394,14 @@ Slice 9-L introduced two boundary nuances that warrant explicit clarification.
 **(a) Why `NowPlayingCoordinator` lives in `Shared/Models/`, not
 `Shared/Services/`.** Same reason as `EQCoordinator` (§4.3(a)) and `AppState`:
 a `@MainActor` lifecycle participant owning Combine subscriptions and
-holding AppState action closures via `[weak self]` capture is not a
+holding the playback controller's transport closures is not a
 stateless utility. Unlike `EQCoordinator`, `NowPlayingCoordinator` does
 not declare any `@Published` properties — its responsibility is wiring
 glue, not state ownership — but the same "lifecycle participant"
 classification applies because publishers and closures are bound at
-construction and live the AppState lifetime.
+construction and live the AppState lifetime. The publishers are
+`PlaybackController.currentTrackPublisher` / `playbackStatePublisher`
+(§4.10(c)).
 
 **(b) Why `MPNowPlayingAdapter` lives in `Shared/Services/` despite
 being the only `import MediaPlayer` site.** Integration Layer placement
@@ -478,9 +489,10 @@ sleep/wake is observed via `NSWorkspace.willSleepNotification` /
 `NSWorkspace.shared.notificationCenter`. `NSWorkspace` is AppKit-only,
 and HarmoniaCore targets macOS **and iOS**, so this observation cannot
 live in HarmoniaCore. `AppDelegate` registers both observers and forwards
-to `AppState.handleSystemWillSleep()` / `handleSystemDidWake()` through a
-weak `AppState` reference assigned by `HarmoniaPlayerApp` — the same
-injection pattern as `openWindow`. The pre-sleep state is recorded at the
+to `PlaybackController.handleSystemWillSleep()` / `handleSystemDidWake()`
+(`appState.playbackController.…`) through a weak `AppState` reference
+assigned by `HarmoniaPlayerApp` — the same injection pattern as
+`openWindow`. The pre-sleep state is recorded at the
 will-sleep notification rather than inferred from the polling loop,
 because the ordering of the did-wake notification against a polling tick
 is undefined.
@@ -495,7 +507,7 @@ service in `.paused` with position retained; the next `play()` resumes
 from that position.
 
 **(c) The polling loop mirrors every reachable service state.**
-`AppState`'s polling loop reflects service-side `.paused` and `.error`
+`PlaybackController`'s polling loop reflects service-side `.paused` and `.error`
 transitions (in addition to `.stopped` completion detection) so
 `playbackState` — and everything subscribed to it, including the system
 Now Playing surface — can never disagree with actual playback.
@@ -515,12 +527,15 @@ no service dependencies.
 **(b) The strangler facade keeps the boundary topology unchanged during
 migration.** AppState constructs the store (`let alertCenter`, first in
 `init`) and re-exposes every migrated property as a same-named computed
-forwarder (get + set), plus delegating facade methods
-(`clearLastError()`, `showFileInfo(trackID:)`).
+forwarder (get + set), plus the delegating facade method
+`showFileInfo(trackID:)`.
 Un-migrated call sites in the `AppState+…` extensions keep writing
-through the facade; the `playbackState` `.error → .stopped` transition
-deliberately stays in the facade rather than entering the store. Tier
-logic never enters AlertCenter: since Slice 16-A the paywall tier check
+through the facade. Playback state never enters AlertCenter: dismissing
+an error alert calls `alertCenter.clearLastError()`, whose
+`onErrorCleared` closure — wired by AppState — calls
+`PlaybackController.recoverFromError()` for the `.error → .stopped`
+transition (§4.10(c)). Tier
+logic never enters AlertCenter either: since Slice 16-A the paywall tier check
 lives in `SettingsStore` and reaches `presentPaywall()` through a
 root-wired closure (§4.9(c)). Because `@Observable` tracks the
 store property access through the forwarding getter, views observing
@@ -564,8 +579,8 @@ application of the per-store persistence split
 closures.** SettingsStore depends only on `IAPManager` and
 `UserDefaults`. Its two outward effects leave through closures that
 AppState assigns in `init`: `onReplayGainModeChanged` →
-`applyReplayGainVolume(requiresActivePlayback: true)`, and
-`onPaywallRequested` → `alertCenter.presentPaywall()`. The paywall tier
+`playbackController.applyReplayGainVolume(requiresActivePlayback: true)`,
+and `onPaywallRequested` → `alertCenter.presentPaywall()`. The paywall tier
 policy therefore lives with the tier data (`showPaywallIfNeeded()` on the
 store) while presentation stays in AlertCenter — the same
 closure-injection precedent as `NowPlayingCoordinator` (§4.5).
@@ -580,6 +595,65 @@ injects the store on the main window scene (PaywallView is a sheet there)
 and on the Settings scene, whose subtree no longer reads AppState. The
 §4.8(c) injection rules apply unchanged.
 
+### 4.10 PlaybackController Placement, PlaylistContext, and Root-Wired Closures
+
+The fourth `@MainActor @Observable` feature store extracted from AppState
+owns the whole playback surface. Four boundary nuances:
+
+**(a) Why `PlaybackController` owns `PlaybackService`.** Same
+Models-vs-Services rule as §4.3(a). The store owns the transport state
+(`currentTrack`, `playbackState`, `currentTime`, `duration`,
+`playingPlaylistID`), the repeat / shuffle modes and shuffle queue, the
+volume, the polling loop, ReplayGain application, the fallback error
+mapping, and the sleep/wake handlers — and therefore the `PlaybackService`
+interface they all drive. AppState builds the service through
+`CoreFactory` and hands it to the store; its own `playbackService` is a
+get-only forwarder kept for the playlist code.
+
+**(b) `PlaylistContext` is the one edge back to playlist state.** The
+controller resolves tracks across playlists, switches the active playlist
+when a track in another playlist is played, marks a track inaccessible,
+and reads the table selection. It reaches that state through
+`PlaylistContext` (`playlists` get/set, `activePlaylistIndex` get/set,
+`selectedTrackIDs` get) rather than through an `AppState` reference.
+`AppState` conforms with an empty extension and assigns itself as the
+controller's `weak` context at the end of `init` — it cannot be an init
+argument of a store it constructs while initialising. The playlist store
+takes over the conformance when the playlist state leaves AppState.
+
+**(c) No store-to-store dependency beyond the declared ones; the
+composition root wires closures.** The controller depends on
+`PlaybackService`, `AlertCenter` (it writes the playback-error surface),
+`SettingsStore` (it reads `replayGainMode`), `PlaylistContext`, and
+`UserDefaults`. Everything else leaves or arrives through closures that
+AppState assigns in `init`, each capturing the target store rather than
+AppState: `onCurrentTrackChanged` → `lyricsStore.updateResolution(for:)`;
+`onSeekCompleted` → `nowPlayingCoordinator.notifySeekCompleted(at:)`;
+`settingsStore.onReplayGainModeChanged` →
+`applyReplayGainVolume(requiresActivePlayback: true)`; and
+`alertCenter.onErrorCleared` → `recoverFromError()`. The Now Playing
+bridge is two store-owned `AnyPublisher`s
+(`currentTrackPublisher` / `playbackStatePublisher`) handed to the
+unchanged `NowPlayingCoordinator.init`, whose seven action closures
+capture the controller.
+
+**(d) Persistence, facade, and injection.** The store restores
+`hp.volume`, `hp.repeatMode`, and `hp.isShuffled` in its `init`; repeat
+and shuffle are written by `didSet` at change time, the volume by
+`saveVolume()` from AppState's terminate-time `saveState()`. AppState
+keeps forwarders only for members its playlist code and the un-migrated
+`PlaylistView` still read — `currentTrack`, `playbackState`,
+`currentTime`, `shuffleQueue`, `shuffleQueueIndex` (get + set),
+`playingPlaylistID`, `repeatMode`, `isShuffled`, `playbackService`
+(get-only), `stop()`, and `play(trackID:)`. `PlayerView`,
+`MiniPlayerView`, `ContentView`, and `LyricsPanel` declare
+`@Environment(PlaybackController.self)`; `HarmoniaPlayerApp` injects the
+store on the main window and Mini Player scenes (§4.8(c) injection rules
+apply unchanged), and injects `appState.eqCoordinator` as an environment
+object on the main window scene for `PlayerView`'s EQ button.
+`HarmoniaPlayerCommands` and `AppDelegate` use the
+`appState.playbackController.…` path.
+
 ---
 
 ## 5. Forbidden Dependencies (Examples)
@@ -589,7 +663,7 @@ architecture clean.
 
 1. **Views importing HarmoniaCore-Swift**
    - ❌ `PlayerView` must not call `PlaybackService.play()` directly.
-   - ✅ It should call `appState.play()` via `@EnvironmentObject`.
+   - ✅ It should call `playbackController.play()` via `@Environment(PlaybackController.self)`.
 
 2. **AppState creating platform adapters**
    - ❌ `AppState` must not create `AVAudioEngineOutputAdapter`.
@@ -633,20 +707,20 @@ architecture clean.
 
 ## 6. Boundary Examples
 
-### 6.1 UI -> AppState
+### 6.1 UI -> Stores
 
 ```swift
 struct PlayerView: View {
-    @EnvironmentObject private var appState: AppState
+    @Environment(PlaybackController.self) private var playbackController
 
     var body: some View {
         VStack {
             PlaylistView()
             TransportControlsView(
-                isPlaying: appState.playbackState == .playing,
-                onPlay: { Task { await appState.play() } },
-                onPause: { Task { await appState.pause() } },
-                onStop: { Task { await appState.stop() } }
+                isPlaying: playbackController.playbackState == .playing,
+                onPlay: { Task { await playbackController.play() } },
+                onPause: { Task { await playbackController.pause() } },
+                onStop: { Task { await playbackController.stop() } }
             )
         }
     }
@@ -654,45 +728,53 @@ struct PlayerView: View {
 ```
 
 - `PlayerView` has **no knowledge** of `PlaybackService` or `DecoderPort`.
-- It only talks to `AppState`.
+- It only talks to `PlaybackController` (and to `AppState` for playlist state).
 
-### 6.2 AppState -> CoreFactory -> Services
+### 6.2 AppState -> CoreFactory -> Services -> PlaybackController
 
 ```swift
 @MainActor
 final class AppState: ObservableObject {
     let settingsStore: SettingsStore
-    let playbackService: PlaybackService
+    let playbackController: PlaybackController
     let tagReaderService: TagReaderService
 
     init(iapManager: IAPManager, provider: CoreServiceProviding, ...) {
+        self.alertCenter = AlertCenter()
         self.settingsStore = SettingsStore(iapManager: iapManager, userDefaults: userDefaults)
         let coreFactory = CoreFactory(featureFlags: settingsStore.featureFlags, provider: provider)
-        self.playbackService = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
+        self.playbackController = PlaybackController(
+            playbackService: coreFactory.makePlaybackService(),
+            alertCenter: alertCenter,
+            settingsStore: settingsStore,
+            userDefaults: userDefaults
+        )
     }
+}
 
-    func play() async {
-        do {
-            try await playbackService.play()
-            playbackState = .playing
-        } catch {
-            let mapped = mapToPlaybackError(error)
-            playbackState = .error(mapped)
-            lastError = mapped
-        }
+@MainActor @Observable
+final class PlaybackController {
+    let playbackService: PlaybackService
+
+    func pause() async {
+        await playbackService.pause()
+        playbackState = .paused
     }
 }
 ```
 
 **Note:** AppState is split across multiple files:
-- `AppState.swift` — properties, init, persistence
-- `AppState+Playlist.swift` — playlist operations, management, undo/redo
-- `AppState+Playback.swift` — transport controls, track selection
-- `AppState+Navigation.swift` — next/previous, trackDidFinishPlaying
+- `AppState.swift` — properties, init, persistence, facade forwarders
+- `AppState+Playlist.swift` — playlist operations, management, undo/redo, Mini Player playlist switch
 - `AppState+M3U8.swift` — M3U8 import/export
 
-- `AppState` does not know **how** services are built, only that they conform to their interfaces.
+The playback surface lives beside it:
+- `PlaybackController.swift` — transport state and controls, track selection, polling, ReplayGain, error mapping, sleep/wake, persistence
+- `PlaybackController+Navigation.swift` — next/previous, trackDidFinishPlaying, shuffle queue
+- `PlaylistContext.swift` — the protocol through which the controller reaches playlist state
+
+- `AppState` and `PlaybackController` do not know **how** services are built, only that they conform to their interfaces.
 - `AppState` uses `TagReaderService`, not `TagReaderPort` directly.
 
 ### 6.3 CoreFactory -> HarmoniaCoreProvider -> HarmoniaCore-Swift
@@ -827,7 +909,7 @@ When reviewing code, check these rules:
 - [ ] No imports of `HarmoniaCore`
 - [ ] No direct calls to `PlaybackService`
 - [ ] No access to Ports or Adapters
-- [ ] Only depends on `AppState`, the feature stores (`AlertCenter`, `LyricsStore`, `SettingsStore`), and UI models
+- [ ] Only depends on `AppState`, the feature stores (`AlertCenter`, `LyricsStore`, `SettingsStore`, `PlaybackController`), and UI models
 
 **Application Layer:**
 - [ ] Uses `PlaybackService` interface only
@@ -884,8 +966,12 @@ struct PlayerView: View {
 ## 10. Summary
 
 - **Views** depend on AppState and the feature stores (`AlertCenter`,
-  `LyricsStore`, `SettingsStore`) only.
-- **AppState** depends on CoreFactory / PlaybackService interface / TagReaderService interface, and hands the `IAPManager` to `SettingsStore`.
+  `LyricsStore`, `SettingsStore`, `PlaybackController`) only.
+- **AppState** depends on CoreFactory / TagReaderService interface, hands the `IAPManager` to `SettingsStore` and the `PlaybackService` to `PlaybackController`, and conforms to `PlaylistContext`.
+- **PlaybackController** depends on the `PlaybackService` interface,
+  `AlertCenter`, `SettingsStore`, `PlaylistContext`, and `UserDefaults`;
+  its other effects go through closures and publishers wired by AppState.
+  See §4.10.
 - **LyricsStore** depends on the `LyricsService` and `LyricsPreferenceStore`
   interfaces it owns.
 - **SettingsStore** depends on the `IAPManager` interface and `UserDefaults`;
@@ -906,8 +992,8 @@ struct PlayerView: View {
   `.lrc` files are read directly via `Foundation` with encoding detection.
   See §4.4 for the boundary rationale.
 - **NowPlayingService** is pure Application Layer — `NowPlayingCoordinator`
-  routes AppState publishers and action closures to `NowPlayingService`
-  push and pull surfaces. The production implementation
+  routes the playback controller's publishers and transport closures to
+  `NowPlayingService` push and pull surfaces. The production implementation
   `MPNowPlayingAdapter` is the only file in HarmoniaPlayer that imports
   `MediaPlayer`. See §4.5 for the boundary rationale.
 

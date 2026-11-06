@@ -189,9 +189,9 @@ struct HarmoniaPlayerCommands: Commands {
             Button(playPauseLabel) {
                 Task {
                     if focusedPlaybackState == .playing {
-                        await appState?.pause()
+                        await appState?.playbackController.pause()
                     } else {
-                        await appState?.play()
+                        await appState?.playbackController.play()
                     }
                 }
             }
@@ -201,7 +201,7 @@ struct HarmoniaPlayerCommands: Commands {
             // Stop / Seek — disabled when playlist is empty OR no track is loaded.
             // Requires an active track because these operations act on the current position.
             Button(L("menu_stop")) {
-                Task { await appState?.stop() }
+                Task { await appState?.playbackController.stop() }
             }
             .keyboardShortcut(".", modifiers: .command)
             .disabled(needsActiveTrack)
@@ -213,13 +213,13 @@ struct HarmoniaPlayerCommands: Commands {
             // start from the first track when currentTrack is nil, so no active
             // track is required.
             Button(L("menu_next_track")) {
-                Task { await appState?.playNextTrack() }
+                Task { await appState?.playbackController.playNextTrack() }
             }
             .keyboardShortcut(.rightArrow, modifiers: .command)
             .disabled(playlistIsEmpty)
 
             Button(L("menu_previous_track")) {
-                Task { await appState?.playPreviousTrack() }
+                Task { await appState?.playbackController.playPreviousTrack() }
             }
             .keyboardShortcut(.leftArrow, modifiers: .command)
             .disabled(playlistIsEmpty)
@@ -229,7 +229,7 @@ struct HarmoniaPlayerCommands: Commands {
             Button(L("menu_seek_forward")) {
                 Task {
                     guard let state = appState else { return }
-                    await state.seek(to: min(state.duration, state.currentTime + 5))
+                    await state.playbackController.seek(to: min(state.playbackController.duration, state.playbackController.currentTime + 5))
                 }
             }
             .keyboardShortcut(.rightArrow, modifiers: [.command, .option])
@@ -238,7 +238,7 @@ struct HarmoniaPlayerCommands: Commands {
             Button(L("menu_seek_backward")) {
                 Task {
                     guard let state = appState else { return }
-                    await state.seek(to: max(0, state.currentTime - 5))
+                    await state.playbackController.seek(to: max(0, state.playbackController.currentTime - 5))
                 }
             }
             .keyboardShortcut(.leftArrow, modifiers: [.command, .option])
@@ -247,13 +247,13 @@ struct HarmoniaPlayerCommands: Commands {
             Divider()
 
             Button(repeatModeLabel) {
-                appState?.cycleRepeatMode()
+                appState?.playbackController.cycleRepeatMode()
             }
             .keyboardShortcut("r", modifiers: .command)
             .disabled(playlistIsEmpty)
 
             Button(shuffleLabel) {
-                appState?.toggleShuffle()
+                appState?.playbackController.toggleShuffle()
             }
             .keyboardShortcut("s", modifiers: .command)
             .disabled(playlistIsEmpty)
@@ -263,7 +263,7 @@ struct HarmoniaPlayerCommands: Commands {
     // MARK: - Dynamic Labels
 
     /// Play/Pause label — driven by focusedPlaybackState (scalar FocusedValue)
-    /// rather than appState?.playbackState so Commands re-evaluates reliably
+    /// rather than appState?.playbackController.playbackState so Commands re-evaluates reliably
     /// on every state change.
     private var playPauseLabel: String {
         focusedPlaybackState == .playing ? L("menu_pause") : L("menu_play")
@@ -279,7 +279,7 @@ struct HarmoniaPlayerCommands: Commands {
     /// Used for: Stop, Seek Forward, Seek Backward.
     /// These operations require an active playback position to be meaningful.
     private var needsActiveTrack: Bool {
-        playlistIsEmpty || appState?.currentTrack == nil
+        playlistIsEmpty || appState?.playbackController.currentTrack == nil
     }
 
     /// True when a batch playlist operation (load / import) is in progress.
@@ -289,7 +289,7 @@ struct HarmoniaPlayerCommands: Commands {
     }
 
     private var repeatModeLabel: String {
-        switch appState?.repeatMode {
+        switch appState?.playbackController.repeatMode {
         case .off:  return L("repeat_off")
         case .all:  return L("repeat_all")
         case .one:  return L("repeat_one")
@@ -298,7 +298,7 @@ struct HarmoniaPlayerCommands: Commands {
     }
 
     private var shuffleLabel: String {
-        appState?.isShuffled == true ? L("shuffle_on") : L("shuffle_off")
+        appState?.playbackController.isShuffled == true ? L("shuffle_on") : L("shuffle_off")
     }
 
     // MARK: - Export / Import Helpers

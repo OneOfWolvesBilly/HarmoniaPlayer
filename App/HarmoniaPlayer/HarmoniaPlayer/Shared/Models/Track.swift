@@ -404,3 +404,21 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
                lhs.rating       == rhs.rating
     }
 }
+
+// MARK: - Display name
+
+extension Track {
+    /// Human-readable name: "title - artist", the title alone, the artist
+    /// alone, or the file name of `originalPath` without its extension.
+    var displayName: String {
+        let hasTitle = !title.isEmpty
+        let hasArtist = !artist.isEmpty
+        switch (hasTitle, hasArtist) {
+        case (true, true):   return "\(title) - \(artist)"
+        case (true, false):  return title
+        case (false, true):  return artist
+        case (false, false): return URL(fileURLWithPath: originalPath)
+                                 .deletingPathExtension().lastPathComponent
+        }
+    }
+}

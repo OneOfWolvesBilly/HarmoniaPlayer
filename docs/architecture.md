@@ -128,8 +128,10 @@ HarmoniaPlayerCommands, EQView, EQWindow]
       subgraph appLayer[Application Layer]
         appState[AppState
 @MainActor ObservableObject
-split: +Playlist, +Playback,
-+Navigation, +M3U8]
+split: +Playlist, +M3U8]
+        playbackController[PlaybackController
+@MainActor @Observable
+transport, navigation, ReplayGain]
         eqCoordinator[EQCoordinator
 @MainActor ObservableObject
 EQ live state + presets]
@@ -180,8 +182,11 @@ Control Center / lock screen
 AirPods / media keys / Siri)]
 
     views --> appState
+    views --> playbackController
+    appState --> playbackController
     appState --> eqCoordinator
     appState --> nowPlayingCoordinator
+    nowPlayingCoordinator --> playbackController
 
     appState --> coreFactory
     appState --> iap
@@ -207,14 +212,21 @@ AirPods / media keys / Siri)]
 - **Must not depend on:** HarmoniaCore-Swift directly, Ports, Adapters, Services
 
 **Application Layer (AppState):**
-- Central observable state (`AppState`, split across 5 files)
+- Central observable state (`AppState`, split across 3 files) plus the
+  extracted `@MainActor @Observable` feature stores (`AlertCenter`,
+  `LyricsStore`, `SettingsStore`, `PlaybackController`)
+- `PlaybackController` — owns the transport state, the playback service,
+  navigation, ReplayGain, polling, and the playback persistence keys;
+  reads playlist state through the `PlaylistContext` protocol that
+  `AppState` conforms to. Views read playback state via
+  `@Environment(PlaybackController.self)`
 - `EQCoordinator` — parallel `@MainActor` `ObservableObject` owning EQ live
   state and presets; held as `let eqCoordinator` on `AppState`. Views read
   EQ state via `appState.eqCoordinator.…` (Slice 9-K)
 - `NowPlayingCoordinator` — `@MainActor` class owning NowPlaying wiring
-  between AppState publishers, AppState action closures, and the system
-  Now Playing surface via `NowPlayingService`. Held as
-  `nowPlayingCoordinator` on `AppState` (Slice 9-L). Receives all
+  between the playback controller's publishers, its transport methods, and
+  the system Now Playing surface via `NowPlayingService`. Held as
+  `let nowPlayingCoordinator` on `AppState` (Slice 9-L). Receives all
   dependencies via constructor closure injection; never holds an
   AppState reference.
 - App-layer service protocols (`PlaybackService`, `TagReaderService`,
@@ -327,8 +339,10 @@ final class AppState: ObservableObject {
 ```
 
 **Note:** AppState is split across multiple extension files for maintainability:
-`AppState.swift` (properties + init), `AppState+Playlist.swift`, `AppState+Playback.swift`,
-`AppState+Navigation.swift`, `AppState+M3U8.swift`.
+`AppState.swift` (properties + init), `AppState+Playlist.swift`,
+`AppState+M3U8.swift`. The playback surface lives in
+`PlaybackController.swift` and `PlaybackController+Navigation.swift`, with
+the transitional `PlaylistContext.swift` protocol between them.
 
 This enables:
 - Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeLyricsService`, `FakeEQService`, `FakeNowPlayingService`, `MockIAPManager`)
@@ -346,7 +360,7 @@ func pause() async
 func stop() async
 ```
 
-**AppState calls services with async/await:**
+**`PlaybackController` calls services with async/await:**
 ```swift
 func play() async {
     do {
@@ -355,7 +369,7 @@ func play() async {
     } catch {
         let mapped = mapToPlaybackError(error)
         playbackState = .error(mapped)
-        lastError = mapped
+        alertCenter.lastError = mapped
     }
 }
 ```
@@ -363,7 +377,7 @@ func play() async {
 **Views dispatch via Task:**
 ```swift
 Button("Play") {
-    Task { await appState.play() }
+    Task { await playbackController.play() }
 }
 ```
 

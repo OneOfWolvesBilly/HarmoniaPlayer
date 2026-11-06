@@ -25,6 +25,29 @@ final class TrackTests: XCTestCase {
     private let sampleURL = URL(fileURLWithPath: "/Music/sample.mp3")
     private let otherURL  = URL(fileURLWithPath: "/Music/other.flac")
 
+    // MARK: - Tests: displayName
+
+    func testDisplayName_TitleAndArtist() {
+        let track = Track(url: sampleURL, title: "Song", artist: "Artist")
+        XCTAssertEqual(track.displayName, "Song - Artist")
+    }
+
+    func testDisplayName_TitleOnly() {
+        let track = Track(url: sampleURL, title: "Song", artist: "")
+        XCTAssertEqual(track.displayName, "Song")
+    }
+
+    func testDisplayName_ArtistOnly() {
+        let track = Track(url: sampleURL, title: "", artist: "Artist")
+        XCTAssertEqual(track.displayName, "Artist")
+    }
+
+    func testDisplayName_NeitherUsesFilename() {
+        var track = Track(url: sampleURL, title: "", artist: "")
+        track.originalPath = "/x/song.mp3"
+        XCTAssertEqual(track.displayName, "song")
+    }
+
     // MARK: - Tests: Identifiable
 
     func testTrack_HasUniqueID() {

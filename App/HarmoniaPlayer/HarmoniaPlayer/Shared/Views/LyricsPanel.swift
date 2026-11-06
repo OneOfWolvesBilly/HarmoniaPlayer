@@ -9,8 +9,9 @@
 //  Rendered as a third column inside `ContentView`'s `HSplitView`,
 //  pushed in from the right when `LyricsStore.showLyrics` is true.
 //
-//  - Observes `LyricsStore` for resolution state and actions; reads
-//    `AppState` only for `currentTrack` and `languageBundle`
+//  - Observes `LyricsStore` for resolution state and actions and
+//    `PlaybackController` for `currentTrack`; reads `AppState` only for
+//    `languageBundle`
 //  - Loads content lazily on appear via `LyricsService.resolveContent`
 //  - Source picker (Embedded / .lrc) shown when both available
 //  - Language picker shown when source is .embedded with multiple variants
@@ -25,6 +26,8 @@ import SwiftUI
 
 struct LyricsPanel: View {
     @EnvironmentObject private var appState: AppState
+
+    @Environment(PlaybackController.self) private var playbackController
 
     @Environment(LyricsStore.self) private var lyricsStore
 
@@ -50,7 +53,7 @@ struct LyricsPanel: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(NSColor.windowBackgroundColor))
         .onAppear { reload() }
-        .onChange(of: appState.currentTrack?.id) { _, _ in reload() }
+        .onChange(of: playbackController.currentTrack?.id) { _, _ in reload() }
         .onChange(of: lyricsStore.lyricsResolution?.currentSource) { _, _ in reload() }
         .onChange(of: lyricsStore.lyricsResolution?.currentLanguage) { _, _ in reload() }
         // Drag-and-drop lyrics attach: a `.lrc` file dropped on the panel
@@ -58,7 +61,7 @@ struct LyricsPanel: View {
         .dropDestination(for: URL.self) { urls, _ in
             var accepted = false
             for url in urls
-            where lyricsStore.attachLyricsFile(url, for: appState.currentTrack) {
+            where lyricsStore.attachLyricsFile(url, for: playbackController.currentTrack) {
                 accepted = true
             }
             return accepted
@@ -97,7 +100,7 @@ struct LyricsPanel: View {
            let current = resolution.currentSource {
             Picker(L("lyrics_source"), selection: Binding<LyricsSource>(
                 get: { current },
-                set: { lyricsStore.setLyricsSource($0, for: appState.currentTrack) }
+                set: { lyricsStore.setLyricsSource($0, for: playbackController.currentTrack) }
             )) {
                 if resolution.availableSources.contains(.lrc) {
                     Text(L("lyrics_source_lrc")).tag(LyricsSource.lrc)
@@ -118,7 +121,7 @@ struct LyricsPanel: View {
            resolution.availableLanguages.count > 1 {
             Picker(L("lyrics_language"), selection: Binding<String?>(
                 get: { resolution.currentLanguage },
-                set: { lyricsStore.setLyricsLanguage($0, for: appState.currentTrack) }
+                set: { lyricsStore.setLyricsLanguage($0, for: playbackController.currentTrack) }
             )) {
                 ForEach(resolution.availableLanguages, id: \.self) { code in
                     Text(displayName(forLanguageCode: code))
@@ -180,7 +183,7 @@ struct LyricsPanel: View {
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 24)
                 Button {
-                    lyricsStore.recheckLyrics(for: appState.currentTrack)
+                    lyricsStore.recheckLyrics(for: playbackController.currentTrack)
                     reload()
                 } label: {
                     Label(L("lyrics_recheck"), systemImage: "arrow.clockwise")
@@ -198,13 +201,13 @@ struct LyricsPanel: View {
 
     /// Forwards an encoding choice to the store for the current track.
     private func setEncoding(_ encoding: String) {
-        lyricsStore.setLyricsEncoding(encoding, for: appState.currentTrack)
+        lyricsStore.setLyricsEncoding(encoding, for: playbackController.currentTrack)
     }
 
     // MARK: - Loading
 
     private func reload() {
-        guard let track = appState.currentTrack,
+        guard let track = playbackController.currentTrack,
               let resolution = lyricsStore.lyricsResolution,
               let source = resolution.currentSource else {
             content = nil

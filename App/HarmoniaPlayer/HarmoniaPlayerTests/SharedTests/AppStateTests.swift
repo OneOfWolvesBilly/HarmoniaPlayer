@@ -6,7 +6,6 @@
 //
 
 import XCTest
-import Combine
 @testable import Harmonia_Player
 
 /// Unit tests for AppState wiring
@@ -274,34 +273,49 @@ final class AppStateTests: XCTestCase {
                        "AppState.init must not call readMetadata — no eager fetch in Slice 1")
     }
 
-    // MARK: - Tests: EQ enabled mirror
+    // MARK: - Tests: Playback controller wiring
 
-    func testEQEnabled_InitialValue_MatchesCoordinator() {
-        let sut = makeSUT()
+    /// Verifies that AppState hands its injected `UserDefaults` to the
+    /// playback controller, so persisted playback settings are restored at init.
+    func testInit_PlaybackControllerRestoresFromInjectedDefaults() throws {
+        // Given: an isolated suite with a persisted repeat mode
+        let defaults = makeIsolatedDefaults()
+        defaults.set(try JSONEncoder().encode(RepeatMode.all), forKey: "hp.repeatMode")
 
-        XCTAssertEqual(sut.eqEnabled, sut.eqCoordinator.isEnabled,
-                       "eqEnabled must mirror the coordinator's isEnabled at init")
+        // When: AppState is built on that suite
+        let appState = AppState(
+            iapManager: MockIAPManager(),
+            provider: FakeCoreProvider(),
+            userDefaults: defaults,
+            playlistStore: FakePlaylistStore()
+        )
+
+        // Then: the playback controller restored the persisted value
+        XCTAssertEqual(appState.playbackController.repeatMode, .all,
+                       "AppState must construct PlaybackController on its injected UserDefaults")
     }
 
-    func testEQEnabled_ReflectsCoordinatorToggle() async {
-        let sut = makeSUT()
-        let toggled = !sut.eqCoordinator.isEnabled
+    /// Verifies the root wiring from the playback controller's current-track
+    /// change to the lyrics store's resolution.
+    func testInit_WiresCurrentTrackChangeToLyricsStore() async {
+        // Given: a lyrics service stub that records resolution requests
+        let stub = StubLyricsService()
+        let provider = FakeCoreProvider(lyricsService: stub)
+        let appState = AppState(
+            iapManager: MockIAPManager(),
+            provider: provider,
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: FakePlaylistStore()
+        )
+        await appState.load(urls: [URL(fileURLWithPath: "/tmp/lyrics-wiring.mp3")])
+        let track = appState.playlist.tracks[0]
 
-        // Observe the mirror directly so the assertion does not depend on
-        // queue ordering. The sink is delivered on RunLoop.main; awaiting
-        // (rather than a synchronous wait that spins the run loop) lets the
-        // main actor make progress without a blocking spin.
-        let mirrored = expectation(description: "eqEnabled mirrors the toggle")
-        let cancellable = sut.$eqEnabled
-            .dropFirst()
-            .sink { if $0 == toggled { mirrored.fulfill() } }
+        // When: the controller changes the current track
+        await appState.playbackController.play(trackID: track.id)
 
-        sut.eqCoordinator.setEnabled(toggled)
-        await fulfillment(of: [mirrored], timeout: 1.0)
-        cancellable.cancel()
-
-        XCTAssertEqual(sut.eqEnabled, toggled,
-                       "eqEnabled must update when the coordinator toggles isEnabled")
+        // Then: the lyrics store resolved lyrics for that track
+        XCTAssertEqual(stub.lastResolvedTrack?.id, track.id,
+                       "a currentTrack change must reach LyricsStore.updateResolution(for:)")
     }
 
     // MARK: - Tests: showPaywallIfNeeded facade

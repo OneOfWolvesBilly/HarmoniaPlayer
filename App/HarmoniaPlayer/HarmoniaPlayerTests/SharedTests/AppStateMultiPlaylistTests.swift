@@ -132,7 +132,7 @@ final class AppStateMultiPlaylistTests: XCTestCase {
     func testSwitchPlaylist_DoesNotStopPlayback() async {
         let url = URL(fileURLWithPath: "/tmp/test.mp3")
         await sut.load(urls: [url])
-        await sut.play()
+        await sut.playbackController.play()
         sut.newPlaylist(name: "Rock")
 
         sut.activePlaylistIndex = 1

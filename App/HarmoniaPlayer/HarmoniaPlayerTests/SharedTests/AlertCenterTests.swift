@@ -108,6 +108,27 @@ final class AlertCenterTests: XCTestCase {
                        "clearLastError() must not touch skippedUnsupportedURLs")
     }
 
+    /// Given an `onErrorCleared` recorder,
+    /// when `clearLastError()` is called,
+    /// then the recorder runs exactly once, after the surface is cleared.
+    func testClearLastError_CallsOnErrorCleared() {
+        // Given
+        sut.lastError = .failedToOpenFile
+        var callCount = 0
+        var lastErrorAtCall: PlaybackError? = .failedToOpenFile
+        sut.onErrorCleared = { [weak sut] in
+            callCount += 1
+            lastErrorAtCall = sut?.lastError
+        }
+
+        // When
+        sut.clearLastError()
+
+        // Then
+        XCTAssertEqual(callCount, 1, "onErrorCleared must run exactly once per clearLastError()")
+        XCTAssertNil(lastErrorAtCall, "onErrorCleared must run after the surface is cleared")
+    }
+
     // MARK: - File Info request
 
     /// Given a `Track`,

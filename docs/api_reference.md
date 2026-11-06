@@ -82,6 +82,10 @@ struct Track: Identifiable, Equatable, Sendable, Codable {
     var sortChannels: Int
     var sortFileSize: Int
 
+    // Display name (extension): "title - artist", the title alone, the
+    // artist alone, or the file name of `originalPath` without extension
+    var displayName: String
+
     // Initializers
     init(url: URL, title: String, artist: String = "", album: String = "",
          duration: TimeInterval = 0, artworkData: Data? = nil, ...)
@@ -459,9 +463,11 @@ Lives in `LyricsService.swift` (free function, not a method on the service) so i
 
 Central application state. `@MainActor`, `ObservableObject`.
 
-Split across 5 files: `AppState.swift` (properties, init, persistence), `AppState+Playlist.swift`, `AppState+Playback.swift`, `AppState+Navigation.swift`, `AppState+M3U8.swift`.
+Split across 3 files: `AppState.swift` (properties, init, persistence), `AppState+Playlist.swift`, `AppState+M3U8.swift`.
 
 Alert, paywall, and File Info request state lives in the `AlertCenter` store (Slice 13-A, see §5.11). AppState constructs it (`let alertCenter: AlertCenter`) and re-exposes its 11 properties as same-named facade computed forwarders (get + set), so internal call sites and tests keep compiling unchanged while views observe the store directly.
+
+Playback state lives in the `PlaybackController` store (see §5.14), which owns the playback service, the transport / navigation / polling / ReplayGain / error-mapping / sleep-wake code, and the three playback persistence keys. AppState constructs it (`let playbackController: PlaybackController`), is its `PlaylistContext` (see §5.15), and keeps facade forwarders only for the members its playlist code and the un-migrated `PlaylistView` still read: `currentTrack`, `playbackState`, `currentTime`, `shuffleQueue`, `shuffleQueueIndex` (get + set), `playingPlaylistID`, `repeatMode`, `isShuffled`, `playbackService` (get-only), and the methods `stop()` and `play(trackID:)`. `duration`, `volume`, the other transport methods, and the sleep/wake handlers have no AppState surface.
 
 Lyrics state lives in the `LyricsStore` store (Slice 14-A, see §5.12). AppState constructs it (`let lyricsStore: LyricsStore`) but keeps **no** facade surface for it — the lyrics surface has no internal readers left, so views, the `$currentTrack` sink, and tests all reach the store directly.
 
@@ -481,17 +487,18 @@ init(
 )
 ```
 
-Wiring flow: `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The `SettingsStore` is constructed next from the injected `iapManager` and `userDefaults`, restoring the persisted settings, and `CoreFactory` is built from `settingsStore.featureFlags` (Slice 16-A). After every stored property is initialised, `init` wires the store's two closures: `onReplayGainModeChanged` → `applyReplayGainVolume(requiresActivePlayback: true)` (asynchronous hop) and `onPaywallRequested` → `alertCenter.presentPaywall()`. The `LyricsStore` is constructed right after the factory-made services exist and takes ownership of the lyrics service and preference store (Slice 14-A). The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests and is handed into the `LyricsStore`; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
+Wiring flow: `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services → `PlaybackController` → `NowPlayingCoordinator`. The `AlertCenter` store is constructed first in `init` (it has no dependencies) before the IAP/factory wiring begins (Slice 13-A). The `SettingsStore` is constructed next from the injected `iapManager` and `userDefaults`, restoring the persisted settings, and `CoreFactory` is built from `settingsStore.featureFlags` (Slice 16-A). The `LyricsStore` is constructed right after the factory-made services exist and takes ownership of the lyrics service and preference store (Slice 14-A). The `PlaybackController` is constructed from the factory-made playback service, `alertCenter`, `settingsStore`, and `userDefaults`, restoring its own keys; the `NowPlayingCoordinator` is built immediately after from the controller's publishers and transport methods (so it is a `let`). After every stored property is initialised, `init` hands the controller its `PlaylistContext` (`self`) and wires the stores' closures, each capturing the store it targets rather than `self`: `settingsStore.onReplayGainModeChanged` → `playbackController.applyReplayGainVolume(requiresActivePlayback: true)` (asynchronous hop), `playbackController.onCurrentTrackChanged` → `lyricsStore.updateResolution(for:)`, `playbackController.onSeekCompleted` → `nowPlayingCoordinator.notifySeekCompleted(at:)`, `alertCenter.onErrorCleared` → `playbackController.recoverFromError()`, and `settingsStore.onPaywallRequested` → `alertCenter.presentPaywall()`. The injected `eqCoordinator` parameter (Slice 9-K) is for tests that need a pre-seeded coordinator; production builds the default from the same `provider`'s `EQService` and an `EQPersistenceStore` backed by the same `userDefaults` instance. The injected `lyricsPreferenceStore` parameter (Slice 9-J) is similarly for tests and is handed into the `LyricsStore`; production builds a `DefaultLyricsPreferenceStore` backed by the same `userDefaults`. The injected `playlistStore` parameter (Slice 9-W) is for tests; production defaults to a `FilePlaylistStore` writing playlists to the Application Support directory.
 
 ### 3.2 Services (injected)
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `playbackService` | `PlaybackService` | Audio playback |
+| `playbackService` | `PlaybackService` | Get-only forwarder to `playbackController.playbackService`; the playlist code calls `playbackService.stop()` when it removes the playing track |
 | `tagReaderService` | `TagReaderService` | Metadata reading |
 | `fileDropService` | `FileDropService` | URL validation + directory expansion |
-| `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…` (Slice 9-K) |
-| `nowPlayingCoordinator` | `NowPlayingCoordinator` | Routes AppState publishers and action closures to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
+| `eqCoordinator` | `EQCoordinator` | Owns observable EQ state; views access EQ via `appState.eqCoordinator.…`, and `PlayerView` observes it via `@EnvironmentObject` (Slice 9-K) |
+| `nowPlayingCoordinator` | `NowPlayingCoordinator` | `let`; routes the playback controller's publishers and transport methods to the system Now Playing surface via `NowPlayingService` (Slice 9-L) |
+| `playbackController` | `PlaybackController` | Playback store owning the transport state, `playbackService`, navigation, ReplayGain, polling, sleep/wake, and the `hp.volume` / `hp.repeatMode` / `hp.isShuffled` keys; views observe it via `@Environment(PlaybackController.self)` (see §5.14) |
 | `alertCenter` | `AlertCenter` | Alert-surface store owning alert, paywall, and File Info request state; constructed first in `init`; views observe it via `@Environment(AlertCenter.self)` (Slice 13-A, see §5.11) |
 | `lyricsStore` | `LyricsStore` | Lyrics store owning `showLyrics` / `lyricsResolution` and the `lyricsService` / `lyricsPreferenceStore` dependencies; views observe it via `@Environment(LyricsStore.self)` (Slice 14-A, see §5.12) |
 | `settingsStore` | `SettingsStore` | Settings store owning the persisted settings, `viewPreferences`, the tier state, `languageBundle`, and the `IAPManager`; views observe it via `@Environment(SettingsStore.self)` (Slice 16-A, see §5.13) |
@@ -503,9 +510,8 @@ Wiring flow: `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `isProUnlocked` | `Bool` | read | Get-only facade forwarder to `settingsStore.isProUnlocked` (Slice 16-A); read by `PlaylistView` / `MiniPlayerView` format gating |
-| `eqEnabled` | `Bool` | read | Mirror of `eqCoordinator.isEnabled`; lets the toolbar EQ button re-render when Enable is toggled |
 
-`featureFlags` lives on `settingsStore` only (Slice 16-A).
+`featureFlags` lives on `settingsStore` only (Slice 16-A). The former `eqEnabled` mirror is gone: `PlayerView` observes `EQCoordinator.isEnabled` directly via `@EnvironmentObject`.
 
 #### Playlist State
 
@@ -514,17 +520,22 @@ Wiring flow: `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `
 | `playlists` | `[Playlist]` | read | All playlists |
 | `activePlaylistIndex` | `Int` | read/write | Currently visible playlist |
 | `playlist` | `Playlist` | computed | `playlists[activePlaylistIndex]` |
-| `currentTrack` | `Track?` | read | Currently selected/playing track |
 | `selectedTrackIDs` | `Set<Track.ID>` | read/write | Multi-selection in PlaylistView |
 
-#### Playback State
+#### Playback State (facade → PlaybackController)
+
+These are **not** `@Published` — each is a computed facade forwarder to the same-named `playbackController` property (see §5.14), kept only for the playlist code's and `PlaylistView`'s remaining reads. `duration` and `volume` have no forwarder.
 
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
-| `playbackState` | `PlaybackState` | read | Current playback state |
+| `currentTrack` | `Track?` | read/write | Currently selected/playing track; the playlist code clears it when the playing track is removed |
+| `playbackState` | `PlaybackState` | read/write | Current playback state |
+| `currentTime` | `TimeInterval` | read/write | Current position in seconds |
 | `playingPlaylistID` | `Playlist.ID?` | read | Playlist owning the playing track |
-| `currentTime` | `TimeInterval` | read | Current position in seconds |
-| `duration` | `TimeInterval` | read | Track duration in seconds |
+| `repeatMode` | `RepeatMode` | read | off/all/one |
+| `isShuffled` | `ShuffleMode` | read | off/on |
+| `shuffleQueue` | `[Track.ID]` | read/write | Pre-shuffled order; the playlist code keeps it in step with insertions and removals |
+| `shuffleQueueIndex` | `Int` | read/write | Current position in shuffle queue |
 
 #### Error / Alert State (facade → AlertCenter)
 
@@ -562,12 +573,9 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 | Property | Type | Access | Description |
 |----------|------|--------|-------------|
 | `allowDuplicateTracks` | `Bool` | read/write | Facade forwarder to `settingsStore.allowDuplicateTracks` (Slice 16-A); read by `load(urls:)` |
-| `volume` | `Float` | read/write | Output volume 0.0–1.0 |
-| `repeatMode` | `RepeatMode` | read | off/all/one |
-| `isShuffled` | `ShuffleMode` | read | off/on |
-| `replayGainMode` | `ReplayGainMode` | read/write | Facade forwarder to `settingsStore.replayGainMode` (Slice 16-A); read by `applyReplayGainVolume` |
+| `replayGainMode` | `ReplayGainMode` | read/write | Facade forwarder to `settingsStore.replayGainMode` (Slice 16-A); no remaining internal reader — `PlaybackController.applyReplayGainVolume` reads the store directly |
 
-`selectedLanguage` lives on `settingsStore` only (Slice 16-A).
+`selectedLanguage` lives on `settingsStore` only (Slice 16-A). `volume` lives on `playbackController` only.
 
 #### Format Classification (static)
 
@@ -583,13 +591,9 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 |----------|------|-------------|
 | `undoManager` | `UndoManager` | Injected; `levelsOfUndo = 10` |
 | `languageBundle` | `Bundle` | Get-only facade forwarder to `settingsStore.languageBundle` (Slice 16-A); resolved at launch for `NSLocalizedString` |
-| `pendingSeekTime` | `TimeInterval` | Seek position buffered while stopped/paused |
-| `lastPlayedTrackID` | `Track.ID?` | Last successfully played track ID |
-| `shuffleQueue` | `[Track.ID]` | Pre-shuffled order |
-| `shuffleQueueIndex` | `Int` | Current position in shuffle queue |
-| `pollingTask` | `Task<Void, Never>?` | Polling loop task for playback state |
-| `wasPlayingBeforeSleep` | `Bool` (`private(set)`) | Whether playback was active when the system began sleeping; recorded by `handleSystemWillSleep()`, consumed and cleared by `handleSystemDidWake()` |
 | `saveBatchSize` | `Int` (static) | Incremental save interval during batch load (5) |
+
+`pendingSeekTime`, `lastPlayedTrackID`, `pollingTask`, and `wasPlayingBeforeSleep` live on `playbackController` only (see §5.14).
 
 ### 3.4 Methods — Playlist Operations (`AppState+Playlist.swift`)
 
@@ -613,31 +617,20 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 | `redo()` | Calls `undoManager.redo()` |
 | `canUndo: Bool` | Whether undo stack has actions |
 | `canRedo: Bool` | Whether redo stack has actions |
+| `switchMiniPlayerPlaylist(to:) async` | Switches playlist from Mini Player: stops, switches `activePlaylistIndex`, clears the undo stack, plays the first track |
 
-### 3.5 Methods — Playback (`AppState+Playback.swift`)
+### 3.5 Methods — Playback Facade (`AppState.swift`)
 
-| Method | Description |
-|--------|-------------|
-| `play() async` | Resumes playback from current position |
-| `pause() async` | Pauses playback, preserves position |
-| `stop() async` | Stops playback, resets position to 0 |
-| `seek(to:) async` | Seeks to absolute position in seconds |
-| `setVolume(_:) async` | Sets output volume 0.0–1.0 |
-| `play(trackID:) async` | Loads and plays a specific track by ID |
-| `cycleRepeatMode()` | Cycles off → all → one → off |
-| `toggleShuffle()` | Toggles shuffle on/off, rebuilds queue |
-| `buildShuffleQueue(startingWith:)` | Rebuilds shuffle queue |
-| `mapToPlaybackError(_:) -> PlaybackError` | Fallback error mapping |
-| `applyReplayGainVolume(for:requiresActivePlayback:) async` | Applies ReplayGain adjustment to volume |
-
-### 3.6 Methods — Navigation (`AppState+Navigation.swift`)
+Transport, navigation, ReplayGain, error mapping, and sleep/wake live on `PlaybackController` (see §5.14). AppState keeps two method forwarders for the playlist code and `PlaylistView`:
 
 | Method | Description |
 |--------|-------------|
-| `playNextTrack() async` | Plays next track (respects shuffle/repeat) |
-| `playPreviousTrack() async` | Plays previous track (respects shuffle/repeat) |
-| `trackDidFinishPlaying() async` | Called by polling loop on natural completion |
-| `switchMiniPlayerPlaylist(to:) async` | Switches playlist from Mini Player |
+| `stop() async` | Forwards to `playbackController.stop()` |
+| `play(trackID:) async` | Forwards to `playbackController.play(trackID:)` |
+
+### 3.6 PlaylistContext conformance (`PlaylistContext.swift`)
+
+`extension AppState: PlaylistContext {}` — AppState's `playlists`, `activePlaylistIndex`, and `selectedTrackIDs` already satisfy the protocol (see §5.15); `init` assigns `playbackController.playlistContext = self` after every stored property is initialised.
 
 ### 3.7 Methods — M3U8 (`AppState+M3U8.swift`)
 
@@ -651,14 +644,12 @@ Since Slice 13-A these are **not** `@Published` — each is a computed facade fo
 
 | Method | Description |
 |--------|-------------|
-| `saveState()` | Persists playlists via `PlaylistStore` (Application Support file); `activePlaylistIndex`, `volume`, `repeatMode`, `isShuffled` to UserDefaults. Settings keys are persisted by `SettingsStore` at change time |
-| `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob; `activePlaylistIndex`, `volume`, `repeatMode`, `isShuffled` from UserDefaults; triggers metadata refresh. Settings keys are restored by `SettingsStore.init` |
-| `displayName(for:) -> String` | Returns "Title - Artist" or filename |
-| `clearLastError()` | Delegates the alert-surface reset to `alertCenter.clearLastError()`; additionally transitions `playbackState` `.error → .stopped` (the transition stays in the facade) |
+| `saveState()` | Calls `playbackController.saveVolume()`, then persists playlists via `PlaylistStore` (Application Support file) and `activePlaylistIndex` to UserDefaults. Settings keys, `repeatMode`, and `isShuffled` are persisted by their stores at change time |
+| `restoreState()` | Restores playlists from `PlaylistStore`, with one-shot migration of the legacy `hp.playlists` UserDefaults blob, and `activePlaylistIndex` from UserDefaults; triggers metadata refresh. Settings keys are restored by `SettingsStore.init`; the playback keys by `PlaybackController.init` |
 | `showFileInfo(trackID:)` | Looks the track up in the active playlist and calls `alertCenter.presentFileInfo(_:)` to signal ContentView to open the File Info WindowGroup; no-op if ID not in active playlist |
 | `showPaywallIfNeeded() -> Bool` | Facade forwarder to `settingsStore.showPaywallIfNeeded()` (Slice 16-A); the Free-tier request reaches `alertCenter.presentPaywall()` through the root-wired `onPaywallRequested` closure; returns true if blocked |
-| `handleSystemWillSleep()` | Records `wasPlayingBeforeSleep = (playbackState == .playing)`. Called by `AppDelegate` on `NSWorkspace.willSleepNotification`. |
-| `handleSystemDidWake() async` | Clears `wasPlayingBeforeSleep`; when it was `true`, calls `play()` to resume from the interrupted position (audio-pipeline re-preparation happens inside the playback service). Called by `AppDelegate` on `NSWorkspace.didWakeNotification`. |
+
+The former `displayName(for:)` is `Track.displayName` (§1.1); `clearLastError()` is `AlertCenter.clearLastError()` (§5.11), whose root-wired `onErrorCleared` returns playback from `.error` to `.stopped`; the sleep/wake handlers live on `PlaybackController` (§5.14) and `AppDelegate` calls them through `appState.playbackController`.
 
 ---
 
@@ -965,7 +956,7 @@ nonisolated enum EQSchemaMigrator {
 
 **Location:** `Shared/Models/EQCoordinator.swift`
 
-**Purpose:** `@MainActor` `ObservableObject` that owns all EQ-related observable state for the UI layer. Coordinates between `EQService` (the Application Layer view of HarmoniaCore's EQ control surface) and `EQPersistenceStore`. Slice 9-K. Lives in `Shared/Models/` (not `Services/`) because, like `AppState`, it is a state-bearing observable object rather than a stateless service. AppState holds a single `let eqCoordinator: EQCoordinator` and views read EQ state via `appState.eqCoordinator.…`; the one exception is `eqEnabled` — a read-only `@Published` mirror of `eqCoordinator.isEnabled` that lets `AppState`-bound views (the toolbar EQ button) re-render when Enable is toggled.
+**Purpose:** `@MainActor` `ObservableObject` that owns all EQ-related observable state for the UI layer. Coordinates between `EQService` (the Application Layer view of HarmoniaCore's EQ control surface) and `EQPersistenceStore`. Slice 9-K. Lives in `Shared/Models/` (not `Services/`) because, like `AppState`, it is a state-bearing observable object rather than a stateless service. AppState holds a single `let eqCoordinator: EQCoordinator`; `EQWindow` reads EQ state via `appState.eqCoordinator.…`, and `PlayerView`'s toolbar EQ button observes the coordinator directly via `@EnvironmentObject` (`HarmoniaPlayerApp` injects `appState.eqCoordinator` on the main window scene).
 
 ```swift
 @MainActor
@@ -1008,7 +999,7 @@ enum EQCoordinatorError: Error {
 
 **Location:** `Shared/Models/NowPlayingCoordinator.swift`
 
-**Purpose:** `@MainActor` class that owns all NowPlaying wiring for the UI / Application boundary with the system Now Playing surface. Slice 9-L. Subscribes to `AppState.$currentTrack` and `AppState.$playbackState`, routes the seven `NowPlayingService` pull-side callbacks to AppState action closures, and exposes `notifySeekCompleted(at:)` for direct AppState notification on successful seek (seek success is not derivable from `$playbackState`). Lives in `Shared/Models/` for the same reason `EQCoordinator` does — it is a lifecycle participant rather than a stateless service. Receives all dependencies via constructor closure injection and never holds an `AppState` reference.
+**Purpose:** `@MainActor` class that owns all NowPlaying wiring for the UI / Application boundary with the system Now Playing surface. Slice 9-L. Subscribes to `PlaybackController.currentTrackPublisher` and `playbackStatePublisher`, routes the seven `NowPlayingService` pull-side callbacks to the controller's transport methods, and exposes `notifySeekCompleted(at:)`, which the controller's root-wired `onSeekCompleted` closure calls after a successful seek (seek success is not derivable from the state publisher). Lives in `Shared/Models/` for the same reason `EQCoordinator` does — it is a lifecycle participant rather than a stateless service. Receives all dependencies via constructor closure injection and never holds an `AppState` or `PlaybackController` reference of its own.
 
 ```swift
 @MainActor
@@ -1034,9 +1025,9 @@ final class NowPlayingCoordinator {
 
 **Push semantics:** on `currentTrack` non-nil push `updateCurrentTrack` then `updateElapsedTime(0)`; on nil call `clear()`. On every `playbackState` event push `updatePlaybackState(_:rate:)` (rate 1.0 playing / 0.0 otherwise) then `updateElapsedTime(currentTimeProvider())`; on `.stopped` also `clear()`.
 
-**Pull semantics:** the seven service callbacks (`onPlay`, `onPause`, `onTogglePlayPause`, `onNext`, `onPrevious`, `onStop`, `onSeek`) are assigned in the coordinator's `init`, each wrapped in `Task { @MainActor in await … }` so the synchronous service callback signature can drive async AppState action closures.
+**Pull semantics:** the seven service callbacks (`onPlay`, `onPause`, `onTogglePlayPause`, `onNext`, `onPrevious`, `onStop`, `onSeek`) are assigned in the coordinator's `init`, each wrapped in `Task { @MainActor in await … }` so the synchronous service callback signature can drive the async transport closures.
 
-**AppState ownership:** AppState declares `private(set) var nowPlayingCoordinator: NowPlayingCoordinator!` (rather than `let`) so the seven action closures can capture `[weak self]` after every other stored property is initialised. `EQCoordinator` uses `let` because it has no self-capture requirement; that contrast does not apply here.
+**AppState ownership:** AppState declares `let nowPlayingCoordinator: NowPlayingCoordinator`. The controller is constructed first, so the seven action closures capture the controller (a local `let`) instead of `[weak self]`, and the coordinator needs no implicitly unwrapped optional. Ownership stays acyclic: AppState → coordinator → controller (strong); the controller reaches the coordinator only through its `onSeekCompleted` closure, which captures the coordinator weakly.
 
 ---
 
@@ -1090,6 +1081,9 @@ final class AlertCenter {
     var showPaywall = false
     var paywallDismissedThisSession = false
 
+    // Root-wired notification
+    @ObservationIgnored var onErrorCleared: (() -> Void)?
+
     func clearLastError()
     func presentFileInfo(_ track: Track)
     func clearFileInfoRequest()
@@ -1099,11 +1093,13 @@ final class AlertCenter {
 }
 ```
 
-**Method semantics:** `clearLastError()` clears the 5-field playback-error surface (`lastError`, `lastErrorDetail`, `failedTrackName`, `showFileNotFoundAlert`, `skippedInaccessibleNames`) and deliberately leaves the 3 batch-operation lists untouched — those are cleared by their own alerts' dismiss buttons. `presentFileInfo(_:)` / `clearFileInfoRequest()` set and reset the one-shot `fileInfoTrack` request. `presentPaywall()` raises `showPaywall` without touching `paywallDismissedThisSession`.
+**Method semantics:** `clearLastError()` clears the 5-field playback-error surface (`lastError`, `lastErrorDetail`, `failedTrackName`, `showFileNotFoundAlert`, `skippedInaccessibleNames`), deliberately leaves the 3 batch-operation lists untouched — those are cleared by their own alerts' dismiss buttons — and then calls `onErrorCleared`. `presentFileInfo(_:)` / `clearFileInfoRequest()` set and reset the one-shot `fileInfoTrack` request. `presentPaywall()` raises `showPaywall` without touching `paywallDismissedThisSession`.
 
-**Facade relationship:** AppState re-exposes all 11 properties as same-named computed forwarders (get + set) plus the delegating methods `clearLastError()` / `showFileInfo(trackID:)` (see §3.8). The `playbackState` `.error → .stopped` transition stays in the facade; the playlist lookup for `showFileInfo(trackID:)` also stays in the facade because it needs `playlist`. The paywall tier check lives in `SettingsStore.showPaywallIfNeeded()` (Slice 16-A, see §5.13), whose request reaches `presentPaywall()` through the `onPaywallRequested` closure wired by AppState — AlertCenter itself holds no tier logic.
+**Error dismissal:** `ContentView`'s error-alert dismiss actions call `alertCenter.clearLastError()` directly. AppState wires `onErrorCleared` → `playbackController.recoverFromError()` (see §5.14), so dismissing an error alert also returns playback from `.error` to `.stopped`; AlertCenter itself holds no playback state.
 
-**Deliberate looseness:** properties stay plain `var` (not `private(set)`) because un-migrated call sites in the `AppState+Playback/+Navigation/+Playlist/+M3U8` extensions still write through the facade's forwarding setters.
+**Facade relationship:** AppState re-exposes all 11 properties as same-named computed forwarders (get + set) plus the delegating method `showFileInfo(trackID:)` (see §3.8), whose playlist lookup stays in the facade because it needs `playlist`. The paywall tier check lives in `SettingsStore.showPaywallIfNeeded()` (Slice 16-A, see §5.13), whose request reaches `presentPaywall()` through the `onPaywallRequested` closure wired by AppState — AlertCenter itself holds no tier logic.
+
+**Deliberate looseness:** properties stay plain `var` (not `private(set)`) because `PlaybackController`'s error paths write the playback-error surface directly and un-migrated call sites in the `AppState+Playlist/+M3U8` extensions still write through the facade's forwarding setters.
 
 **Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
 
@@ -1156,13 +1152,13 @@ final class LyricsStore {
 }
 ```
 
-**Track-explicit contract:** the store never reads current-track state — every track-dependent method takes the track explicitly, and callers supply it: the AppState `$currentTrack` sink passes the sink's track value to `updateResolution(for:)`, and the views pass `appState.currentTrack`.
+**Track-explicit contract:** the store never reads current-track state — every track-dependent method takes the track explicitly, and callers supply it: the `PlaybackController.onCurrentTrackChanged` closure (wired by AppState) passes the new track to `updateResolution(for:)`, and the views pass `playbackController.currentTrack`.
 
 **Method semantics:** `toggleLyrics()` flips `showLyrics`. `updateResolution(for:)` recomputes `lyricsResolution` from `lyricsService.resolveAvailability(for:)`, applying any persisted `LyricsPreference` whose source is actually available; `nil` clears the resolution. `recheckLyrics(for:)` is the user-intent entry point behind the panel's Recheck button and delegates to `updateResolution(for:)`. `setLyricsSource(_:for:)` switches the active source when available and persists; `setLyricsLanguage(_:for:)` selects a USLT variant when the current source is `.embedded` and persists; `setLyricsEncoding(_:for:)` persists the `.lrc` decoding charset (`"auto"` re-detects). All persistence goes through the owned `lyricsPreferenceStore`.
 
 **Drag-and-drop attach (Slice 15-A):** `attachLyricsFile(_:for:)` is the drop entry point (PlayerView and LyricsPanel forward dropped URLs to it) and returns whether the drop was accepted — a `.lrc` extension with a current track. When the track's resolution already offers a `.lrc` source, the request is staged on `pendingAttach` and ContentView presents a replace-confirmation alert; `confirmPendingAttach()` / `cancelPendingAttach()` resolve it. The install path calls `lyricsService.installSidecar(from:for:)`, persists `LyricsPreference(source: .lrc, encoding: "auto")`, refreshes the resolution, and raises `showLyrics` so the panel opens with the new content. On failure, `attachErrorKey` carries the localized message key for ContentView's failure alert and nothing is persisted.
 
-**No facade relationship:** unlike `AlertCenter`, AppState keeps no forwarders for the lyrics surface — after the Slice 14-A view and test migration the surface has no internal readers, so the facade step of the strangler protocol is skipped and AppState only constructs the store and retargets its `$currentTrack` sink to `lyricsStore.updateResolution(for:)`.
+**No facade relationship:** unlike `AlertCenter`, AppState keeps no forwarders for the lyrics surface — after the Slice 14-A view and test migration the surface has no internal readers, so the facade step of the strangler protocol is skipped and AppState only constructs the store and wires `playbackController.onCurrentTrackChanged` to `lyricsStore.updateResolution(for:)`.
 
 **Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
 
@@ -1215,11 +1211,135 @@ final class SettingsStore {
 
 **Tier state:** `isProUnlocked` and `featureFlags` are read from the IAP manager at `init`; `purchasePro()` (rethrows `IAPError`) and `refreshEntitlements()` call the IAP manager and then refresh both. A post-launch flag change does not rebuild services.
 
-**Notifications:** `replayGainMode`'s `didSet` calls `onReplayGainModeChanged` with the new mode after persisting, on every assignment. `showPaywallIfNeeded()` calls `onPaywallRequested` and returns `true` on the Free tier, and returns `false` without calling it on the Pro tier. The store references no other store; AppState wires both closures (see §3.1).
+**Notifications:** `replayGainMode`'s `didSet` calls `onReplayGainModeChanged` with the new mode after persisting, on every assignment. `showPaywallIfNeeded()` calls `onPaywallRequested` and returns `true` on the Free tier, and returns `false` without calling it on the Pro tier. The store references no other store; AppState wires both closures (see §3.1) — `onReplayGainModeChanged` to `playbackController.applyReplayGainVolume(requiresActivePlayback: true)`, `onPaywallRequested` to `alertCenter.presentPaywall()`.
 
-**Facade relationship:** AppState keeps `allowDuplicateTracks` / `replayGainMode` (get + set), `isProUnlocked` / `languageBundle` (get-only), and `showPaywallIfNeeded()` as forwarders for their remaining internal and un-migrated view readers; the other members have no AppState surface (see §3).
+**Facade relationship:** AppState keeps `allowDuplicateTracks` / `replayGainMode` (get + set), `isProUnlocked` / `languageBundle` (get-only), and `showPaywallIfNeeded()` as forwarders for their remaining internal and un-migrated view readers; the other members have no AppState surface (see §3). `PlaybackController` reads `replayGainMode` from the store directly.
 
 **Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
+
+---
+
+### 5.14 PlaybackController
+
+**Location:** `Shared/Models/PlaybackController.swift` (state, init, transport, polling, ReplayGain, error mapping, sleep/wake, persistence) and `Shared/Models/PlaybackController+Navigation.swift` (next / previous, natural completion, shuffle queue)
+
+**Purpose:** `@MainActor @Observable` store owning the playback surface — the fourth and largest feature store extracted from AppState under the AppState decomposition program. Owns the `PlaybackService`, the transport state, the repeat / shuffle modes and shuffle queue, the volume, and the three playback persistence keys. Lives in `Shared/Models/` for the same reason `AlertCenter` does. Views whose body reads playback state (`PlayerView`, `MiniPlayerView`, `ContentView`'s lyrics-column condition and focused playback state, `LyricsPanel`'s `currentTrack`) observe it via `@Environment(PlaybackController.self)`, injected on the main window and Mini Player scenes by `HarmoniaPlayerApp`; `HarmoniaPlayerCommands` and `AppDelegate` reach it through `appState.playbackController`; `PlaylistView` still reads it through AppState's forwarders.
+
+```swift
+@MainActor @Observable
+final class PlaybackController {
+
+    // Transport state
+    var currentTrack: Track?                      // didSet → publisher + onCurrentTrackChanged
+    var playbackState: PlaybackState = .idle      // didSet → publisher
+    var playingPlaylistID: Playlist.ID?
+    var currentTime: TimeInterval = 0
+    var duration: TimeInterval = 0
+
+    // Persisted — hp.volume via saveVolume(); hp.repeatMode / hp.isShuffled in didSet
+    var volume: Float = 1.0
+    var repeatMode: RepeatMode = .off
+    var isShuffled: ShuffleMode = .off
+
+    // Shuffle queue (read by the PlaylistView popover)
+    var shuffleQueue: [Track.ID] = []
+    var shuffleQueueIndex: Int = 0
+
+    // Not observed
+    @ObservationIgnored var pendingSeekTime: TimeInterval = 0
+    @ObservationIgnored var lastPlayedTrackID: Track.ID?
+    @ObservationIgnored var pollingTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var wasPlayingBeforeSleep = false
+
+    // Dependencies
+    let playbackService: PlaybackService
+    let alertCenter: AlertCenter
+    @ObservationIgnored weak var playlistContext: (any PlaylistContext)?   // assigned by the root
+
+    // Root-wired notifications
+    @ObservationIgnored var onCurrentTrackChanged: ((Track?) -> Void)?
+    @ObservationIgnored var onSeekCompleted: ((TimeInterval) -> Void)?
+
+    // Now Playing bridge
+    var currentTrackPublisher: AnyPublisher<Track?, Never> { get }
+    var playbackStatePublisher: AnyPublisher<PlaybackState, Never> { get }
+
+    init(playbackService: PlaybackService,
+         alertCenter: AlertCenter,
+         settingsStore: SettingsStore,
+         userDefaults: UserDefaults)
+
+    // Transport
+    func play() async
+    func pause() async
+    func stop() async
+    func seek(to seconds: TimeInterval) async
+    func setVolume(_ volume: Float) async
+    func play(trackID: Track.ID) async
+    func cycleRepeatMode()
+    func toggleShuffle()
+    func buildShuffleQueue(startingWith startID: Track.ID? = nil)
+
+    // Navigation (PlaybackController+Navigation.swift)
+    func playNextTrack() async
+    func playPreviousTrack() async
+    func trackDidFinishPlaying() async
+
+    // ReplayGain / errors
+    func applyReplayGainVolume(for explicitTrack: Track? = nil, requiresActivePlayback: Bool = false) async
+    func mapToPlaybackError(_ error: Error) -> PlaybackError
+    func makeErrorDetail(code: PlaybackError, track: Track?) -> String
+    func recoverFromError()           // .error → .stopped; no-op otherwise
+
+    // Sleep / wake
+    func handleSystemWillSleep()
+    func handleSystemDidWake() async
+
+    // Persistence
+    func saveVolume()                 // writes hp.volume; called by AppState.saveState()
+
+    nonisolated deinit {}
+}
+```
+
+**Transport semantics:** `play()` resumes the current track, or — when `currentTrack` is `nil` — plays the first selected track in playlist order, else the first track; when the service is stopped after natural completion of the last track with `repeatMode == .off`, it restarts from the first track. `pause()` preserves the position. `stop()` cancels polling, resets `currentTime` and `pendingSeekTime`, and clears `currentTrack` and `playingPlaylistID`. `seek(to:)` updates `currentTime` and calls `onSeekCompleted` only on success; on failure it writes `alertCenter.lastError` / `lastErrorDetail` and leaves `playbackState` unchanged. `setVolume(_:)` clamps to 0.0–1.0. `play(trackID:)` resolves the track across the context's playlists (switching `activePlaylistIndex` to the owning playlist), rejects an inaccessible track before touching `currentTrack` (raising the file-not-found alert and marking the context's track `isAccessible = false`), then loads, applies ReplayGain, plays, records `lastPlayedTrackID` and `playingPlaylistID`, and starts polling; failures map to `PlaybackError`, write the alert surface, and set `.error`.
+
+**Navigation semantics:** `playNextTrack()` / `playPreviousTrack()` walk the active playlist (or the shuffle queue when shuffled); Next always wraps to the first track, Previous at the first track seeks to 0 and replays. `trackDidFinishPlaying()` (called by the polling loop) advances from `lastPlayedTrackID` within the playing playlist according to `repeatMode`, skipping inaccessible tracks and listing them in the file-not-found alert, and stops at the end when `repeatMode == .off`.
+
+**Polling:** `play()` and `play(trackID:)` start a 0.25 s loop that mirrors the service's `currentTime` and reflects a service-side `.stopped` (natural completion → `trackDidFinishPlaying()`), `.paused` (e.g. after system sleep), or `.error` into `playbackState`; `stop()` cancels it.
+
+**ReplayGain:** `applyReplayGainVolume(for:requiresActivePlayback:)` reads `settingsStore.replayGainMode` and applies the track or album gain (with cross-fallback) on top of `volume`, clamped to 1.0, through `playbackService.setVolume`. Called by `play(trackID:)` and, through the root-wired `settingsStore.onReplayGainModeChanged`, on mode changes during active playback.
+
+**Persistence:** `init` restores `hp.volume`, `hp.repeatMode`, and `hp.isShuffled` from the injected `UserDefaults` before its stored properties without defaults are initialised, so the restore assignments go through the `@Observable` init accessors and run neither `didSet` nor the closures (a missing key keeps the default; undecodable repeat data keeps `.off`). `repeatMode` and `isShuffled` persist in `didSet` on every assignment; `volume` is written only by `saveVolume()`, which `AppState.saveState()` calls at terminate.
+
+**Publishers and closures:** every `currentTrack` / `playbackState` assignment feeds a private `CurrentValueSubject` exposed as an `AnyPublisher` for the unchanged `NowPlayingCoordinator.init`; `currentTrack`'s `didSet` also calls `onCurrentTrackChanged`. The controller holds no reference to `LyricsStore`, `NowPlayingCoordinator`, or `EQCoordinator`; AppState wires the closures (see §3.1).
+
+**Playlist context:** `playlistContext` is `weak` and assigned by AppState after its own stored properties are initialised (AppState is the context, so it cannot be an init argument); context-dependent methods are no-ops while it is `nil`. It becomes an init parameter when the playlist state moves into its own store.
+
+**Facade relationship:** AppState keeps forwarders only for the members its playlist code and `PlaylistView` still read (see §3); `HarmoniaPlayerCommands` uses the `appState.playbackController.…` path.
+
+**Xcode 26 beta workaround:** `nonisolated deinit {}` — same pattern as `EQCoordinator` / `AppState` (see §5.8).
+
+---
+
+### 5.15 PlaylistContext
+
+**Location:** `Shared/Models/PlaylistContext.swift`
+
+**Purpose:** The playlist state `PlaybackController` reads and writes — the playlists it resolves tracks in, the index of the playlist the user is looking at, and the current table selection. `AppState` conforms with an empty extension; the playlist store conforms once the playlist state moves out of AppState.
+
+```swift
+@MainActor
+protocol PlaylistContext: AnyObject {
+    var playlists: [Playlist] { get set }
+    var activePlaylistIndex: Int { get set }
+    var selectedTrackIDs: Set<Track.ID> { get }
+}
+
+extension AppState: PlaylistContext {}
+```
+
+Test double: `FakePlaylistContext` (`HarmoniaPlayerTests/FakeInfrastructure/`), one empty playlist at index 0 and no selection.
 
 ---
 
@@ -1358,10 +1478,10 @@ with `hp.` prefix keys.
 | `hp.playlists` | `[Playlist]` (JSON) | **Legacy** — no longer written; `restoreState()` reads it once to migrate into `playlists.json`, then deletes the key |
 | `hp.activePlaylistIndex` | `Int` | `saveState()` |
 | `hp.allowDuplicateTracks` | `Bool` | `SettingsStore` (didSet) |
-| `hp.volume` | `Float` | `saveState()` |
+| `hp.volume` | `Float` | `PlaybackController.saveVolume()`, called by `saveState()` |
 | `hp.selectedLanguage` | `String` | `SettingsStore` (didSet); also written by `HarmoniaPlayerApp.init` on first launch (`"en"`) |
-| `hp.repeatMode` | `RepeatMode` (JSON) | `saveState()` |
-| `hp.isShuffled` | `Bool` | `saveState()` |
+| `hp.repeatMode` | `RepeatMode` (JSON) | `PlaybackController` (didSet) |
+| `hp.isShuffled` | `Bool` | `PlaybackController` (didSet) |
 | `hp.replayGainMode` | `String` | `SettingsStore` (didSet) |
 | `hp.isProUnlocked` | `Bool` | `StoreKitIAPManager` (didSet) |
 | `hp.eq.schemaVersion` | `Int` | `EQPersistenceStore.save(_:)` |
@@ -1382,6 +1502,8 @@ with `hp.` prefix keys.
 
 **Settings keys (Slice 16-A).** `hp.allowDuplicateTracks`, `hp.selectedLanguage`, and `hp.replayGainMode` are owned by `SettingsStore` (see §5.13), independent of `AppState.saveState()`: restored in the store's `init`, written by each property's `didSet` at change time.
 
+**Playback keys.** `hp.volume`, `hp.repeatMode`, and `hp.isShuffled` are owned by `PlaybackController` (see §5.14): restored in the store's `init`; `hp.repeatMode` and `hp.isShuffled` are written by their properties' `didSet` at change time, while `hp.volume` is written by `saveVolume()`, which `AppState.saveState()` calls at terminate.
+
 Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissedThisSession`, `shuffleQueue`, `currentTrack`, `playbackState`, `viewPreferences`.
 
 ---
@@ -1389,8 +1511,9 @@ Not persisted: `isPerformingBlockingOperation`, `showPaywall`, `paywallDismissed
 ## 9. Module Boundaries Summary
 
 ```
-Views -> AppState + feature stores (AlertCenter, LyricsStore, SettingsStore)
-AppState -> PlaybackService, TagReaderService, CoreFactory (protocols)
+Views -> AppState + feature stores (AlertCenter, LyricsStore, SettingsStore, PlaybackController)
+AppState -> TagReaderService, CoreFactory (protocols); conforms to PlaylistContext
+PlaybackController -> PlaybackService (protocol), AlertCenter, SettingsStore, PlaylistContext, UserDefaults
 LyricsStore -> LyricsService, LyricsPreferenceStore (protocols)
 SettingsStore -> IAPManager (protocol), UserDefaults
 CoreFactory -> CoreServiceProviding -> HarmoniaCore (via Integration Layer)

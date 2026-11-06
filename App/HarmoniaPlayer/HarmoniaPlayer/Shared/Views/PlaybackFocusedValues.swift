@@ -16,7 +16,7 @@
 //  (PlaybackState) re-evaluates Commands correctly on every state change.
 //
 //  ContentView sets this value via:
-//    .focusedValue(\.playbackState, appState.playbackState)
+//    .focusedValue(\.playbackState, playbackController.playbackState)
 //
 //  HarmoniaPlayerCommands reads it via:
 //    @FocusedValue(\.playbackState) private var focusedPlaybackState: PlaybackState?

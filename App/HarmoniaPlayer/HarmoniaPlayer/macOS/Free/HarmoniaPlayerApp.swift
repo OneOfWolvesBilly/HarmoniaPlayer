@@ -108,6 +108,13 @@ struct HarmoniaPlayerApp: App {
                 // File Info subtrees read settings state only through
                 // AppState's forwarders and take no injection.
                 .environment(appState.settingsStore)
+                // Playback controller — required by ContentView, PlayerView, and
+                // LyricsPanel. PlaylistView still reads playback state through
+                // AppState's forwarders.
+                .environment(appState.playbackController)
+                // EQ coordinator — required by PlayerView's EQ toolbar button,
+                // which reads `isEnabled` directly.
+                .environmentObject(appState.eqCoordinator)
                 .frame(minWidth: 620, minHeight: 480)
                 .focusedSceneObject(appState)
                 .ignoresSafeArea()
@@ -143,6 +150,7 @@ struct HarmoniaPlayerApp: App {
         Window("Mini Player", id: "mini-player") {
             MiniPlayerView()
                 .environmentObject(appState)
+                .environment(appState.playbackController)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)

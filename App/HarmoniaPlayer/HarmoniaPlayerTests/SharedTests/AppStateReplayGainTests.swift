@@ -70,107 +70,18 @@ final class AppStateReplayGainTests: XCTestCase {
         Float(min(1.0, Double(base) * pow(10.0, gainDB / 20.0)))
     }
 
-    // MARK: - mode = off
-
-    func testReplayGain_Off_DoesNotAdjustVolume() async throws {
-        let track = await loadTrack(replayGainTrack: -6.0, replayGainAlbum: -4.0)
-        sut.replayGainMode = .off
-        await sut.setVolume(0.8)
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, 0.8, accuracy: 0.001)
-    }
-
-    // MARK: - mode = track
-
-    func testReplayGain_TrackMode_UsesTrackGain() async throws {
-        let gainDB = -6.0
-        let track = await loadTrack(replayGainTrack: gainDB, replayGainAlbum: -3.0)
-        sut.replayGainMode = .track
-        await sut.setVolume(1.0)
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, expectedVolume(gainDB: gainDB), accuracy: 0.001)
-    }
-
-    func testReplayGain_TrackMode_FallbackToAlbum_WhenTrackGainNil() async throws {
-        let albumDB = -4.0
-        let track = await loadTrack(replayGainTrack: nil, replayGainAlbum: albumDB)
-        sut.replayGainMode = .track
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, expectedVolume(gainDB: albumDB), accuracy: 0.001)
-    }
-
-    // MARK: - mode = album
-
-    func testReplayGain_AlbumMode_UsesAlbumGain() async throws {
-        let gainDB = -3.0
-        let track = await loadTrack(replayGainTrack: -6.0, replayGainAlbum: gainDB)
-        sut.replayGainMode = .album
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, expectedVolume(gainDB: gainDB), accuracy: 0.001)
-    }
-
-    func testReplayGain_AlbumMode_FallbackToTrack_WhenAlbumGainNil() async throws {
-        let trackDB = -5.0
-        let track = await loadTrack(replayGainTrack: trackDB, replayGainAlbum: nil)
-        sut.replayGainMode = .album
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, expectedVolume(gainDB: trackDB), accuracy: 0.001)
-    }
-
-    // MARK: - Both tags nil
-
-    func testReplayGain_BothTagsNil_UsesPlainVolume() async throws {
-        let track = await loadTrack(replayGainTrack: nil, replayGainAlbum: nil)
-        sut.replayGainMode = .track
-        await sut.setVolume(0.7)
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, 0.7, accuracy: 0.001)
-    }
-
-    // MARK: - Clamping
-
-    func testReplayGain_LargePositiveGain_ClampsTo1() async throws {
-        // +30 dB → linear ~31.6 → must be clamped to 1.0
-        let track = await loadTrack(replayGainTrack: 30.0)
-        sut.replayGainMode = .track
-        await sut.setVolume(1.0)
-
-        await sut.play(trackID: track.id)
-
-        let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
-        XCTAssertEqual(vol, 1.0, accuracy: 0.001)
-    }
-
     // MARK: - Real-time mode switching
 
     func testReplayGain_ModeSwitch_DuringPlayback_AppliesImmediately() async throws {
         let gainDB = -6.0
         let track = await loadTrack(replayGainTrack: gainDB, replayGainAlbum: -3.0)
-        sut.replayGainMode = .off
+        sut.settingsStore.replayGainMode = .off
         await sut.play(trackID: track.id)
 
         // Switch to track mode while playing — should apply immediately
-        sut.replayGainMode = .track
+        sut.settingsStore.replayGainMode = .track
 
-        // Allow Combine sink + Task to execute
+        // Allow the mode-change closure's Task to execute
         try await Task.sleep(nanoseconds: 50_000_000)
 
         let vol = try XCTUnwrap(fakePlaybackService.lastSetVolume)
@@ -182,7 +93,7 @@ final class AppStateReplayGainTests: XCTestCase {
         _ = track  // loaded but not played
         let callCountBefore = fakePlaybackService.setVolumeCallCount
 
-        sut.replayGainMode = .track
+        sut.settingsStore.replayGainMode = .track
         try await Task.sleep(nanoseconds: 50_000_000)
 
         XCTAssertEqual(fakePlaybackService.setVolumeCallCount, callCountBefore)
@@ -208,8 +119,8 @@ final class AppStateReplayGainTests: XCTestCase {
     func testEQReplayGainInteraction_AdditiveCombination() async throws {
         // Given: track tagged with RG = -2 dB
         let track = await loadTrack(replayGainTrack: -2.0)
-        sut.replayGainMode = .track
-        await sut.setVolume(1.0)
+        sut.settingsStore.replayGainMode = .track
+        await sut.playbackController.setVolume(1.0)
 
         // And: EQ preamp set to -3 dB via the coordinator
         sut.eqCoordinator.setPreamp(-3)

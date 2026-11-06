@@ -11,20 +11,26 @@
 //
 //  DESIGN NOTES
 //  ------------
+//  - Playback state and transport actions come from `PlaybackController`,
+//    observed via `@Environment(PlaybackController.self)` (injected by
+//    `HarmoniaPlayerApp`); the EQ button reads `EQCoordinator` via
+//    `@EnvironmentObject`. `AppState` is read only for the active playlist
+//    and `languageBundle`.
 //  - Album art is loaded from `currentTrack.artworkData` if available;
 //    otherwise a grey rounded-rectangle placeholder with a music note icon
 //    is shown.
 //  - The seek slider uses a local `isSeeking` flag to freeze the displayed
 //    position while the user is dragging. On drag end (`editing == false`),
-//    `appState.seek(to:)` is called with the final slider value. This
-//    prevents the slider from jumping back to `currentTime` mid-drag.
+//    `playbackController.seek(to:)` is called with the final slider value.
+//    This prevents the slider from jumping back to `currentTime` mid-drag.
 //  - Repeat icon changes to `repeat.1` when `repeatMode == .one` to match
 //    macOS Music.app convention.
 //  - Shuffle button tint changes to `accentColor` when shuffle is active,
 //    matching the repeat button convention.
-//  - All transport actions are dispatched via `Task { await appState.method() }`
-//    to satisfy Swift 6 concurrency requirements.
-//  - No `import HarmoniaCore` — all state access goes through `AppState`.
+//  - All transport actions are dispatched via
+//    `Task { await playbackController.method() }` to satisfy Swift 6
+//    concurrency requirements.
+//  - No `import HarmoniaCore` — all state access goes through the stores.
 //  - All UI strings use `String(localized:bundle:appState.languageBundle)`
 //    for runtime language switching support.
 //
@@ -44,6 +50,8 @@ import AppKit
 struct PlayerView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(PlaybackController.self) private var playbackController
+    @EnvironmentObject private var eqCoordinator: EQCoordinator
     @Environment(LyricsStore.self) private var lyricsStore
     @Environment(\.openWindow) private var openWindow
 
@@ -97,7 +105,7 @@ struct PlayerView: View {
                 .buttonStyle(.plain)
                 .help(L("lyrics_toggle"))
                 .accessibilityIdentifier("lyrics-toggle")
-                .disabled(appState.currentTrack == nil)
+                .disabled(playbackController.currentTrack == nil)
 
                 // Equalizer — opens the EQ window (Slice 9-K commit 7-A).
                 // Always visible; icon tint reflects EQ enabled state so
@@ -108,7 +116,7 @@ struct PlayerView: View {
                 } label: {
                     Image(systemName: "slider.vertical.3")
                         .font(.system(size: 16))
-                        .foregroundStyle(appState.eqEnabled
+                        .foregroundStyle(eqCoordinator.isEnabled
                                          ? Color.accentColor
                                          : .secondary)
                 }
@@ -139,7 +147,7 @@ struct PlayerView: View {
         .dropDestination(for: URL.self) { urls, _ in
             var accepted = false
             for url in urls
-            where lyricsStore.attachLyricsFile(url, for: appState.currentTrack) {
+            where lyricsStore.attachLyricsFile(url, for: playbackController.currentTrack) {
                 accepted = true
             }
             return accepted
@@ -153,7 +161,7 @@ struct PlayerView: View {
         GeometryReader { geo in
             let size = min(geo.size.width, geo.size.height)
             Group {
-                if let data = appState.currentTrack?.artworkData,
+                if let data = playbackController.currentTrack?.artworkData,
                    let nsImage = NSImage(data: data) {
                     Image(nsImage: nsImage)
                         .resizable()
@@ -181,13 +189,13 @@ struct PlayerView: View {
     /// Track title and artist labels.
     private var metadataView: some View {
         VStack(spacing: 4) {
-            Text(appState.currentTrack?.title ?? L("no_track_playing"))
+            Text(playbackController.currentTrack?.title ?? L("no_track_playing"))
                 .font(.title3)
                 .fontWeight(.semibold)
                 .lineLimit(1)
                 .accessibilityIdentifier("now-playing-title")
 
-            Text(appState.currentTrack?.artist ?? "")
+            Text(playbackController.currentTrack?.artist ?? "")
                 .font(.callout)
                 .foregroundStyle(Color.secondary)
                 .lineLimit(1)
@@ -205,31 +213,31 @@ struct PlayerView: View {
         VStack(spacing: 4) {
             Slider(
                 value: Binding(
-                    get: { isSeeking ? seekValue : appState.currentTime },
+                    get: { isSeeking ? seekValue : playbackController.currentTime },
                     set: { newValue in seekValue = newValue }
                 ),
-                in: 0...max(appState.duration, 1)
+                in: 0...max(playbackController.duration, 1)
             ) { editing in
                 if editing {
                     // Drag started — freeze display at current position
                     isSeeking = true
-                    seekValue = appState.currentTime
+                    seekValue = playbackController.currentTime
                 } else {
                     // Drag ended — send final position to AppState
                     isSeeking = false
-                    Task { await appState.seek(to: seekValue) }
+                    Task { await playbackController.seek(to: seekValue) }
                 }
             }
             .accessibilityIdentifier("progress-slider")
-            .disabled(appState.duration <= 0)
+            .disabled(playbackController.duration <= 0)
 
             HStack {
-                Text(formatTime(appState.currentTime))
+                Text(formatTime(playbackController.currentTime))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(Color.secondary)
                 Spacer()
-                Text(formatTime(appState.duration))
+                Text(formatTime(playbackController.duration))
                     .font(.caption)
                     .monospacedDigit()
                     .foregroundStyle(Color.secondary)
@@ -243,7 +251,7 @@ struct PlayerView: View {
     private var transportControlsView: some View {
         HStack(spacing: 24) {
             Button {
-                Task { await appState.playPreviousTrack() }
+                Task { await playbackController.playPreviousTrack() }
             } label: {
                 Image(systemName: "backward.fill")
                     .font(.title2)
@@ -253,21 +261,21 @@ struct PlayerView: View {
 
             Button {
                 Task {
-                    if appState.playbackState == .playing {
-                        await appState.pause()
+                    if playbackController.playbackState == .playing {
+                        await playbackController.pause()
                     } else {
-                        await appState.play()
+                        await playbackController.play()
                     }
                 }
             } label: {
-                Image(systemName: appState.playbackState == .playing ? "pause.fill" : "play.fill")
+                Image(systemName: playbackController.playbackState == .playing ? "pause.fill" : "play.fill")
                     .font(.title)
             }
             .accessibilityIdentifier("play-pause-button")
-            .help(appState.playbackState == .playing ? L("help_pause") : L("help_play"))
+            .help(playbackController.playbackState == .playing ? L("help_pause") : L("help_play"))
 
             Button {
-                Task { await appState.stop() }
+                Task { await playbackController.stop() }
             } label: {
                 Image(systemName: "stop.fill")
                     .font(.title2)
@@ -276,7 +284,7 @@ struct PlayerView: View {
             .help(L("help_stop"))
 
             Button {
-                Task { await appState.playNextTrack() }
+                Task { await playbackController.playNextTrack() }
             } label: {
                 Image(systemName: "forward.fill")
                     .font(.title2)
@@ -295,10 +303,10 @@ struct PlayerView: View {
         HStack(spacing: 20) {
             // Repeat cycles: off → all → one → off
             Button {
-                appState.cycleRepeatMode()
+                playbackController.cycleRepeatMode()
             } label: {
                 Image(systemName: repeatIcon)
-                    .foregroundStyle(appState.repeatMode == .off
+                    .foregroundStyle(playbackController.repeatMode == .off
                         ? Color.secondary
                         : Color.accentColor)
             }
@@ -307,15 +315,15 @@ struct PlayerView: View {
 
             // Shuffle toggles on/off
             Button {
-                appState.toggleShuffle()
+                playbackController.toggleShuffle()
             } label: {
                 Image(systemName: "shuffle")
-                    .foregroundStyle(appState.isShuffled
+                    .foregroundStyle(playbackController.isShuffled
                         ? Color.accentColor
                         : Color.secondary)
             }
             .accessibilityIdentifier("shuffle-button")
-            .help(appState.isShuffled ? L("shuffle_on") : L("shuffle_off"))
+            .help(playbackController.isShuffled ? L("shuffle_on") : L("shuffle_off"))
         }
         .buttonStyle(.plain)
         .disabled(appState.playlist.tracks.isEmpty)
@@ -339,7 +347,7 @@ struct PlayerView: View {
             GeometryReader { geo in
                 let thumbEdge: CGFloat = 11   // macOS slider thumb edge inset (~half thumb width)
                 let usable = geo.size.width - thumbEdge * 2
-                let thumbX = thumbEdge + CGFloat(appState.volume) * usable
+                let thumbX = thumbEdge + CGFloat(playbackController.volume) * usable
 
                 ZStack(alignment: .top) {
                     // Volume label bubble — floats above thumb, center-aligned to thumb x
@@ -353,16 +361,16 @@ struct PlayerView: View {
                         .frame(minHeight: 22)
                         .opacity(volumeLabelOpacity)
                         .position(x: thumbX, y: 0)
-                        .animation(.easeOut(duration: 0.15), value: appState.volume)
+                        .animation(.easeOut(duration: 0.15), value: playbackController.volume)
 
                     // Slider sits below the label
                     Slider(
                         value: Binding(
-                            get: { Double(appState.volume) },
+                            get: { Double(playbackController.volume) },
                             set: { newValue in
                                 // Snap to 0.1% steps (0.001 in 0.0–1.0 range)
                                 let snapped = Float((newValue * 1000).rounded() / 1000)
-                                Task { await appState.setVolume(snapped) }
+                                Task { await playbackController.setVolume(snapped) }
                             }
                         ),
                         in: 0.0...1.0
@@ -400,7 +408,7 @@ struct PlayerView: View {
 
     /// Volume as a 1-decimal-place percentage string (e.g. "73.0%").
     private var volumePercentLabel: String {
-        String(format: "%.1f%%", appState.volume * 100)
+        String(format: "%.1f%%", playbackController.volume * 100)
     }
 
     // MARK: - Status Label
@@ -417,7 +425,7 @@ struct PlayerView: View {
 
     /// SF Symbol name for the current repeat mode.
     private var repeatIcon: String {
-        switch appState.repeatMode {
+        switch playbackController.repeatMode {
         case .off: return "repeat"
         case .all: return "repeat"
         case .one: return "repeat.1"
@@ -426,18 +434,18 @@ struct PlayerView: View {
 
     /// Tooltip text for the repeat button.
     private var repeatHelpText: String {
-        switch appState.repeatMode {
+        switch playbackController.repeatMode {
         case .off: return L("repeat_off")
         case .all: return L("repeat_all")
         case .one: return L("repeat_one")
         }
     }
 
-    /// Human-readable description of `appState.playbackState`.
+    /// Human-readable description of `playbackController.playbackState`.
     private var statusText: String {
         // No text when playlist is empty
         guard !appState.playlist.tracks.isEmpty else { return "" }
-        switch appState.playbackState {
+        switch playbackController.playbackState {
         case .idle:         return ""
         case .stopped:      return L("status_stopped")
         case .loading:      return L("status_loading")

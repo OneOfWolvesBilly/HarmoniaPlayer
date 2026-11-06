@@ -33,7 +33,7 @@ This guide demonstrates:
               ↓ conforms to
 [HP] PlaybackService (app-layer protocol)  — async throws PlaybackError
               ↓ used by
-[HP] AppState  — async methods consumed by SwiftUI Views via Task { await ... }
+[HP] PlaybackController  — async methods consumed by SwiftUI Views via Task { await ... }
 ```
 
 HarmoniaCore's own APIs are synchronous. The app-layer `PlaybackService`
@@ -423,16 +423,19 @@ Layer protocol). See `module_boundary.md` §4.5 for the full rationale.
 
 ## 3. AppState Implementation
 
-`AppState` is the central observable state. It is `@MainActor` and split
-across five files for maintainability:
+`AppState` is the central observable state and the composition root for
+the feature stores. It is `@MainActor` and split across three files for
+maintainability; the playback surface lives in the `PlaybackController`
+store beside it:
 
 | File | Responsibility |
 |------|----------------|
-| `AppState.swift` | Properties, init, persistence, display helpers |
-| `AppState+Playlist.swift` | Playlist operations, undo/redo, sort |
-| `AppState+Playback.swift` | Transport controls, volume, ReplayGain, polling |
-| `AppState+Navigation.swift` | Next/previous, track-finished handling |
+| `AppState.swift` | Properties, init, persistence, facade forwarders |
+| `AppState+Playlist.swift` | Playlist operations, undo/redo, sort, Mini Player playlist switch |
 | `AppState+M3U8.swift` | M3U8 import/export |
+| `PlaybackController.swift` | Transport state and controls, volume, ReplayGain, polling, error mapping, sleep/wake, persistence |
+| `PlaybackController+Navigation.swift` | Next/previous, track-finished handling, shuffle queue |
+| `PlaylistContext.swift` | Protocol through which the controller reaches playlist state (`AppState` conforms) |
 
 ### 3.1 Initialization (Dependency Injection)
 
@@ -443,9 +446,14 @@ final class AppState: ObservableObject {
     // Services — internal access, never `private`
     // (Views access AppState, not services directly — the boundary is
     //  architectural, not enforced by access control.)
-    let playbackService: PlaybackService
     let tagReaderService: TagReaderService
     let fileDropService: FileDropService
+
+    // Playback controller. Owns the playback service, the transport state,
+    // navigation, ReplayGain, polling, and the playback persistence keys;
+    // views observe it via @Environment(PlaybackController.self). AppState
+    // keeps forwarders only for the members its playlist code still reads.
+    let playbackController: PlaybackController
 
     // Lyrics store (Slice 14-A). Owns showLyrics / lyricsResolution and the
     // LyricsService + LyricsPreferenceStore dependencies; views observe it
@@ -457,12 +465,11 @@ final class AppState: ObservableObject {
     // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
     let eqCoordinator: EQCoordinator
 
-    // NowPlaying coordinator (Slice 9-L). Routes AppState publishers and
-    // action closures to the system Now Playing surface via NowPlayingService.
-    // Declared `private(set) var ...!` rather than `let` so the seven action
-    // closures can capture `[weak self]` after every other stored property
-    // is initialised.
-    private(set) var nowPlayingCoordinator: NowPlayingCoordinator!
+    // NowPlaying coordinator (Slice 9-L). Routes the playback controller's
+    // publishers and transport methods to the system Now Playing surface via
+    // NowPlayingService. A `let`: the controller is constructed first, so
+    // the seven action closures capture the controller, not `self`.
+    let nowPlayingCoordinator: NowPlayingCoordinator
 
     // Alert-surface store (Slice 13-A). Owns alert, paywall, and File Info
     // request state; views observe it via @Environment(AlertCenter.self).
@@ -482,8 +489,13 @@ final class AppState: ObservableObject {
     // Published state (excerpt)
     @Published var playlists: [Playlist]
     @Published var activePlaylistIndex: Int = 0
-    @Published var currentTrack: Track?
-    @Published var playbackState: PlaybackState = .idle
+
+    // Facade forwarder (excerpt) — playback state lives in
+    // PlaybackController; kept for the playlist code that reads and clears it.
+    var currentTrack: Track? {
+        get { playbackController.currentTrack }
+        set { playbackController.currentTrack = newValue }
+    }
 
     // Facade forwarder (excerpt) — alert state lives in AlertCenter
     // (Slice 13-A). The forwarding getter registers the store property with
@@ -519,7 +531,7 @@ final class AppState: ObservableObject {
             featureFlags: settingsStore.featureFlags,
             provider:     provider
         )
-        self.playbackService  = coreFactory.makePlaybackService()
+        let playbackService   = coreFactory.makePlaybackService()
         self.tagReaderService = coreFactory.makeTagReaderService()
         self.fileDropService  = FileDropService()
 
@@ -545,39 +557,63 @@ final class AppState: ObservableObject {
                 store:   EQPersistenceStore(defaults: userDefaults)
             )
 
+        // Playback controller — owns the playback service and restores its
+        // own keys (hp.volume, hp.repeatMode, hp.isShuffled) from userDefaults.
+        let playbackController = PlaybackController(
+            playbackService: playbackService,
+            alertCenter:     alertCenter,
+            settingsStore:   settingsStore,
+            userDefaults:    userDefaults
+        )
+        self.playbackController = playbackController
+
+        // NowPlayingCoordinator (Slice 9-L). Built from the controller's
+        // publishers and transport methods; the closures capture the
+        // controller, so no `self` is needed and the property is a `let`.
+        // The coordinator never holds an AppState reference.
+        self.nowPlayingCoordinator = NowPlayingCoordinator(
+            service: coreFactory.makeNowPlayingService(),
+            currentTrackPublisher: playbackController.currentTrackPublisher,
+            playbackStatePublisher: playbackController.playbackStatePublisher,
+            currentTimeProvider: { playbackController.currentTime },
+            play: { await playbackController.play() },
+            pause: { await playbackController.pause() },
+            stop: { await playbackController.stop() },
+            seek: { s in await playbackController.seek(to: s) },
+            next: { await playbackController.playNextTrack() },
+            previous: { await playbackController.playPreviousTrack() },
+            togglePlayPause: {
+                if playbackController.playbackState == .playing { await playbackController.pause() }
+                else { await playbackController.play() }
+            }
+        )
+
         self.playlists      = [Playlist(name: "Playlist 1")]
         self.userDefaults   = userDefaults
         // Playlist store — injected fake for tests, default for production.
         // Built in the @MainActor init body (not a default argument) because a
         // @MainActor initializer cannot run in the nonisolated default-arg context.
         self.playlistStore  = playlistStore ?? FilePlaylistStore()
-        // ... (remaining init: undoManager, restoreState(), the settings
-        //      store's closure wiring — onReplayGainModeChanged →
-        //      applyReplayGainVolume(requiresActivePlayback: true) and
-        //      onPaywallRequested → alertCenter.presentPaywall() — the
-        //      repeatMode/isShuffled persistence sinks, and the $currentTrack
-        //      sink that calls lyricsStore.updateResolution(for:))
+        // ... (remaining init: undoManager, restoreState())
 
-        // NowPlayingCoordinator (Slice 9-L). Constructed last so all stored
-        // properties are initialised before the seven action closures capture
-        // `[weak self]`. The coordinator never holds an AppState reference.
-        self.nowPlayingCoordinator = NowPlayingCoordinator(
-            service: coreFactory.makeNowPlayingService(),
-            currentTrackPublisher: $currentTrack.eraseToAnyPublisher(),
-            playbackStatePublisher: $playbackState.eraseToAnyPublisher(),
-            currentTimeProvider: { [weak self] in self?.currentTime ?? 0 },
-            play: { [weak self] in await self?.play() },
-            pause: { [weak self] in await self?.pause() },
-            stop: { [weak self] in await self?.stop() },
-            seek: { [weak self] s in await self?.seek(to: s) },
-            next: { [weak self] in await self?.playNextTrack() },
-            previous: { [weak self] in await self?.playPreviousTrack() },
-            togglePlayPause: { [weak self] in
-                guard let self else { return }
-                if self.playbackState == .playing { await self.pause() }
-                else { await self.play() }
+        // Wiring — after every stored property is initialised. Each closure
+        // captures the store it targets, never `self`.
+        playbackController.playlistContext = self      // AppState is the PlaylistContext
+        settingsStore.onReplayGainModeChanged = { _ in
+            Task { @MainActor in
+                await playbackController.applyReplayGainVolume(requiresActivePlayback: true)
             }
-        )
+        }
+        playbackController.onCurrentTrackChanged = { [lyricsStore] track in
+            lyricsStore.updateResolution(for: track)
+        }
+        playbackController.onSeekCompleted = { [weak nowPlayingCoordinator] seconds in
+            nowPlayingCoordinator?.notifySeekCompleted(at: seconds)
+        }
+        alertCenter.onErrorCleared = { playbackController.recoverFromError() }
+        settingsStore.onPaywallRequested = { [weak alertCenter = self.alertCenter] in
+            alertCenter?.presentPaywall()
+        }
     }
 
     // Xcode 26 beta workaround — see development_guide.md §9.6.
@@ -585,22 +621,27 @@ final class AppState: ObservableObject {
 }
 ```
 
-**Wiring flow:** `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services.
+**Wiring flow:** `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services → `PlaybackController` → `NowPlayingCoordinator`.
 
 ### 3.2 Async Playback Methods
 
-All transport methods are `async` because the app-layer `PlaybackService`
-protocol is async. Errors from the Integration Layer arrive already mapped
-to `PlaybackError`:
+All transport methods live on `PlaybackController` and are `async` because
+the app-layer `PlaybackService` protocol is async. Errors from the
+Integration Layer arrive already mapped to `PlaybackError`. Playlist state
+is read through the controller's `PlaylistContext`:
 
 ```swift
-extension AppState {
+@MainActor @Observable
+final class PlaybackController {
 
     // Resumes from current position. If no track loaded, resolves one from
     // selection or the first track in the active playlist.
     func play() async {
+        guard let context = playlistContext else { return }
+
         if currentTrack == nil {
-            let tracks = playlists[activePlaylistIndex].tracks
+            let tracks = context.playlists[context.activePlaylistIndex].tracks
+            let selectedTrackIDs = context.selectedTrackIDs
             if !selectedTrackIDs.isEmpty,
                let selected = tracks.first(where: { selectedTrackIDs.contains($0.id) }) {
                 await play(trackID: selected.id)
@@ -616,7 +657,8 @@ extension AppState {
             startPolling()
         } catch {
             let mapped = mapToPlaybackError(error)
-            lastError = mapped
+            alertCenter.lastError = mapped
+            alertCenter.lastErrorDetail = makeErrorDetail(code: mapped, track: nil)
             playbackState = .error(mapped)
         }
     }
@@ -630,19 +672,27 @@ extension AppState {
         stopPolling()
         await playbackService.stop()
         playbackState = .stopped
+        currentTrack = nil
         currentTime = 0
+        pendingSeekTime = 0
+        playingPlaylistID = nil
     }
 }
 ```
 
+`currentTrack` and `playbackState` feed the Now Playing publishers from
+their `didSet`; `currentTrack`'s `didSet` also calls the root-wired
+`onCurrentTrackChanged`. `repeatMode` and `isShuffled` persist their keys
+in `didSet`; `volume` is written by `saveVolume()` at terminate.
+
 ### 3.3 Fallback Error Mapping
 
 `CoreError` → `PlaybackError` mapping happens in
-`HarmoniaPlaybackServiceAdapter` (Integration Layer). AppState only needs a
-thin fallback for unexpected non-`PlaybackError` errors:
+`HarmoniaPlaybackServiceAdapter` (Integration Layer). `PlaybackController`
+only needs a thin fallback for unexpected non-`PlaybackError` errors:
 
 ```swift
-// In AppState (Application Layer)
+// In PlaybackController (Application Layer)
 func mapToPlaybackError(_ error: Error) -> PlaybackError {
     if let playbackError = error as? PlaybackError { return playbackError }
     // Should not happen if Integration Layer mapping is complete.
@@ -1015,6 +1065,11 @@ struct HarmoniaPlayerApp: App {
                 // Settings store — required by PaywallView (presented as a
                 // sheet from ContentView).
                 .environment(appState.settingsStore)
+                // Playback controller — required by ContentView, PlayerView,
+                // and LyricsPanel.
+                .environment(appState.playbackController)
+                // EQ coordinator — required by PlayerView's EQ toolbar button.
+                .environmentObject(appState.eqCoordinator)
                 .focusedSceneObject(appState)
                 // Hand the open-window action and the state container to
                 // the app delegate; SwiftUI does not populate @Environment
@@ -1040,6 +1095,7 @@ struct HarmoniaPlayerApp: App {
         Window("Mini Player", id: "mini-player") {
             MiniPlayerView()
                 .environmentObject(appState)
+                .environment(appState.playbackController)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
@@ -1067,45 +1123,49 @@ struct HarmoniaPlayerApp: App {
 }
 ```
 
-### 6.2 Calling Async AppState Methods from SwiftUI
+### 6.2 Calling Async Transport Methods from SwiftUI
 
-Every transport method on AppState is `async`. SwiftUI button handlers
-are synchronous, so wrap calls in `Task { await ... }`:
+Every transport method on `PlaybackController` is `async`. SwiftUI button
+handlers are synchronous, so wrap calls in `Task { await ... }`:
 
 ```swift
 struct TransportControls: View {
-    @EnvironmentObject private var appState: AppState
+    @Environment(PlaybackController.self) private var playbackController
 
     var body: some View {
         HStack {
             Button {
-                Task { await appState.playPreviousTrack() }
+                Task { await playbackController.playPreviousTrack() }
             } label: { Image(systemName: "backward.fill") }
 
             Button {
                 Task {
-                    if appState.playbackState == .playing {
-                        await appState.pause()
+                    if playbackController.playbackState == .playing {
+                        await playbackController.pause()
                     } else {
-                        await appState.play()
+                        await playbackController.play()
                     }
                 }
             } label: {
-                Image(systemName: appState.playbackState == .playing
+                Image(systemName: playbackController.playbackState == .playing
                       ? "pause.fill" : "play.fill")
             }
 
             Button {
-                Task { await appState.stop() }
+                Task { await playbackController.stop() }
             } label: { Image(systemName: "stop.fill") }
 
             Button {
-                Task { await appState.playNextTrack() }
+                Task { await playbackController.playNextTrack() }
             } label: { Image(systemName: "forward.fill") }
         }
     }
 }
 ```
+
+Because `PlaybackController` is `@Observable`, a view re-renders only when
+a property its `body` actually read changes — a `currentTime` tick
+re-renders the views that read `currentTime`, not every transport view.
 
 ### 6.3 Seeking from a Slider Binding
 
@@ -1114,17 +1174,17 @@ value and dispatch the async seek in the change handler:
 
 ```swift
 struct ProgressBar: View {
-    @EnvironmentObject private var appState: AppState
+    @Environment(PlaybackController.self) private var playbackController
 
     var body: some View {
         Slider(
             value: Binding(
-                get: { appState.currentTime },
+                get: { playbackController.currentTime },
                 set: { newValue in
-                    Task { await appState.seek(to: newValue) }
+                    Task { await playbackController.seek(to: newValue) }
                 }
             ),
-            in: 0...max(appState.duration, 1)
+            in: 0...max(playbackController.duration, 1)
         )
     }
 }
@@ -1135,13 +1195,13 @@ struct ProgressBar: View {
 `alertCenter.lastError` is a `PlaybackError` enum with no String payload
 (Slice 13-A: alert state lives in `AlertCenter`, observed via
 `@Environment(AlertCenter.self)`). Map each case to a localised user-facing
-message in the View. Dismissal still calls the facade
-`appState.clearLastError()` because the `.error → .stopped` playback-state
-transition lives there:
+message in the View. Dismissal calls `alertCenter.clearLastError()`; its
+`onErrorCleared` closure, wired by AppState to
+`playbackController.recoverFromError()`, performs the `.error → .stopped`
+playback-state transition:
 
 ```swift
 struct ErrorAlert: ViewModifier {
-    @EnvironmentObject private var appState: AppState
     @Environment(AlertCenter.self) private var alertCenter
 
     func body(content: Content) -> some View {
@@ -1149,11 +1209,11 @@ struct ErrorAlert: ViewModifier {
             "Playback Error",
             isPresented: Binding(
                 get: { alertCenter.lastError != nil },
-                set: { if !$0 { appState.clearLastError() } }
+                set: { if !$0 { alertCenter.clearLastError() } }
             ),
             presenting: alertCenter.lastError
         ) { _ in
-            Button("OK") { appState.clearLastError() }
+            Button("OK") { alertCenter.clearLastError() }
         } message: { error in
             Text(message(for: error))
         }
@@ -1221,74 +1281,86 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 
 ### 7.2 @MainActor Test Classes (Swift 6)
 
-`AppState` is `@MainActor`. Test classes that use it must also be
-`@MainActor` — XCTest runs `@MainActor`-isolated classes on the main
-actor automatically, so individual methods don't need `await MainActor.run {}`:
+`AppState` and the feature stores are `@MainActor`. Test classes that use
+them must also be `@MainActor` — XCTest runs `@MainActor`-isolated classes
+on the main actor automatically, so individual methods don't need
+`await MainActor.run {}`. A test constructs the type it tests: a
+`PlaybackController` test builds the controller directly with a
+`FakePlaylistContext`, not an `AppState`:
 
 ```swift
 import XCTest
 @testable import Harmonia_Player
 
 @MainActor
-final class AppStatePlaybackControlTests: XCTestCase {
+final class PlaybackControllerTransportTests: XCTestCase {
 
-    private var sut: AppState!
-    private var fakePlaybackService: FakePlaybackService!
-    private var testDefaults: UserDefaults!
-    private var suiteName: String!
+    private var createdSuiteNames: [String] = []
 
-    override func setUp() {
-        super.setUp()
-        suiteName = "hp-test-\(UUID().uuidString)"
-        testDefaults = UserDefaults(suiteName: suiteName)!
-        fakePlaybackService = FakePlaybackService()
-        let provider = FakeCoreProvider(playbackService: fakePlaybackService)
-        let iap = MockIAPManager(isProUnlocked: false)
-        sut = AppState(
-            iapManager:    iap,
-            provider:      provider,
-            userDefaults:  testDefaults,
-            playlistStore: FakePlaylistStore()
-        )
+    override func tearDown() async throws {
+        for name in createdSuiteNames {
+            UserDefaults(suiteName: name)?.removePersistentDomain(forName: name)
+        }
+        createdSuiteNames.removeAll()
+        try await super.tearDown()
     }
 
-    override func tearDown() {
-        sut = nil
-        fakePlaybackService = nil
-        testDefaults.removePersistentDomain(forName: suiteName)
-        testDefaults = nil
-        suiteName = nil
-        super.tearDown()
+    private struct Fixture {
+        let sut: PlaybackController
+        let fake: FakePlaybackService
+        let context: FakePlaylistContext
+        let alertCenter: AlertCenter
+    }
+
+    private func makeSUT() -> Fixture {
+        let suiteName = "hp-test-\(UUID().uuidString)"
+        createdSuiteNames.append(suiteName)
+        let defaults = UserDefaults(suiteName: suiteName)!
+        let fake = FakePlaybackService()
+        let context = FakePlaylistContext()
+        let alertCenter = AlertCenter()
+        let sut = PlaybackController(
+            playbackService: fake,
+            alertCenter:     alertCenter,
+            settingsStore:   SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            userDefaults:    defaults
+        )
+        sut.playlistContext = context
+        return Fixture(sut: sut, fake: fake, context: context, alertCenter: alertCenter)
     }
 
     func testPlay_CallsPlaybackServicePlay() async {
-        await loadTrackIntoSUT()
+        let f = makeSUT()
+        await loadTrackIntoSUT(f)
 
-        // Clear call counts set up by loadTrackIntoSUT().
-        fakePlaybackService.resetCounts()
+        await f.sut.play()
 
-        await sut.play()
-
-        XCTAssertEqual(fakePlaybackService.playCallCount, 1)
-        XCTAssertEqual(sut.playbackState, .playing)
+        XCTAssertEqual(f.fake.playCallCount, 1)
     }
 
-    // Helper: loads a track so play() can proceed past the
-    // "no currentTrack / stopped state" guards.
-    private func loadTrackIntoSUT() async {
-        let url = URL(fileURLWithPath: "/tmp/test.mp3")
-        await sut.load(urls: [url])
-        if let first = sut.playlist.tracks.first {
-            await sut.play(trackID: first.id)
-        }
+    // Helper: seeds a track and plays it so play() can proceed past the
+    // "no currentTrack / stopped state" guards, then clears the call counts.
+    private func loadTrackIntoSUT(_ f: Fixture) async {
+        let track = Track(url: URL(fileURLWithPath: "/tmp/test.mp3"))
+        f.context.playlists[0].tracks = [track]
+        await f.sut.play(trackID: track.id)
+        f.fake.resetCounts()
     }
+
+    nonisolated deinit {}
 }
 ```
 
 Key points:
 - `@MainActor` on the test class — do not put it on individual methods
-- Use a fresh `UserDefaults(suiteName:)` per test and clean up in `tearDown`
-- Inject a fresh `FakePlaylistStore()` per test alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. Tests that exercise relaunch (a second `AppState` over the same data) must share one `FakePlaylistStore` instance across both.
+- Use a fresh `UserDefaults(suiteName:)` per test and clean up in the
+  `async` `tearDown`; building the SUT in `makeSUT()` (instead of assigning
+  fixture properties in a synchronous `setUp()`) keeps the file free of
+  strict-concurrency warnings
+- Seed `FakePlaylistContext.playlists` with `Track(url:)` values and keep
+  the context alive for the test — the controller holds it weakly
+- A test that does construct an `AppState` (composition-root and playlist
+  tests) injects a fresh `FakePlaylistStore()` alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. Tests that exercise relaunch (a second `AppState` over the same data) must share one `FakePlaylistStore` instance across both.
 - Setup helpers like `loadTrackIntoSUT()` should reset call counts so
   assertions target the operation under test, not the setup
 
@@ -1324,6 +1396,26 @@ settingsStore.replayGainMode = .album
 let relaunched = SettingsStore(iapManager: mockIAP, userDefaults: testDefaults)
 XCTAssertEqual(relaunched.replayGainMode, .album)
 
+// Playback controller built directly — playlist state comes from a
+// FakePlaylistContext; relaunch is a second controller on the same suite
+let context = FakePlaylistContext()
+let controller = PlaybackController(
+    playbackService: fakePlayback,
+    alertCenter: AlertCenter(),
+    settingsStore: settingsStore,
+    userDefaults: testDefaults
+)
+controller.playlistContext = context
+context.playlists[0].tracks = [Track(url: url)]
+controller.cycleRepeatMode()                      // persists hp.repeatMode on change
+let relaunchedController = PlaybackController(
+    playbackService: FakePlaybackService(),
+    alertCenter: AlertCenter(),
+    settingsStore: settingsStore,
+    userDefaults: testDefaults
+)
+XCTAssertEqual(relaunchedController.repeatMode, .all)
+
 // Stub a lyrics resolution (Slice 14-A: the SUT is LyricsStore, built
 // directly — no AppState needed)
 let stubLyrics = StubLyricsService()
@@ -1352,8 +1444,8 @@ XCTAssertEqual(stubLyrics.lastResolvedTrack?.id, expectedTrack.id)
 
 ```
 SwiftUI Views
-    ↓ @EnvironmentObject
-AppState (@MainActor)
+    ↓ @EnvironmentObject / @Environment(<Store>.self)
+AppState (@MainActor) + feature stores (PlaybackController, …)
     ↓ constructor-injected
 CoreFactory (Application Layer)
     ↓ delegates to
@@ -1388,20 +1480,20 @@ AVAssetReaderDecoder, AVAudioEngine, AVMetadataTagReader (AVFoundation)
 
 5. **Views use AppState and the feature stores only**
    - No ViewModels — AppState plus the extracted `@Observable` feature
-     stores (`AlertCenter`, `LyricsStore`, `SettingsStore`) are the
-     observable state
+     stores (`AlertCenter`, `LyricsStore`, `SettingsStore`,
+     `PlaybackController`) are the observable state
    - No direct service access from Views
-   - Async AppState methods dispatched via `Task { await ... }`
+   - Async store methods dispatched via `Task { await ... }`
 
 ---
 
 ## 9. Common Pitfalls
 
-### ❌ Don't: Call async AppState methods without `Task`
+### ❌ Don't: Call async transport methods without `Task`
 
 ```swift
 Button("Play") {
-    appState.play()  // ❌ error: async call in sync context
+    playbackController.play()  // ❌ error: async call in sync context
 }
 ```
 
@@ -1409,7 +1501,7 @@ Button("Play") {
 
 ```swift
 Button("Play") {
-    Task { await appState.play() }
+    Task { await playbackController.play() }
 }
 ```
 
@@ -1418,14 +1510,14 @@ Button("Play") {
 ### ❌ Don't: Import HarmoniaCore outside the 3 Integration Layer files
 
 ```swift
-// In AppState+Playback.swift
+// In PlaybackController.swift
 import HarmoniaCore  // ❌ boundary violation
 ```
 
 ### ✅ Do: Use app-layer protocols
 
 ```swift
-// AppState uses PlaybackService (app-layer protocol)
+// PlaybackController uses PlaybackService (app-layer protocol)
 // No HarmoniaCore import needed.
 try await playbackService.play()
 ```

@@ -217,7 +217,7 @@ final class IntegrationTests: XCTestCase {
         let track = sut.playlist.tracks[0]
         await sut.play(trackID: track.id)
 
-        await sut.pause()
+        await sut.playbackController.pause()
 
         XCTAssertEqual(sut.playbackState, .paused)
     }
@@ -234,7 +234,7 @@ final class IntegrationTests: XCTestCase {
         let track = sut.playlist.tracks[0]
         await sut.play(trackID: track.id)
 
-        await sut.seek(to: 1.0)
+        await sut.playbackController.seek(to: 1.0)
 
         XCTAssertEqual(sut.currentTime, 1.0, accuracy: 0.5)
     }

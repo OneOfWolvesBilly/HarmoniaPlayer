@@ -100,36 +100,11 @@ final class AppStatePersistenceTests: XCTestCase {
         XCTAssertEqual(sut.playlist.sortKey, .title)
     }
 
-    func testSaveAndRestore_Volume_Survives() async {
-        await sut.setVolume(0.7)
-        sut.saveState()
-        sut.restoreState()
-
-        XCTAssertEqual(sut.volume, 0.7, accuracy: 0.001)
-    }
-
-    func testSaveAndRestore_RepeatMode_Survives() {
-        sut.cycleRepeatMode() // off → all
-        sut.saveState()
-        sut.restoreState()
-
-        XCTAssertEqual(sut.repeatMode, .all)
-    }
-
-    func testSaveAndRestore_ShuffleMode_Survives() {
-        sut.toggleShuffle() // off → on
-        sut.saveState()
-        sut.restoreState()
-
-        XCTAssertTrue(sut.isShuffled)
-    }
-
     func testRestoreState_WhenNoData_UsesDefaults() {
         sut.restoreState()
 
         XCTAssertEqual(sut.playlists.count, 1)
         XCTAssertTrue(sut.playlist.isEmpty)
-        XCTAssertEqual(sut.volume, 1.0, accuracy: 0.001)
     }
 
     // MARK: - Immediate Save (playlist mutations)
@@ -215,38 +190,6 @@ final class AppStatePersistenceTests: XCTestCase {
 
         let restored = makeRestoredAppState()
         XCTAssertEqual(restored.playlist.sortKey, .none)
-    }
-
-    // MARK: - Combine sink auto-save (no explicit saveState() call)
-
-    /// Changing `repeatMode` must trigger automatic persistence via its
-    /// Combine sink — toggling repeat must NOT require an explicit saveState() call.
-    func testRepeatMode_AutoSaves_ViaCombineSink() async throws {
-        // When: change repeatMode without calling saveState()
-        sut.repeatMode = .one
-
-        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        // Then: a fresh AppState backed by the same UserDefaults reads back the value
-        let restored = makeRestoredAppState()
-        XCTAssertEqual(restored.repeatMode, .one,
-                       "repeatMode must be persisted automatically via Combine sink")
-    }
-
-    /// Changing `isShuffled` must trigger automatic persistence via its
-    /// Combine sink — toggling shuffle must NOT require an explicit saveState() call.
-    func testShuffleMode_AutoSaves_ViaCombineSink() async throws {
-        // When: change isShuffled without calling saveState()
-        sut.isShuffled = .on
-
-        // Allow the Combine sink (.receive(on: RunLoop.main)) to fire
-        try await Task.sleep(nanoseconds: 50_000_000)
-
-        // Then: a fresh AppState backed by the same UserDefaults reads back the value
-        let restored = makeRestoredAppState()
-        XCTAssertTrue(restored.isShuffled,
-                      "isShuffled must be persisted automatically via Combine sink")
     }
 
     // MARK: - File-backed playlist store

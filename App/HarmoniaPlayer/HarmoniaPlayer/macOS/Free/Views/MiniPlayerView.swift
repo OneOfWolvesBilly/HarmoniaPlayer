@@ -25,7 +25,10 @@
 //
 //  DESIGN NOTES
 //  ------------
-//  - Shares AppState via @EnvironmentObject; full/mini player always in sync.
+//  - Observes PlaybackController via @Environment for playback state and
+//    transport; shares AppState via @EnvironmentObject for the playlists,
+//    the Mini Player playlist switch, and localization. Full/mini player
+//    always in sync.
 //  - FloatingWindowController sets window.level based on hp.miniPlayerAlwaysOnTop.
 //  - WindowCloseObserver brings Full Player to front when Mini Player closes.
 //  - Playlist switch: stop → change activePlaylistIndex → play first track.
@@ -175,6 +178,7 @@ private struct WindowDragArea: NSViewRepresentable {
 struct MiniPlayerView: View {
 
     @EnvironmentObject private var appState: AppState
+    @Environment(PlaybackController.self) private var playbackController
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("hp.miniPlayerAlwaysOnTop") private var alwaysOnTop: Bool = true
@@ -242,7 +246,7 @@ struct MiniPlayerView: View {
         // .focusedSceneObject at the scene level in HarmoniaPlayerApp and
         // .focusedValue inside ContentView, both in place since Slice 8-A.
         .focusedSceneObject(appState)
-        .focusedSceneValue(\.playbackState, appState.playbackState)
+        .focusedSceneValue(\.playbackState, playbackController.playbackState)
     }
 
     // MARK: - Playlist Picker Row
@@ -297,7 +301,7 @@ struct MiniPlayerView: View {
             albumArtView
 
             VStack(alignment: .leading, spacing: 2) {
-                if let track = appState.currentTrack {
+                if let track = playbackController.currentTrack {
                     MarqueeText(
                         text: track.title.isEmpty
                             ? URL(fileURLWithPath: track.originalPath).lastPathComponent
@@ -323,12 +327,12 @@ struct MiniPlayerView: View {
                 seekSlider
 
                 HStack {
-                    Text(formatTime(isSeeking ? seekValue : appState.currentTime))
+                    Text(formatTime(isSeeking ? seekValue : playbackController.currentTime))
                         .font(.system(size: 10))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Text(formatTime(appState.duration))
+                    Text(formatTime(playbackController.duration))
                         .font(.system(size: 10))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -343,7 +347,7 @@ struct MiniPlayerView: View {
 
     private var albumArtView: some View {
         Group {
-            if let data = appState.currentTrack?.artworkData,
+            if let data = playbackController.currentTrack?.artworkData,
                let nsImage = NSImage(data: data) {
                 Image(nsImage: nsImage)
                     .resizable()
@@ -367,17 +371,17 @@ struct MiniPlayerView: View {
     private var seekSlider: some View {
         Slider(
             value: Binding(
-                get: { isSeeking ? seekValue : appState.currentTime },
+                get: { isSeeking ? seekValue : playbackController.currentTime },
                 set: { seekValue = $0 }
             ),
-            in: 0...max(appState.duration, 1)
+            in: 0...max(playbackController.duration, 1)
         ) { editing in
             if editing {
                 isSeeking = true
-                seekValue = appState.currentTime
+                seekValue = playbackController.currentTime
             } else {
                 isSeeking = false
-                Task { await appState.seek(to: seekValue) }
+                Task { await playbackController.seek(to: seekValue) }
             }
         }
         .controlSize(.mini)
@@ -389,7 +393,7 @@ struct MiniPlayerView: View {
         HStack(spacing: 16) {
             Spacer()
 
-            Button { Task { await appState.playPreviousTrack() } } label: {
+            Button { Task { await playbackController.playPreviousTrack() } } label: {
                 Image(systemName: "backward.fill").font(.system(size: 13))
             }
             .buttonStyle(.plain)
@@ -397,40 +401,40 @@ struct MiniPlayerView: View {
 
             Button {
                 Task {
-                    if appState.playbackState == .playing {
-                        await appState.pause()
+                    if playbackController.playbackState == .playing {
+                        await playbackController.pause()
                     } else {
-                        await appState.play()
+                        await playbackController.play()
                     }
                 }
             } label: {
-                Image(systemName: appState.playbackState == .playing
+                Image(systemName: playbackController.playbackState == .playing
                       ? "pause.fill" : "play.fill")
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
             .disabled(appState.playlist.tracks.isEmpty)
 
-            Button { Task { await appState.playNextTrack() } } label: {
+            Button { Task { await playbackController.playNextTrack() } } label: {
                 Image(systemName: "forward.fill").font(.system(size: 13))
             }
             .buttonStyle(.plain)
             .disabled(appState.playlist.tracks.isEmpty)
 
             // Repeat
-            Button { appState.cycleRepeatMode() } label: {
-                Image(systemName: appState.repeatMode == .one ? "repeat.1" : "repeat")
+            Button { playbackController.cycleRepeatMode() } label: {
+                Image(systemName: playbackController.repeatMode == .one ? "repeat.1" : "repeat")
                     .font(.system(size: 12))
-                    .foregroundStyle(appState.repeatMode != .off
+                    .foregroundStyle(playbackController.repeatMode != .off
                                      ? Color.accentColor : Color.primary)
             }
             .buttonStyle(.plain)
 
             // Shuffle
-            Button { appState.toggleShuffle() } label: {
+            Button { playbackController.toggleShuffle() } label: {
                 Image(systemName: "shuffle")
                     .font(.system(size: 12))
-                    .foregroundStyle(appState.isShuffled
+                    .foregroundStyle(playbackController.isShuffled
                                      ? Color.accentColor : Color.primary)
             }
             .buttonStyle(.plain)
@@ -475,11 +479,11 @@ struct MiniPlayerView: View {
                         let isFormatGated = AppState.proOnlyFormats
                             .contains(track.url.pathExtension.lowercased())
                             && !appState.isProUnlocked
-                        let isCurrent = appState.currentTrack?.id == track.id
+                        let isCurrent = playbackController.currentTrack?.id == track.id
 
                         Button {
                             showTrackList = false
-                            Task { await appState.play(trackID: track.id) }
+                            Task { await playbackController.play(trackID: track.id) }
                         } label: {
                             HStack(spacing: 8) {
                                 // Playing indicator or lock icon
@@ -541,10 +545,10 @@ struct MiniPlayerView: View {
                 .foregroundStyle(.secondary)
             Slider(
                 value: Binding(
-                    get: { Double(appState.volume) },
+                    get: { Double(playbackController.volume) },
                     set: { newValue in
                         let snapped = Float((newValue * 1000).rounded() / 1000)
-                        Task { await appState.setVolume(snapped) }
+                        Task { await playbackController.setVolume(snapped) }
                     }
                 ),
                 in: 0.0...1.0

@@ -88,7 +88,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.appState?.handleSystemWillSleep()
+                self?.appState?.playbackController.handleSystemWillSleep()
             }
         }
 
@@ -98,7 +98,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                await self?.appState?.handleSystemDidWake()
+                await self?.appState?.playbackController.handleSystemDidWake()
             }
         }
     }

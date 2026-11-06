@@ -19,9 +19,13 @@
 //  - Alert, paywall, and File Info request state lives in `AlertCenter`,
 //    observed via `@Environment(AlertCenter.self)` (injected by
 //    `HarmoniaPlayerApp`); `@Bindable` provides the sheet/alert bindings.
+//    Dismissing an error alert calls `alertCenter.clearLastError()`, whose
+//    root-wired `onErrorCleared` returns playback from `.error` to `.stopped`.
+//  - The lyrics-column condition and the focused playback state read
+//    `PlaybackController` via `@Environment(PlaybackController.self)`.
 //  - `failedToOpenFile` alert auto-dismisses after 3 seconds.
 //    Other playback errors require manual dismissal.
-//  - No `import HarmoniaCore` — all state access goes through `AppState`.
+//  - No `import HarmoniaCore` — all state access goes through the stores.
 //  - All UI strings use `String(localized:bundle:appState.languageBundle)`
 //    for runtime language switching support.
 //
@@ -42,6 +46,8 @@ struct ContentView: View {
     @EnvironmentObject private var appState: AppState
 
     @Environment(AlertCenter.self) private var alertCenter
+
+    @Environment(PlaybackController.self) private var playbackController
 
     @Environment(LyricsStore.self) private var lyricsStore
 
@@ -69,7 +75,7 @@ struct ContentView: View {
             // toggles lyrics on. HSplitView handles the divider so the
             // user can resize it freely; closing it (toggle off) collapses
             // the column and the window contracts back.
-            if lyricsStore.showLyrics && appState.currentTrack != nil {
+            if lyricsStore.showLyrics && playbackController.currentTrack != nil {
                 LyricsPanel()
                     .frame(minWidth: 280, idealWidth: 360)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -82,7 +88,7 @@ struct ContentView: View {
         // HarmoniaPlayerCommands can observe it via @FocusedValue.
         // @FocusedObject does not reliably re-evaluate Commands body on
         // property changes; @FocusedValue with a scalar value does.
-        .focusedValue(\.playbackState, appState.playbackState)
+        .focusedValue(\.playbackState, playbackController.playbackState)
         // File Info window — opens an independent WindowGroup(for: Track.ID.self)
         // whenever alertCenter.fileInfoTrack is set by showFileInfo(trackID:).
         // The property is a one-shot signal: we clear the request after
@@ -117,7 +123,7 @@ struct ContentView: View {
         .onChange(of: alertCenter.showFileNotFoundAlert) {
             guard alertCenter.showFileNotFoundAlert else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                appState.clearLastError()
+                alertCenter.clearLastError()
             }
         }
         .alert(
@@ -125,7 +131,7 @@ struct ContentView: View {
             isPresented: $alertCenter.showFileNotFoundAlert
         ) {
             Button("OK") {
-                appState.clearLastError()
+                alertCenter.clearLastError()
             }
         } message: {
             if !alertCenter.skippedInaccessibleNames.isEmpty {
@@ -160,14 +166,14 @@ struct ContentView: View {
                     default: return true
                     }
                 },
-                set: { if !$0 { appState.clearLastError() } }
+                set: { if !$0 { alertCenter.clearLastError() } }
             )
         ) {
             Button(L("alert_report_issue_button")) {
                 openReportIssueMail()
-                appState.clearLastError()
+                alertCenter.clearLastError()
             }
-            Button("OK") { appState.clearLastError() }
+            Button("OK") { alertCenter.clearLastError() }
         } message: {
             switch alertCenter.lastError {
             case .unsupportedFormat:

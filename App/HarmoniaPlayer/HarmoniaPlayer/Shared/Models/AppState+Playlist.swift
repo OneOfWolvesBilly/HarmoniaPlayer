@@ -3,7 +3,8 @@
 //  HarmoniaPlayer / Shared / Models
 //
 //  PURPOSE: Playlist operations (load, remove, move, clear, sort), playlist tab
-//  management (new, rename, delete, switch), and undo / redo.
+//  management (new, rename, delete, switch), the Mini Player playlist switch,
+//  and undo / redo.
 //
 
 import Foundation
@@ -582,5 +583,28 @@ extension AppState {
         }
 
         moveTrack(fromOffsets: IndexSet(integer: fromIndex), toOffset: toOffset)
+    }
+}
+
+// MARK: - Mini Player
+
+extension AppState {
+
+    /// Switches the active playlist from Mini Player and starts playing from the first track.
+    ///
+    /// Called by MiniPlayerView when the user selects a different playlist.
+    /// Stops current playback, switches activePlaylistIndex, then plays the
+    /// first track in the new playlist. No-op if index is out of range.
+    ///
+    /// - Parameter index: Index of the playlist to switch to.
+    func switchMiniPlayerPlaylist(to index: Int) async {
+        guard playlists.indices.contains(index) else { return }
+        await stop()
+        activePlaylistIndex = index
+        // Clear undo stack: switched playlist context.
+        undoManager.removeAllActions()
+        if let first = playlists[index].tracks.first {
+            await play(trackID: first.id)
+        }
     }
 }

@@ -83,17 +83,25 @@ final class AlertCenter {
     /// Session-only; resets on every app launch and is never persisted.
     var paywallDismissedThisSession = false
 
+    // MARK: - Root-wired notifications
+
+    /// Called at the end of `clearLastError()`, after the playback-error
+    /// surface is cleared. Wired by the composition root.
+    @ObservationIgnored var onErrorCleared: (() -> Void)?
+
     // MARK: - Presentation methods
 
     /// Clears the playback-error surface (error, detail, failed name,
-    /// file-not-found flag, inaccessible-skip list). Batch-operation
-    /// lists are cleared by their own alerts' dismiss buttons, not here.
+    /// file-not-found flag, inaccessible-skip list), then calls
+    /// `onErrorCleared`. Batch-operation lists are cleared by their own
+    /// alerts' dismiss buttons, not here.
     func clearLastError() {
         lastError = nil
         lastErrorDetail = nil
         failedTrackName = nil
         showFileNotFoundAlert = false
         skippedInaccessibleNames = []
+        onErrorCleared?()
     }
 
     /// Presents the File Info window request for the given track.
