@@ -1096,6 +1096,7 @@ slice has not opened yet has no slice number (no reservations).
 | at open | Playlist interaction latency and CPU load while playing | not opened |
 | at open | Import speed for large batches | not opened |
 | at open | Player panel: the top-trailing controls (lyrics, equalizer, more) overlay the album art instead of stacking above it; its own slice, handled immediately after the Settings window item | not opened |
+| at open | Player panel: the album art flashes dark while the volume is adjusted (suspected cause, to be confirmed at open: the art is re-decoded on every player re-render and cross-fades inside the volume label's animation); its own slice, handled immediately after the player-panel control item and before the playlist-latency item | not opened |
 
 Deferred past v1.0.1: legacy tag-text encoding (ID3 text without a
 declared Unicode encoding) — no operational impact while tag editing
