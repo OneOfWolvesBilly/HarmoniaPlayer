@@ -29,7 +29,7 @@ test targets from the Swift 5 language mode to Swift 6.
   | Extract LyricsStore | **14** | `slice_14_micro.md` |
   | Extract SettingsStore | **16** | `slice_16_micro.md` |
   | Extract PlaybackController | **19** | `slice_19_micro.md` |
-  | Extract PlaylistCollection (incl. M3U8) | — | §7.4 scope freeze |
+  | Extract PlaylistCollection (incl. M3U8) | **20** | `slice_20_micro.md` |
   | Swift 6 language-mode switch + close-out | — | §7.5 scope freeze |
 
   Execution order is the table order, strictly sequential. Stores are
@@ -39,7 +39,7 @@ test targets from the Swift 5 language mode to Swift 6.
   milestone: it precedes the Pro tier (v2.0.0) but carries no version
   label of its own. Releases are cut by tagging `main`, so each completed
   stage ships with whichever release is tagged after it lands
-  (`HarmoniaPlayer_development_plan.md` §11.15). The same milestone also
+  (`HarmoniaPlayer_development_plan.md` §11.16). The same milestone also
   carries candidate slices outside this program (window-menu declarative
   semantics, lyrics expansion backlog, …), numbered when they open.
 - **Out of scope.** HarmoniaCore (hexagonal architecture is clean; only
@@ -398,6 +398,26 @@ Mapping rows 27–30 + playlist/tab/undo/M3U8/persistence/metadata-refresh
 methods + format statics; `PlaylistContext` moves here; PlaylistView +
 Commands migration; facade shrinks to construction + wiring + any
 straggler.
+
+Folded in at the Slice 20 spec freeze (file-state check):
+- The playlist code's effects on playback (shuffle-queue upkeep on load /
+  remove / play-next, stop-and-advance when the playing track is removed,
+  stop when the playing playlist is deleted, clearing the current track)
+  travel as six root-wired closures from the collection to reaction
+  methods on `PlaybackController` (§2: no collection → controller edge);
+  `playNext` takes the current track's id from its caller.
+- `PlaylistCollection` conforms to `PlaylistContext` and is passed to
+  `PlaybackController.init`; the transitional `weak var` + guards go.
+- Readers outside the view list above: `PlayerView` and `FileInfoView`
+  read the active playlist and migrate here too (the File Info scene
+  gains the injection).
+- `ObservableObject` / `import Combine` stay on AppState for the
+  `@EnvironmentObject` (`languageBundle`, `eqCoordinator`) and
+  `@FocusedObject` readers → §7.5.
+- Stragglers kept on AppState: the terminate-time save-all and the Mini
+  Player playlist switch (cross-store orchestration).
+- The volume is no longer written as a side effect of every playlist
+  save; only at terminate until BL-17A-01.
 
 ### 7.5 Swift 6 language-mode switch + close-out
 Remove `SWIFT_VERSION = 5.0` overrides and `SWIFT_STRICT_CONCURRENCY`

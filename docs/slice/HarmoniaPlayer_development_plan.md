@@ -807,7 +807,7 @@ Slice 6, the gate moved twice as scope expanded:
   own numbered slice instead.
 - **AppState decomposition refactor (pre-Pro milestone)** — the program
   that precedes the Pro tier. It carries no version label of its own:
-  releases are cut by tagging `main` (§11.15), so each completed stage
+  releases are cut by tagging `main` (§11.16), so each completed stage
   ships with whichever release is tagged after it lands. Design
   authority: `docs/slice/appstate_refactor_plan.md`.
   Opened stages: Slice 10 (token cleanup), Slice 12 (strict-concurrency
@@ -1024,7 +1024,7 @@ main-thread exception terminates the process and writes a crash report,
 adds a Debug-only launch-argument trigger to verify it in the real app,
 and guards the registration with a hosted unit test. The Slice 9-AA
 window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
-(see §11.15).
+(see §11.16).
 
 | Slice | Content | Status |
 |---|---|---|
@@ -1074,7 +1074,29 @@ members with remaining internal or un-migrated-view readers.
 |---|---|---|
 | 19 | PlaybackController extraction + PlaylistContext + Combine replacement + persistence split + @Environment view migration + test migration | ✅ |
 
-### 11.15 Version Targets
+### 11.15 Slice 20: Extract PlaylistCollection (pre-Pro milestone; AppState Refactor Program)
+
+**Spec:** `docs/slice/slice_20_micro.md`
+
+Seventh stage of the AppState decomposition refactor program: the fifth
+and last store extraction (`@MainActor @Observable PlaylistCollection`
+behind the AppState strangler facade). Takes ownership of the playlist
+state, the playlist / tab / undo / M3U8 / persistence / metadata-refresh
+code, the format statics, the undo manager, and the playlist services;
+routes the playlist mutations' effects on playback through root-wired
+closures into `PlaybackController` reaction methods; hands the controller
+its `PlaylistContext` at construction (the collection conforms); migrates
+`PlaylistView`, the Commands, and the remaining playlist readers in
+`MiniPlayerView`, `PlayerView`, and `FileInfoView`; deletes every facade
+forwarder whose last internal reader leaves; and re-homes the playlist
+test files on the store. AppState keeps construction + wiring, the
+terminate-time save-all, and the Mini Player playlist switch.
+
+| Slice | Content | Status |
+|---|---|---|
+| 20 | PlaylistCollection extraction (incl. M3U8) + playlist → playback reaction closures + PlaylistContext at controller init + facade removal + @Environment view migration + test migration | ⬜ |
+
+### 11.16 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
