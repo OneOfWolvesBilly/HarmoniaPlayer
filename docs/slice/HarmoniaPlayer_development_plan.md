@@ -1094,7 +1094,7 @@ terminate-time save-all, and the Mini Player playlist switch.
 
 | Slice | Content | Status |
 |---|---|---|
-| 20 | PlaylistCollection extraction (incl. M3U8) + playlist → playback reaction closures + PlaylistContext at controller init + facade removal + @Environment view migration + test migration | ⬜ |
+| 20 | PlaylistCollection extraction (incl. M3U8) + playlist → playback reaction closures + PlaylistContext at controller init + facade removal + @Environment view migration + test migration | ✅ |
 
 ### 11.16 Version Targets
 

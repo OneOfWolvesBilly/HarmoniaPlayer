@@ -190,6 +190,30 @@ before and after the slice (its file-level `makeTrack` helper calling a
 main-actor-isolated initialiser); it predates this slice and carries no
 row.
 
+**Slice 20-A re-measurement — three rows retire.** The PlaylistCollection
+extraction re-homed the playlist tests on the store and deleted nine test
+files; the three of them that carried rows retire —
+`AppStatePersistenceTests.swift` (20), `AppStateFormatGatingTests.swift`
+(8), and `AppStateUndoTests.swift` (2) — so the test-target total drops
+from 366 to 336. The other six deleted files
+(`AppStatePlayerlistTests.swift`, `AppStateMultiPlaylistTests.swift`,
+`AppStateDragReorderTests.swift`, `AppStateMetadataTests.swift`,
+`AppStateErrorHandlingTests.swift`, `AppStateFileInfoTests.swift`) carried
+no row. The files carrying rows that the slice touched were re-measured
+against a clean build of the pre-slice tree with an identical counting
+method: `PlaylistView.swift`, `HarmoniaPlayerApp.swift`,
+`AppStateReplayGainTests.swift`, `AppStateTests.swift`, and
+`MiniPlayerViewTests.swift` each measure the same before and after the
+slice, so their rows (16, 14, 20, 2, 2) stand with unchanged dominant
+kinds, and no file gains a diagnostic. `PlaylistCollection.swift`,
+`PlaylistCollection+M3U8.swift`,
+`PlaybackController+PlaylistReactions.swift`, `PlaybackController.swift`,
+`PlaybackController+Navigation.swift`, `PlaylistContext.swift`,
+`AppState.swift`, `PlayerView.swift`, `FileInfoView.swift`,
+`MiniPlayerView.swift`, `HarmoniaPlayerCommands.swift`, the eight new
+test files, the seven `PlaybackController*Tests.swift` files, and
+`IntegrationTests.swift` build with zero warnings.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |
@@ -198,7 +222,7 @@ row.
 | `HarmoniaPlayer/macOS/Free/HarmoniaPlayerApp.swift` | 14 | main-actor API referenced from nonisolated / Sendable-closure context (14/14) |
 | `HarmoniaPlayer/macOS/Free/AppDelegate.swift` | 2 | main-actor API referenced from nonisolated / Sendable-closure context (2/2) |
 
-**Test target — 366** (466 at recording; `AppSettingsTests.swift` 14 retired by Slice 16-A; seven playback test files, 86, retired by Slice 19-A)
+**Test target — 336** (466 at recording; `AppSettingsTests.swift` 14 retired by Slice 16-A; seven playback test files, 86, retired by Slice 19-A; three playlist test files, 30, retired by Slice 20-A)
 
 | File | Warnings | Dominant kind |
 | --- | --- | --- |
@@ -207,7 +231,6 @@ row.
 | `HarmoniaPlayerTests/SharedTests/CoreFeatureFlagsTests.swift` | 44 | main-actor isolation violation (44/44) |
 | `HarmoniaPlayerTests/SharedTests/CoreFactoryTests.swift` | 34 | main-actor isolation violation (23/34) |
 | `HarmoniaPlayerTests/SharedTests/AppStateReplayGainTests.swift` | 20 | main-actor isolation violation (8/20) |
-| `HarmoniaPlayerTests/SharedTests/AppStatePersistenceTests.swift` | 20 | main-actor isolation violation (8/20) |
 | `HarmoniaPlayerTests/SharedTests/FileOriginServiceTests.swift` | 18 | sending non-Sendable value across isolation (9/18) |
 | `HarmoniaPlayerTests/SharedTests/LyricsPreferenceStoreTests.swift` | 17 | main-actor isolation violation (16/17) |
 | `HarmoniaPlayerTests/SharedTests/EQCoordinatorTests.swift` | 17 | main-actor isolation violation (7/17) |
@@ -217,13 +240,11 @@ row.
 | `HarmoniaPlayerTests/SharedTests/EQPresetsTests.swift` | 11 | main-actor isolation violation (11/11) |
 | `HarmoniaPlayerTests/SharedTests/EQSchemaMigratorTests.swift` | 10 | main-actor isolation violation (10/10) |
 | `HarmoniaPlayerTests/SharedTests/EQPersistenceStoreTests.swift` | 10 | main-actor isolation violation (10/10) |
-| `HarmoniaPlayerTests/SharedTests/AppStateFormatGatingTests.swift` | 8 | main-actor isolation violation (3/8) |
 | `HarmoniaPlayerTests/SharedTests/FileDropServiceTests.swift` | 7 | main-actor isolation violation (7/7) |
 | `HarmoniaPlayerTests/SharedTests/SiblingFilePresenterTests.swift` | 5 | main-actor isolation violation (5/5) |
 | `HarmoniaPlayerTests/SharedTests/ErrorReportServiceTests.swift` | 4 | main-actor isolation violation (4/4) |
 | `HarmoniaPlayerTests/SharedTests/MiniPlayerViewTests.swift` | 2 | main-actor isolation violation (2/2) |
 | `HarmoniaPlayerTests/SharedTests/M3U8ServiceTests.swift` | 2 | main-actor isolation violation (2/2) |
-| `HarmoniaPlayerTests/SharedTests/AppStateUndoTests.swift` | 2 | main-actor isolation violation (2/2) |
 | `HarmoniaPlayerTests/SharedTests/AppStateTests.swift` | 2 | main-actor isolation violation (2/2) |
 | `HarmoniaPlayerTests/FakeInfrastructure/FakeNowPlayingService.swift` | 1 | default initializer both nonisolated and main-actor-isolated (1/1) |
 | `HarmoniaPlayerTests/FakeInfrastructure/FakeCoreProvider.swift` | 1 | main-actor default value in nonisolated context (1/1) |

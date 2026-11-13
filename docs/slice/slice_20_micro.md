@@ -23,7 +23,7 @@ named stragglers.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 20-A | Extract `PlaylistCollection` (incl. M3U8) + playlist → playback reaction closures + `PlaylistContext` at controller init + facade removal + `@Environment` view migration + test migration | — | ⬜ |
+| 20-A | Extract `PlaylistCollection` (incl. M3U8) + playlist → playback reaction closures + `PlaylistContext` at controller init + facade removal + `@Environment` view migration + test migration | — | ✅ |
 
 ### Goals
 
@@ -153,7 +153,7 @@ named stragglers.
 
 ---
 
-## Slice 20-A: Extract PlaylistCollection ⬜
+## Slice 20-A: Extract PlaylistCollection ✅
 
 ### Goal
 
@@ -691,6 +691,49 @@ controller but keeps its own playlist members and forwarders until green
   the retargeted negative rows.
 - Expected red: every other row. The observed red set is recorded at
   close-out.
+
+Execution amendments (recorded at close-out):
+
+- **`alertCenter` is module-internal on `PlaylistCollection`**, not
+  `private` as the Scope states: the M3U8 code lives in
+  `PlaylistCollection+M3U8.swift`, and a `private` member is not visible
+  to an extension in another file (the Slice 19 controller precedent).
+  `fileDropService`, `playlistStore`, `settingsStore`, and `userDefaults`
+  stay `private`.
+- **Context reads in the controller.** The six former guard sites read the
+  context through a local `let context = playlistContext` alias rather
+  than the property directly; AC3's grep for the guard line is empty, and
+  the bodies reach the context only through that `let`.
+- **`PlaylistView.swift` warnings.** Its 16 baseline diagnostics are the
+  `TableColumn(value:)` `KeyPath<Track, _>` non-Sendable kind, unrelated
+  to the environment migration; they were not attempted and the count is
+  unchanged (AC7).
+- **Red set.** Observed 118 red / 445 green / 5 skipped against the
+  skeleton (568, the AC6 total). Of the 136 matrix rows: the seven
+  default-value guards were green as predicted; eleven of the thirteen
+  negative guards were vacuously green as predicted, while rows 29 and 61
+  were red because their fixture asserts a precondition the skeleton
+  cannot satisfy; fifteen rows predicted red were vacuously green against
+  the empty skeleton (8, 21, 27, 30, 36, 37, 44, 54, 55, 56, 79, 82, 85,
+  89, 99); the other 103 matrix rows and the 15 retargeted rows were red.
+- **Green.** 563 passed / 5 skipped / 0 failed — exactly pre-slice
+  531 − 5 + 37 (AC6).
+- **HC audit.** The 5-area audit read the pinned revision's tree directly
+  (split-repo paths `Sources/HarmoniaCore/…`): Ports (8), Adapters (9),
+  Services (`PlaybackService`, `DefaultPlaybackService`), Models (5), and
+  `CoreError` (6 cases) match `architecture.md` §2 and §5 and
+  `module_boundary.md` §2 — no HC-side change to surface.
+- **Warning re-measurement** used clean builds of the spec-commit tree and
+  the green tree with an identical counting method (deduplicated
+  `file:line:col: warning:` lines): totals 450 → 417; only the three
+  deleted files' rows disappear, every other touched file measures the
+  same before and after, and every new file builds with zero warnings
+  (AC7). The method counts 23 for `AppStatePersistenceTests.swift` and
+  `AppStateReplayGainTests.swift` where the baseline table records 20 —
+  the unit gap the Slice 19 re-measurement noted — so the table is updated
+  in its own units.
+- BL-20A-01 moves with the code, as specified; AC8 (a)–(l) is the manual
+  check on the committed tree.
 
 ### Public API shape
 
