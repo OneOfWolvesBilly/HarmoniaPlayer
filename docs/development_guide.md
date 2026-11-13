@@ -125,9 +125,7 @@ HarmoniaPlayer/
 │       │   ├── Shared/                           # Platform-independent code
 │       │   │   ├── Models/
 │       │   │   │   ├── AlertCenter.swift            # Alert/paywall/File Info store
-│       │   │   │   ├── AppState.swift               # Properties, init, persistence, facade forwarders
-│       │   │   │   ├── AppState+Playlist.swift      # Playlist ops, undo/redo, Mini Player switch
-│       │   │   │   ├── AppState+M3U8.swift          # M3U8 import/export
+│       │   │   │   ├── AppState.swift               # Composition root: stores, wiring, save-all
 │       │   │   │   ├── AudioFileItem.swift          # Drag-and-drop Transferable (file import)
 │       │   │   │   ├── PlaylistReorderItem.swift    # Drag-and-drop Transferable (row reorder)
 │       │   │   │   ├── CoreFeatureFlags.swift       # Free/Pro feature flags
@@ -144,9 +142,12 @@ HarmoniaPlayer/
 │       │   │   │   ├── NowPlayingCoordinator.swift  # @MainActor NowPlaying wiring
 │       │   │   │   ├── PlaybackController.swift     # Playback store: transport, volume, ReplayGain, polling
 │       │   │   │   ├── PlaybackController+Navigation.swift  # Next/previous, track-finish, shuffle queue
+│       │   │   │   ├── PlaybackController+PlaylistReactions.swift  # Reactions to playlist mutations
 │       │   │   │   ├── PlaybackError.swift          # Typed errors (no String payload)
 │       │   │   │   ├── PlaybackState.swift          # idle/loading/playing/paused/stopped/error
 │       │   │   │   ├── Playlist.swift               # Playlist model + sort state
+│       │   │   │   ├── PlaylistCollection.swift     # Playlist store: playlists, tabs, undo/redo, persistence
+│       │   │   │   ├── PlaylistCollection+M3U8.swift  # M3U8 import/export
 │       │   │   │   ├── PlaylistContext.swift        # Playlist state the playback store reads/writes
 │       │   │   │   ├── RepeatMode.swift             # off/all/one
 │       │   │   │   ├── ReplayGainMode.swift         # off/track/album
@@ -301,7 +302,7 @@ struct HarmoniaPlayerApp: App {
 }
 ```
 
-Inside AppState:
+Inside AppState — a composition root with no state of its own:
 
 ```swift
 @MainActor
@@ -309,30 +310,13 @@ final class AppState: ObservableObject {
     let alertCenter: AlertCenter                // alert/paywall/File Info store
     let lyricsStore: LyricsStore                // lyrics store
     let settingsStore: SettingsStore            // settings/tier/language-bundle store
+    let playlistCollection: PlaylistCollection  // playlist store (owns TagReaderService, FileDropService, PlaylistStore, UndoManager)
     let playbackController: PlaybackController  // playback store (owns PlaybackService)
+    let eqCoordinator: EQCoordinator
     let nowPlayingCoordinator: NowPlayingCoordinator
-    let tagReaderService: TagReaderService      // app-layer protocol
-    let fileDropService: FileDropService
 
-    @Published var playlists: [Playlist]
-
-    /// Facade forwarder — alert state lives in AlertCenter.
-    /// The lyrics surface has no forwarders: views and the root-wired
-    /// onCurrentTrackChanged closure reach lyricsStore directly.
-    var lastError: PlaybackError? {
-        get { alertCenter.lastError }
-        set { alertCenter.lastError = newValue }
-    }
-
-    /// Read-only facade forwarder — tier state lives in SettingsStore.
-    var isProUnlocked: Bool { settingsStore.isProUnlocked }
-
-    /// Facade forwarder — playback state lives in PlaybackController; kept
-    /// for the playlist code that still reads and clears it.
-    var currentTrack: Track? {
-        get { playbackController.currentTrack }
-        set { playbackController.currentTrack = newValue }
-    }
+    /// Read-only forwarder for the views' and Commands' L() helper.
+    var languageBundle: Bundle { settingsStore.languageBundle }
 
     init(
         iapManager: IAPManager,
@@ -353,28 +337,41 @@ final class AppState: ObservableObject {
             featureFlags: settingsStore.featureFlags,
             provider:     provider
         )
-        let playbackService   = coreFactory.makePlaybackService()
-        self.tagReaderService = coreFactory.makeTagReaderService()
-        self.fileDropService  = FileDropService()
+        let playbackService  = coreFactory.makePlaybackService()
+        let tagReaderService = coreFactory.makeTagReaderService()
+        let fileDropService  = FileDropService()
         let lyricsService = coreFactory.makeLyricsService()
         let lyricsPreferenceStore = lyricsPreferenceStore
             ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
+        // ... eqCoordinator (injected or default) ...
         self.lyricsStore = LyricsStore(         // owns the lyrics dependencies
             lyricsService: lyricsService,
             lyricsPreferenceStore: lyricsPreferenceStore
         )
+        let playlistCollection = PlaylistCollection(   // owns the playlist services + keys; restores the playlists
+            tagReaderService: tagReaderService,
+            fileDropService:  fileDropService,
+            playlistStore:    playlistStore ?? FilePlaylistStore(),
+            undoManager:      undoManager ?? UndoManager(),
+            alertCenter:      alertCenter,
+            settingsStore:    settingsStore,
+            userDefaults:     userDefaults
+        )
+        self.playlistCollection = playlistCollection
         let playbackController = PlaybackController(   // owns the playback service + keys
             playbackService: playbackService,
             alertCenter:     alertCenter,
             settingsStore:   settingsStore,
+            playlistContext: playlistCollection,
             userDefaults:    userDefaults
         )
         self.playbackController = playbackController
         // NowPlayingCoordinator is built here from the controller's
         // publishers and transport methods.
-        // ... rest of init; after every stored property is set, the
-        // controller receives its PlaylistContext and the closures are wired:
-        //   playbackController.playlistContext    = self
+        // ... after every stored property is set, the closures are wired:
+        //   playlistCollection.onTracksAppended / onTrackRemoved / onTracksRemoved /
+        //     onPlaylistCleared / onPlaylistDeleted / onTrackQueuedNext
+        //                                         → playbackController.handle…
         //   settingsStore.onReplayGainModeChanged → playbackController.applyReplayGainVolume(requiresActivePlayback: true)
         //   playbackController.onCurrentTrackChanged → lyricsStore.updateResolution(for:)
         //   playbackController.onSeekCompleted    → nowPlayingCoordinator.notifySeekCompleted(at:)
@@ -481,7 +478,7 @@ HarmoniaPlayer ships with `ENABLE_APP_SANDBOX = YES` for App Store distribution.
 
 The user grants access by selecting an audio file via `NSOpenPanel` or drag-drop. The system issues an in-process sandbox extension on that URL. To persist this access across cold-launch:
 
-1. Encode the URL with `URL.bookmarkData(options: [.withSecurityScope])`. This must happen while the in-process extension is active — `AppState.load(urls:)` wraps the body of its `for url in urls` loop with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` (paired via `defer` inside the loop body, which is per-iteration scope, not method scope) so the bookmark capture succeeds.
+1. Encode the URL with `URL.bookmarkData(options: [.withSecurityScope])`. This must happen while the in-process extension is active — `PlaylistCollection.load(urls:)` wraps the body of its `for url in urls` loop with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` (paired via `defer` inside the loop body, which is per-iteration scope, not method scope) so the bookmark capture succeeds.
 2. On decode, resolve with `URL(resolvingBookmarkData:options:)` using `[.withSecurityScope]` and capture `bookmarkDataIsStale: &stale`.
 3. Call `startAccessingSecurityScopedResource()` on the resolved URL — `Track.isAccessible` is set to its return value. Do NOT call `stopAccessingSecurityScopedResource()` after success: the macOS sandbox requires an active extension at every read, and stopping releases the extension so PlaybackService open returns FigFile err=-12203 / "File Not Found". The extension is held for the URL's lifetime and released as a side effect when the Track value is dropped from the playlist (NSURL ref count → 0).
 4. The resolved URL replaces the in-memory `Track.url`. On the next `JSONEncoder().encode(track)` pass, `URL.bookmarkData(.withSecurityScope)` regenerates the bookmark from the now-current URL — this implicitly handles `bookmarkDataIsStale = true` without an explicit refresh helper.
@@ -561,7 +558,8 @@ All test infrastructure lives in
 | `StubLyricsService` | `LyricsService` | Configurable stub for tests verifying `LyricsStore` reactions to specific resolutions: `stubbedResolution` lets the test dictate `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Also defined inline in `FakeCoreProvider.swift`. Same toolchain-bug-avoidance rationale as `FakeLyricsService` |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last value captured (`lastSetEnabled`, `lastSetPreamp`, `lastSetBandGains`); defined inline in `FakeCoreProvider.swift`, not a separate file |
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters (`updateCurrentTrackCallCount` / `updatePlaybackStateCallCount` / `updateElapsedTimeCallCount` / `clearCallCount`) plus last-value captures (`lastUpdatedTrack` / `lastUpdatedState` / `lastUpdatedRate` / `lastUpdatedElapsed`) and `updatedElapsedHistory` array; pull-side callback properties (`onPlay` / `onPause` / `onTogglePlayPause` / `onNext` / `onPrevious` / `onStop` / `onSeek`) tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` |
-| `FakePlaylistContext` | `PlaylistContext` | In-memory playlist state for `PlaybackController` tests: one empty playlist at index 0, no selection; tests seed `playlists[0].tracks` directly instead of calling `load(urls:)`. Standalone file in `FakeInfrastructure/` |
+| `FakePlaylistContext` | `PlaylistContext` | In-memory playlist state for `PlaybackController` tests, passed to the controller's `init`: one empty playlist at index 0, no selection; tests seed `playlists[0].tracks` directly instead of calling `load(urls:)`. Standalone file in `FakeInfrastructure/` |
+| `FakePlaylistStore` | `PlaylistStore` | In-memory `stored: [Playlist]?` with `saveCallCount` and an optional `loadError`; one instance shared between two `PlaylistCollection`s (or two `AppState`s) simulates a relaunch. Standalone file in `FakeInfrastructure/` |
 | `MockIAPManager` | `IAPManager` | `purchaseResult` enum (`.success` / `.failure(IAPError)`); `entitlementAfterRefresh: Bool?` applied by `refreshEntitlements()` when set; call counts for `refreshEntitlements` and `purchasePro` |
 
 ### 8.2 Test class conventions (Swift 6)
@@ -611,9 +609,9 @@ final class PlaybackControllerTransportTests: XCTestCase {
             playbackService: fake,
             alertCenter:     alertCenter,
             settingsStore:   SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            playlistContext: context,
             userDefaults:    defaults
         )
-        sut.playlistContext = context
         return Fixture(sut: sut, fake: fake, context: context, alertCenter: alertCenter)
     }
 
@@ -641,18 +639,22 @@ final class PlaybackControllerTransportTests: XCTestCase {
 
 Rules:
 - A test that does construct an `AppState` (composition-root and
-  playlist tests) injects `FakePlaylistStore()` alongside the isolated
+  cross-store tests) injects `FakePlaylistStore()` alongside the isolated
   `UserDefaults` — without it `AppState` falls back to the real
   `FilePlaylistStore` and the test reads and writes the shared
-  `playlists.json`
+  `playlists.json`. `PlaylistCollection` tests build the store directly
+  with a `FakePlaylistStore`, a `FakeTagReaderService`, a `FileDropService`,
+  an `UndoManager`, an `AlertCenter`, and a `SettingsStore` on the same
+  isolated suite; a relaunch is a second collection on the same store
 - `PlaybackController` tests seed `FakePlaylistContext.playlists` with
-  `Track(url:)` values instead of calling `load(urls:)`, and keep the
-  context alive for the test (the controller holds it weakly)
+  `Track(url:)` values instead of calling `load(urls:)` and pass the
+  context at `init`
 - One operation per test — setup helpers call `resetCounts()` before the
   assertion target so the count reflects the operation under test only
 - Use `await` for every async call — `play`, `pause`, `stop`, `seek`,
   `play(trackID:)`, `playNextTrack`, `playPreviousTrack` on the
-  controller; `load` on AppState
+  controller; `load`, `handleFileDrop`, `importPlaylist`,
+  `refreshMetadataIfNeeded` on the collection
 - `final class` and unique `suiteName` per test
 
 ### 8.3 Running tests
@@ -681,9 +683,12 @@ The Xcode project is not an SPM package, so `swift test` does not apply.
 
 ### 9.2 Access control
 
-- Services on AppState are `let` (internal), not `private let` — Views
-  access AppState, not the services directly, but the boundary is
-  architectural, not enforced by Swift access modifiers
+- Services the stores expose for the composition-root tests
+  (`PlaybackController.playbackService`,
+  `PlaylistCollection.tagReaderService`) are `let` (internal), not
+  `private let` — Views observe the stores, not the services directly,
+  but the boundary is architectural, not enforced by Swift access
+  modifiers; the stores' other dependencies are `private`
 - `@Published` / store properties are `var` by default; use `private(set)`
   only when the View should never write (e.g. `SettingsStore.isProUnlocked`)
 
@@ -779,7 +784,7 @@ final class SomeObservable: ObservableObject {
 
 **When the workaround IS needed.** Any class that is `@MainActor` (explicit
 or inferred). The `final` modifier is independent — it does not change the
-deinit behaviour. Eleven known production / test-double sites in HarmoniaPlayer:
+deinit behaviour. Twelve known production / test-double sites in HarmoniaPlayer:
 
 | Class | File | Why |
 |-------|------|-----|
@@ -788,6 +793,7 @@ deinit behaviour. Eleven known production / test-double sites in HarmoniaPlayer:
 | `LyricsStore` | `Shared/Models/LyricsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`LyricsStoreTests` and every AppState test teardown) |
 | `SettingsStore` | `Shared/Models/SettingsStore.swift` | Explicit `@MainActor`; deallocated in test contexts (`SettingsStoreTests` and every AppState test teardown) |
 | `PlaybackController` | `Shared/Models/PlaybackController.swift` | Explicit `@MainActor`; deallocated in test contexts (the `PlaybackController*Tests` family and every AppState test teardown) |
+| `PlaylistCollection` | `Shared/Models/PlaylistCollection.swift` | Explicit `@MainActor`; deallocated in test contexts (the `PlaylistCollection*Tests` family and every AppState test teardown) |
 | `EQCoordinator` | `Shared/Models/EQCoordinator.swift` | Explicit `@MainActor`; long-lived but holds `EQService` reference that captures Core types |
 | `NowPlayingCoordinator` | `Shared/Models/NowPlayingCoordinator.swift` | Explicit `@MainActor`; deallocated in test contexts (`NowPlayingCoordinatorTests` and every AppState test teardown) |
 | `HarmoniaEQAdapter` | `Shared/Services/HarmoniaEQAdapter.swift` | Inferred `@MainActor`; three escaping closures capture `HarmoniaCore.PlaybackService` — releasing them through the isolated deinit triggers the bug |
@@ -797,8 +803,7 @@ deinit behaviour. Eleven known production / test-double sites in HarmoniaPlayer:
 
 Several `XCTestCase` subclasses that hold an `AppState` or a store declare
 the same `nonisolated deinit {}` for the same reason (e.g.
-`IntegrationTests`, `AppStateFormatGatingTests`, and the
-`PlaybackController*Tests` family).
+`IntegrationTests` and the `PlaybackController*Tests` family).
 
 **When the workaround is NOT needed.** Classes already declared
 `nonisolated`, structs, enums, and actors are unaffected because their
@@ -868,7 +873,7 @@ detailed workflow and commit atomicity rules are in [Workflow](workflow.md).
 - Logs: `OSLogAdapter` in HarmoniaCore emits to OSLog subsystem
   `HarmoniaPlayer` / category `Playback`. View in Console.app or Xcode Console.
 - Useful breakpoints: `PlaybackController.play()`,
-  `PlaybackController.play(trackID:)`, `AppState.load(urls:)`,
+  `PlaybackController.play(trackID:)`, `PlaylistCollection.load(urls:)`,
   `HarmoniaPlaybackServiceAdapter.mapCoreError`
 - StoreKit: use `HarmoniaPlayer.storekit` configuration file for local IAP
   testing (Scheme → Edit Scheme → Run → Options → StoreKit Configuration)

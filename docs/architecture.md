@@ -128,7 +128,10 @@ HarmoniaPlayerCommands, EQView, EQWindow]
       subgraph appLayer[Application Layer]
         appState[AppState
 @MainActor ObservableObject
-split: +Playlist, +M3U8]
+composition root]
+        playlistCollection[PlaylistCollection
+@MainActor @Observable
+playlists, tabs, undo, M3U8]
         playbackController[PlaybackController
 @MainActor @Observable
 transport, navigation, ReplayGain]
@@ -182,8 +185,11 @@ Control Center / lock screen
 AirPods / media keys / Siri)]
 
     views --> appState
+    views --> playlistCollection
     views --> playbackController
+    appState --> playlistCollection
     appState --> playbackController
+    playbackController --> playlistCollection
     appState --> eqCoordinator
     appState --> nowPlayingCoordinator
     nowPlayingCoordinator --> playbackController
@@ -212,14 +218,19 @@ AirPods / media keys / Siri)]
 - **Must not depend on:** HarmoniaCore-Swift directly, Ports, Adapters, Services
 
 **Application Layer (AppState):**
-- Central observable state (`AppState`, split across 3 files) plus the
-  extracted `@MainActor @Observable` feature stores (`AlertCenter`,
-  `LyricsStore`, `SettingsStore`, `PlaybackController`)
+- The composition root `AppState` plus the five `@MainActor @Observable`
+  feature stores it constructs and wires (`AlertCenter`, `LyricsStore`,
+  `SettingsStore`, `PlaybackController`, `PlaylistCollection`)
+- `PlaylistCollection` — owns the playlists, the active index, the table
+  selection, the undo manager, the playlist services, and the playlist
+  persistence; conforms to `PlaylistContext`; reports mutations that
+  affect playback through root-wired closures. Views read playlist state
+  via `@Environment(PlaylistCollection.self)`
 - `PlaybackController` — owns the transport state, the playback service,
-  navigation, ReplayGain, polling, and the playback persistence keys;
-  reads playlist state through the `PlaylistContext` protocol that
-  `AppState` conforms to. Views read playback state via
-  `@Environment(PlaybackController.self)`
+  navigation, ReplayGain, polling, the playlist reactions, and the
+  playback persistence keys; reads playlist state through the
+  `PlaylistContext` protocol that `PlaylistCollection` conforms to. Views
+  read playback state via `@Environment(PlaybackController.self)`
 - `EQCoordinator` — parallel `@MainActor` `ObservableObject` owning EQ live
   state and presets; held as `let eqCoordinator` on `AppState`. Views read
   EQ state via `appState.eqCoordinator.…` (Slice 9-K)
@@ -338,11 +349,12 @@ final class AppState: ObservableObject {
 }
 ```
 
-**Note:** AppState is split across multiple extension files for maintainability:
-`AppState.swift` (properties + init), `AppState+Playlist.swift`,
-`AppState+M3U8.swift`. The playback surface lives in
-`PlaybackController.swift` and `PlaybackController+Navigation.swift`, with
-the transitional `PlaylistContext.swift` protocol between them.
+**Note:** `AppState.swift` is the composition root alone. The playlist
+surface lives in `PlaylistCollection.swift` and
+`PlaylistCollection+M3U8.swift`, the playback surface in
+`PlaybackController.swift`, `PlaybackController+Navigation.swift`, and
+`PlaybackController+PlaylistReactions.swift`, with the
+`PlaylistContext.swift` protocol between them.
 
 This enables:
 - Testing with mocks (`FakeCoreProvider`, `FakePlaybackService`, `FakeLyricsService`, `FakeEQService`, `FakeNowPlayingService`, `MockIAPManager`)

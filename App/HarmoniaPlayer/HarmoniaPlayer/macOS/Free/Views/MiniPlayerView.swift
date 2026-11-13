@@ -26,9 +26,10 @@
 //  DESIGN NOTES
 //  ------------
 //  - Observes PlaybackController via @Environment for playback state and
-//    transport; shares AppState via @EnvironmentObject for the playlists,
-//    the Mini Player playlist switch, and localization. Full/mini player
-//    always in sync.
+//    transport, PlaylistCollection for the playlists, and SettingsStore for
+//    the tier and localization; shares AppState via @EnvironmentObject for
+//    the Mini Player playlist switch and the focused scene object. Full/mini
+//    player always in sync.
 //  - FloatingWindowController sets window.level based on hp.miniPlayerAlwaysOnTop.
 //  - WindowCloseObserver brings Full Player to front when Mini Player closes.
 //  - Playlist switch: stop → change activePlaylistIndex → play first track.
@@ -179,6 +180,8 @@ struct MiniPlayerView: View {
 
     @EnvironmentObject private var appState: AppState
     @Environment(PlaybackController.self) private var playbackController
+    @Environment(PlaylistCollection.self) private var playlistCollection
+    @Environment(SettingsStore.self) private var settingsStore
     @Environment(\.openWindow) private var openWindow
 
     @AppStorage("hp.miniPlayerAlwaysOnTop") private var alwaysOnTop: Bool = true
@@ -189,7 +192,7 @@ struct MiniPlayerView: View {
     @State private var showTrackList = false
 
     private func L(_ key: String) -> String {
-        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+        NSLocalizedString(key, bundle: settingsStore.languageBundle, comment: "")
     }
 
     private func formatTime(_ seconds: TimeInterval) -> String {
@@ -260,12 +263,12 @@ struct MiniPlayerView: View {
             Spacer()
 
             Menu {
-                ForEach(Array(appState.playlists.enumerated()), id: \.offset) { index, pl in
+                ForEach(Array(playlistCollection.playlists.enumerated()), id: \.offset) { index, pl in
                     Button {
                         Task { await appState.switchMiniPlayerPlaylist(to: index) }
                     } label: {
                         HStack {
-                            if index == appState.activePlaylistIndex {
+                            if index == playlistCollection.activePlaylistIndex {
                                 Image(systemName: "checkmark")
                             }
                             Text(pl.name)
@@ -274,7 +277,7 @@ struct MiniPlayerView: View {
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(appState.playlist.name)
+                    Text(playlistCollection.playlist.name)
                         .font(.caption)
                         .fontWeight(.medium)
                     Image(systemName: "chevron.down")
@@ -397,7 +400,7 @@ struct MiniPlayerView: View {
                 Image(systemName: "backward.fill").font(.system(size: 13))
             }
             .buttonStyle(.plain)
-            .disabled(appState.playlist.tracks.isEmpty)
+            .disabled(playlistCollection.playlist.tracks.isEmpty)
 
             Button {
                 Task {
@@ -413,13 +416,13 @@ struct MiniPlayerView: View {
                     .font(.system(size: 16))
             }
             .buttonStyle(.plain)
-            .disabled(appState.playlist.tracks.isEmpty)
+            .disabled(playlistCollection.playlist.tracks.isEmpty)
 
             Button { Task { await playbackController.playNextTrack() } } label: {
                 Image(systemName: "forward.fill").font(.system(size: 13))
             }
             .buttonStyle(.plain)
-            .disabled(appState.playlist.tracks.isEmpty)
+            .disabled(playlistCollection.playlist.tracks.isEmpty)
 
             // Repeat
             Button { playbackController.cycleRepeatMode() } label: {
@@ -449,7 +452,7 @@ struct MiniPlayerView: View {
                     .foregroundStyle(showTrackList ? Color.accentColor : Color.primary)
             }
             .buttonStyle(.plain)
-            .disabled(appState.playlist.tracks.isEmpty)
+            .disabled(playlistCollection.playlist.tracks.isEmpty)
             .popover(isPresented: $showTrackList, arrowEdge: .top) {
                 trackListPopover
             }
@@ -465,7 +468,7 @@ struct MiniPlayerView: View {
     /// Format-gated tracks show a lock icon and cannot be played on the Free tier.
     private var trackListPopover: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(appState.playlist.name)
+            Text(playlistCollection.playlist.name)
                 .font(.headline)
                 .padding(.horizontal, 12)
                 .padding(.top, 12)
@@ -475,10 +478,10 @@ struct MiniPlayerView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(appState.playlist.tracks) { track in
-                        let isFormatGated = AppState.proOnlyFormats
+                    ForEach(playlistCollection.playlist.tracks) { track in
+                        let isFormatGated = PlaylistCollection.proOnlyFormats
                             .contains(track.url.pathExtension.lowercased())
-                            && !appState.isProUnlocked
+                            && !settingsStore.isProUnlocked
                         let isCurrent = playbackController.currentTrack?.id == track.id
 
                         Button {
@@ -530,7 +533,7 @@ struct MiniPlayerView: View {
                 }
             }
             .frame(width: 280, height: min(
-                CGFloat(appState.playlist.tracks.count) * 44 + 16,
+                CGFloat(playlistCollection.playlist.tracks.count) * 44 + 16,
                 320
             ))
         }

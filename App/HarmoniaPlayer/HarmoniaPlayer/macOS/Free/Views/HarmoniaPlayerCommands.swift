@@ -71,20 +71,21 @@ struct HarmoniaPlayerCommands: Commands {
         //     }
         // }
 
-        // Replace default Undo/Redo with versions wired to AppState.undoManager.
-        // Disabled when the manager has nothing to undo/redo.
+        // Replace default Undo/Redo with versions wired to the playlist
+        // collection's undo manager. Disabled when the manager has nothing
+        // to undo/redo.
         CommandGroup(replacing: .undoRedo) {
             Button(L("menu_undo")) {
-                appState?.undo()
+                appState?.playlistCollection.undo()
             }
             .keyboardShortcut("z", modifiers: .command)
-            .disabled(appState?.canUndo != true || isBlocking)
+            .disabled(appState?.playlistCollection.canUndo != true || isBlocking)
 
             Button(L("menu_redo")) {
-                appState?.redo()
+                appState?.playlistCollection.redo()
             }
             .keyboardShortcut("z", modifiers: [.command, .shift])
-            .disabled(appState?.canRedo != true || isBlocking)
+            .disabled(appState?.playlistCollection.canRedo != true || isBlocking)
         }
 
         // Remove unused default menu groups.
@@ -144,17 +145,17 @@ struct HarmoniaPlayerCommands: Commands {
             Divider()
 
             Button(L("menu_get_info")) {
-                guard let state = appState,
-                      let trackID = state.selectedTrackIDs.first else { return }
-                state.showFileInfo(trackID: trackID)
+                guard let collection = appState?.playlistCollection,
+                      let trackID = collection.selectedTrackIDs.first else { return }
+                collection.showFileInfo(trackID: trackID)
             }
             .keyboardShortcut("i", modifiers: .command)
-            .disabled(appState?.selectedTrackIDs.isEmpty != false)
+            .disabled(appState?.playlistCollection.selectedTrackIDs.isEmpty != false)
 
             Divider()
 
             Button(L("menu_new_playlist")) {
-                appState?.newPlaylist(name: "")
+                appState?.playlistCollection.newPlaylist(name: "")
                 NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
             }
 
@@ -163,8 +164,8 @@ struct HarmoniaPlayerCommands: Commands {
             }
 
             Button(L("menu_delete_playlist")) {
-                guard let state = appState else { return }
-                state.deletePlaylist(at: state.activePlaylistIndex)
+                guard let collection = appState?.playlistCollection else { return }
+                collection.deletePlaylist(at: collection.activePlaylistIndex)
             }
 
             Divider()
@@ -272,7 +273,7 @@ struct HarmoniaPlayerCommands: Commands {
     /// True when the playlist has no tracks.
     /// Used for: Play/Pause, Next Track, Previous Track.
     private var playlistIsEmpty: Bool {
-        appState?.playlist.tracks.isEmpty != false
+        appState?.playlistCollection.playlist.tracks.isEmpty != false
     }
 
     /// True when there is no currently loaded track.
@@ -285,7 +286,7 @@ struct HarmoniaPlayerCommands: Commands {
     /// True when a batch playlist operation (load / import) is in progress.
     /// Used for: Add Files, Import M3U8, Undo, Redo.
     private var isBlocking: Bool {
-        appState?.isPerformingBlockingOperation == true
+        appState?.playlistCollection.isPerformingBlockingOperation == true
     }
 
     private var repeatModeLabel: String {
@@ -312,7 +313,7 @@ struct HarmoniaPlayerCommands: Commands {
         if let m3u8Type = UTType(filenameExtension: "m3u8") {
             panel.allowedContentTypes = [m3u8Type]
         }
-        panel.nameFieldStringValue = "\(appState.playlist.name).m3u8"
+        panel.nameFieldStringValue = "\(appState.playlistCollection.playlist.name).m3u8"
         panel.canCreateDirectories = true
 
         // Path style picker as accessory view
@@ -331,7 +332,7 @@ struct HarmoniaPlayerCommands: Commands {
 
         Task {
             do {
-                try appState.writeExport(to: url, pathStyle: pathStyle)
+                try appState.playlistCollection.writeExport(to: url, pathStyle: pathStyle)
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
@@ -355,7 +356,7 @@ struct HarmoniaPlayerCommands: Commands {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         Task {
-            await appState.importPlaylist(from: url)
+            await appState.playlistCollection.importPlaylist(from: url)
             // Show warning alert if any files were missing. Commands receive
             // no SwiftUI environment, so the store is reached through the
             // focused appState reference.

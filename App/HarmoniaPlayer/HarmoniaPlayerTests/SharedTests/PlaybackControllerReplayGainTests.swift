@@ -45,9 +45,9 @@ final class PlaybackControllerReplayGainTests: XCTestCase {
             playbackService: fake,
             alertCenter: AlertCenter(),
             settingsStore: settingsStore,
+            playlistContext: context,
             userDefaults: defaults
         )
-        sut.playlistContext = context
         return Fixture(sut: sut, fake: fake, context: context, settingsStore: settingsStore)
     }
 

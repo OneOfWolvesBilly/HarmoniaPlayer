@@ -13,9 +13,10 @@
 //  ------------
 //  - Playback state and transport actions come from `PlaybackController`,
 //    observed via `@Environment(PlaybackController.self)` (injected by
-//    `HarmoniaPlayerApp`); the EQ button reads `EQCoordinator` via
-//    `@EnvironmentObject`. `AppState` is read only for the active playlist
-//    and `languageBundle`.
+//    `HarmoniaPlayerApp`); the empty-playlist checks read
+//    `PlaylistCollection` via `@Environment(PlaylistCollection.self)`; the
+//    EQ button reads `EQCoordinator` via `@EnvironmentObject`. `AppState` is
+//    read only for `languageBundle`.
 //  - Album art is loaded from `currentTrack.artworkData` if available;
 //    otherwise a grey rounded-rectangle placeholder with a music note icon
 //    is shown.
@@ -51,6 +52,7 @@ struct PlayerView: View {
 
     @EnvironmentObject private var appState: AppState
     @Environment(PlaybackController.self) private var playbackController
+    @Environment(PlaylistCollection.self) private var playlistCollection
     @EnvironmentObject private var eqCoordinator: EQCoordinator
     @Environment(LyricsStore.self) private var lyricsStore
     @Environment(\.openWindow) private var openWindow
@@ -293,7 +295,7 @@ struct PlayerView: View {
             .help(L("help_next_track"))
         }
         .buttonStyle(.plain)
-        .disabled(appState.playlist.tracks.isEmpty)
+        .disabled(playlistCollection.playlist.tracks.isEmpty)
     }
 
     // MARK: - Mode Controls
@@ -326,7 +328,7 @@ struct PlayerView: View {
             .help(playbackController.isShuffled ? L("shuffle_on") : L("shuffle_off"))
         }
         .buttonStyle(.plain)
-        .disabled(appState.playlist.tracks.isEmpty)
+        .disabled(playlistCollection.playlist.tracks.isEmpty)
     }
 
     // MARK: - Volume Slider
@@ -444,7 +446,7 @@ struct PlayerView: View {
     /// Human-readable description of `playbackController.playbackState`.
     private var statusText: String {
         // No text when playlist is empty
-        guard !appState.playlist.tracks.isEmpty else { return "" }
+        guard !playlistCollection.playlist.tracks.isEmpty else { return "" }
         switch playbackController.playbackState {
         case .idle:         return ""
         case .stopped:      return L("status_stopped")

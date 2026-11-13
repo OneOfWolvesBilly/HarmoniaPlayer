@@ -44,9 +44,9 @@ final class PlaybackControllerNavigationTests: XCTestCase {
             playbackService: fake,
             alertCenter: AlertCenter(),
             settingsStore: SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            playlistContext: context,
             userDefaults: defaults
         )
-        sut.playlistContext = context
         return Fixture(sut: sut, fake: fake, context: context)
     }
 

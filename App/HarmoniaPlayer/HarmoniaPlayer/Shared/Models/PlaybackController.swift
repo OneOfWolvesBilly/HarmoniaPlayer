@@ -156,10 +156,8 @@ final class PlaybackController {
     private let userDefaults: UserDefaults
 
     /// Playlist state the controller resolves tracks in and switches the
-    /// active playlist of. Assigned by the composition root once it is
-    /// fully initialised (the root is itself the context, so it cannot be
-    /// an init argument). Context-dependent methods are no-ops while `nil`.
-    @ObservationIgnored weak var playlistContext: (any PlaylistContext)?
+    /// active playlist of.
+    @ObservationIgnored let playlistContext: any PlaylistContext
 
     // MARK: - Root-wired notifications
 
@@ -194,6 +192,7 @@ final class PlaybackController {
         playbackService: PlaybackService,
         alertCenter: AlertCenter,
         settingsStore: SettingsStore,
+        playlistContext: any PlaylistContext,
         userDefaults: UserDefaults
     ) {
         // Restore before the stored properties without defaults are set:
@@ -212,6 +211,7 @@ final class PlaybackController {
         self.playbackService = playbackService
         self.alertCenter = alertCenter
         self.settingsStore = settingsStore
+        self.playlistContext = playlistContext
         self.userDefaults = userDefaults
     }
 
@@ -231,7 +231,7 @@ final class PlaybackController {
     ///
     /// On error: sets `lastError` and `playbackState = .error(mapped)`.
     func play() async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
 
         // If no track is loaded, resolve from selection or first track.
         if currentTrack == nil {
@@ -355,7 +355,7 @@ final class PlaybackController {
     ///
     /// - Parameter trackID: The `UUID` of the track to load and play.
     func play(trackID: Track.ID) async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
 
         // Step 1: Resolve track across all playlists.
         // Search activePlaylistIndex first, then other playlists.

@@ -423,19 +423,20 @@ Layer protocol). See `module_boundary.md` §4.5 for the full rationale.
 
 ## 3. AppState Implementation
 
-`AppState` is the central observable state and the composition root for
-the feature stores. It is `@MainActor` and split across three files for
-maintainability; the playback surface lives in the `PlaybackController`
-store beside it:
+`AppState` is the composition root for the feature stores: it constructs
+them, wires their closures, and keeps the terminate-time save-all and the
+Mini Player playlist switch. It is `@MainActor` and one file; the playlist
+and playback surfaces live in the stores beside it:
 
 | File | Responsibility |
 |------|----------------|
-| `AppState.swift` | Properties, init, persistence, facade forwarders |
-| `AppState+Playlist.swift` | Playlist operations, undo/redo, sort, Mini Player playlist switch |
-| `AppState+M3U8.swift` | M3U8 import/export |
+| `AppState.swift` | Composition root: stores, coordinators, closure wiring, `saveState()` save-all, `switchMiniPlayerPlaylist(to:)` |
+| `PlaylistCollection.swift` | Playlists, active index, selection, blocking flag, format statics, undo/redo, File Info request, persistence, metadata refresh |
+| `PlaylistCollection+M3U8.swift` | M3U8 import/export |
 | `PlaybackController.swift` | Transport state and controls, volume, ReplayGain, polling, error mapping, sleep/wake, persistence |
 | `PlaybackController+Navigation.swift` | Next/previous, track-finished handling, shuffle queue |
-| `PlaylistContext.swift` | Protocol through which the controller reaches playlist state (`AppState` conforms) |
+| `PlaybackController+PlaylistReactions.swift` | Reactions to playlist mutations (shuffle-queue upkeep, stop / advance) |
+| `PlaylistContext.swift` | Protocol through which the controller reaches playlist state (`PlaylistCollection` conforms) |
 
 ### 3.1 Initialization (Dependency Injection)
 
@@ -443,71 +444,46 @@ store beside it:
 @MainActor
 final class AppState: ObservableObject {
 
-    // Services — internal access, never `private`
-    // (Views access AppState, not services directly — the boundary is
-    //  architectural, not enforced by access control.)
-    let tagReaderService: TagReaderService
-    let fileDropService: FileDropService
+    // Alert-surface store. Owns alert, paywall, and File Info request
+    // state; views observe it via @Environment(AlertCenter.self).
+    let alertCenter: AlertCenter
 
-    // Playback controller. Owns the playback service, the transport state,
-    // navigation, ReplayGain, polling, and the playback persistence keys;
-    // views observe it via @Environment(PlaybackController.self). AppState
-    // keeps forwarders only for the members its playlist code still reads.
-    let playbackController: PlaybackController
-
-    // Lyrics store (Slice 14-A). Owns showLyrics / lyricsResolution and the
+    // Lyrics store. Owns showLyrics / lyricsResolution and the
     // LyricsService + LyricsPreferenceStore dependencies; views observe it
-    // via @Environment(LyricsStore.self). No facade forwarders — the lyrics
-    // surface has no internal readers on AppState.
+    // via @Environment(LyricsStore.self).
     let lyricsStore: LyricsStore
 
+    // Settings store. Owns the persisted settings, the tier state
+    // (isProUnlocked, featureFlags), languageBundle, and the IAPManager;
+    // persists its own keys on change. Views observe it via
+    // @Environment(SettingsStore.self).
+    let settingsStore: SettingsStore
+
+    // Playlist collection. Owns the playlists, the active index, the table
+    // selection, the blocking flag, the UndoManager, the TagReaderService /
+    // FileDropService / PlaylistStore dependencies, and the playlist
+    // persistence; views observe it via @Environment(PlaylistCollection.self).
+    let playlistCollection: PlaylistCollection
+
+    // Playback controller. Owns the playback service, the transport state,
+    // navigation, ReplayGain, polling, the playlist reactions, and the
+    // playback persistence keys; views observe it via
+    // @Environment(PlaybackController.self).
+    let playbackController: PlaybackController
+
     // Owns observable EQ state; views read EQ via `appState.eqCoordinator.…`
-    // (Slice 9-K). AppState itself has no EQ-specific @Published properties.
+    // or @EnvironmentObject.
     let eqCoordinator: EQCoordinator
 
-    // NowPlaying coordinator (Slice 9-L). Routes the playback controller's
-    // publishers and transport methods to the system Now Playing surface via
+    // NowPlaying coordinator. Routes the playback controller's publishers
+    // and transport methods to the system Now Playing surface via
     // NowPlayingService. A `let`: the controller is constructed first, so
     // the seven action closures capture the controller, not `self`.
     let nowPlayingCoordinator: NowPlayingCoordinator
 
-    // Alert-surface store (Slice 13-A). Owns alert, paywall, and File Info
-    // request state; views observe it via @Environment(AlertCenter.self).
-    // AppState re-exposes its properties as same-named facade forwarders.
-    let alertCenter: AlertCenter
-
-    // Settings store (Slice 16-A). Owns the persisted settings, the tier
-    // state (isProUnlocked, featureFlags), languageBundle, and the
-    // IAPManager; persists its own keys on change. Views observe it via
-    // @Environment(SettingsStore.self).
-    let settingsStore: SettingsStore
-
-    // Dependencies kept private
-    private let userDefaults: UserDefaults
-    private let playlistStore: PlaylistStore
-
-    // Published state (excerpt)
-    @Published var playlists: [Playlist]
-    @Published var activePlaylistIndex: Int = 0
-
-    // Facade forwarder (excerpt) — playback state lives in
-    // PlaybackController; kept for the playlist code that reads and clears it.
-    var currentTrack: Track? {
-        get { playbackController.currentTrack }
-        set { playbackController.currentTrack = newValue }
-    }
-
-    // Facade forwarder (excerpt) — alert state lives in AlertCenter
-    // (Slice 13-A). The forwarding getter registers the store property with
-    // Observation, so views observing either surface re-render correctly.
-    var lastError: PlaybackError? {
-        get { alertCenter.lastError }
-        set { alertCenter.lastError = newValue }
-    }
-
-    // Facade forwarder (excerpt) — tier state lives in SettingsStore
-    // (Slice 16-A); kept for un-migrated readers.
-    var isProUnlocked: Bool { settingsStore.isProUnlocked }
+    // The one forwarder left: the UI string bundle for the views still on
+    // @EnvironmentObject and for the Commands.
+    var languageBundle: Bundle { settingsStore.languageBundle }
 
     init(
         iapManager: IAPManager,
@@ -531,14 +507,14 @@ final class AppState: ObservableObject {
             featureFlags: settingsStore.featureFlags,
             provider:     provider
         )
-        let playbackService   = coreFactory.makePlaybackService()
-        self.tagReaderService = coreFactory.makeTagReaderService()
-        self.fileDropService  = FileDropService()
+        let playbackService  = coreFactory.makePlaybackService()
+        let tagReaderService = coreFactory.makeTagReaderService()
+        let fileDropService  = FileDropService()
 
         // Lyrics store — takes ownership of the factory-made service and the
-        // injected-or-default preference store (Slice 14-A). Production
-        // builds the default preference store backed by the same
-        // userDefaults; tests inject a stub via the parameter.
+        // injected-or-default preference store. Production builds the
+        // default preference store backed by the same userDefaults; tests
+        // inject a stub via the parameter.
         let lyricsService = coreFactory.makeLyricsService()
         let lyricsPreferenceStore = lyricsPreferenceStore
             ?? DefaultLyricsPreferenceStore(userDefaults: userDefaults)
@@ -557,12 +533,30 @@ final class AppState: ObservableObject {
                 store:   EQPersistenceStore(defaults: userDefaults)
             )
 
-        // Playback controller — owns the playback service and restores its
-        // own keys (hp.volume, hp.repeatMode, hp.isShuffled) from userDefaults.
+        // Playlist collection — owns the playlist services, the undo manager,
+        // and the durable store, and restores the persisted playlists. The
+        // store and the manager default to nil and are built here, because a
+        // @MainActor initializer cannot run in the nonisolated default-arg
+        // context.
+        let playlistCollection = PlaylistCollection(
+            tagReaderService: tagReaderService,
+            fileDropService:  fileDropService,
+            playlistStore:    playlistStore ?? FilePlaylistStore(),
+            undoManager:      undoManager ?? UndoManager(),
+            alertCenter:      alertCenter,
+            settingsStore:    settingsStore,
+            userDefaults:     userDefaults
+        )
+        self.playlistCollection = playlistCollection
+
+        // Playback controller — owns the playback service, takes the
+        // collection as its playlist context, and restores its own keys
+        // (hp.volume, hp.repeatMode, hp.isShuffled) from userDefaults.
         let playbackController = PlaybackController(
             playbackService: playbackService,
             alertCenter:     alertCenter,
             settingsStore:   settingsStore,
+            playlistContext: playlistCollection,
             userDefaults:    userDefaults
         )
         self.playbackController = playbackController
@@ -588,17 +582,15 @@ final class AppState: ObservableObject {
             }
         )
 
-        self.playlists      = [Playlist(name: "Playlist 1")]
-        self.userDefaults   = userDefaults
-        // Playlist store — injected fake for tests, default for production.
-        // Built in the @MainActor init body (not a default argument) because a
-        // @MainActor initializer cannot run in the nonisolated default-arg context.
-        self.playlistStore  = playlistStore ?? FilePlaylistStore()
-        // ... (remaining init: undoManager, restoreState())
-
         // Wiring — after every stored property is initialised. Each closure
-        // captures the store it targets, never `self`.
-        playbackController.playlistContext = self      // AppState is the PlaylistContext
+        // captures the store it targets, never `self`. Playlist mutations
+        // reach the controller's reactions:
+        playlistCollection.onTracksAppended  = { ids in playbackController.handleTracksAppended(ids) }
+        playlistCollection.onTrackRemoved    = { id in playbackController.handleTrackRemoved(id) }
+        playlistCollection.onTracksRemoved   = { ids in playbackController.handleTracksRemoved(ids) }
+        playlistCollection.onPlaylistCleared = { playbackController.handlePlaylistCleared() }
+        playlistCollection.onPlaylistDeleted = { id in playbackController.handlePlaylistDeleted(id) }
+        playlistCollection.onTrackQueuedNext = { id in playbackController.handleTrackQueuedNext(id) }
         settingsStore.onReplayGainModeChanged = { _ in
             Task { @MainActor in
                 await playbackController.applyReplayGainVolume(requiresActivePlayback: true)
@@ -621,7 +613,13 @@ final class AppState: ObservableObject {
 }
 ```
 
-**Wiring flow:** `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services → `PlaybackController` → `NowPlayingCoordinator`.
+**Wiring flow:** `IAPManager` → `SettingsStore` (derives `CoreFeatureFlags`) → `CoreFactory` → Services → `PlaylistCollection` → `PlaybackController` → `NowPlayingCoordinator`.
+
+Besides `init`, AppState has `saveState()` — the terminate-time save-all
+(`playbackController.saveVolume()`, then `playlistCollection.saveState()`)
+that `HarmoniaPlayerApp` calls on `willTerminateNotification` — and
+`switchMiniPlayerPlaylist(to:)`, the Mini Player's stop → switch → play
+orchestration over the two stores.
 
 ### 3.2 Async Playback Methods
 
@@ -637,7 +635,7 @@ final class PlaybackController {
     // Resumes from current position. If no track loaded, resolves one from
     // selection or the first track in the active playlist.
     func play() async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
 
         if currentTrack == nil {
             let tracks = context.playlists[context.activePlaylistIndex].tracks
@@ -724,7 +722,7 @@ if url.isFileURL,
 }
 ```
 
-The bookmark capture must happen while an active sandbox extension exists on `url`. `AppState.load(urls:)` ensures this by wrapping each URL with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` (paired via `defer` inside the `for` loop body — Swift `defer` is per-scope, so the loop body is the relevant scope and the pair fires per-iteration).
+The bookmark capture must happen while an active sandbox extension exists on `url`. `PlaylistCollection.load(urls:)` ensures this by wrapping each URL with `startAccessingSecurityScopedResource()` / `stopAccessingSecurityScopedResource()` (paired via `defer` inside the `for` loop body — Swift `defer` is per-scope, so the loop body is the relevant scope and the pair fires per-iteration).
 
 **Decode (Track.swift, JSONDecoder init):**
 
@@ -1063,11 +1061,13 @@ struct HarmoniaPlayerApp: App {
                 // LyricsPanel.
                 .environment(appState.lyricsStore)
                 // Settings store — required by PaywallView (presented as a
-                // sheet from ContentView).
+                // sheet from ContentView) and PlaylistView.
                 .environment(appState.settingsStore)
                 // Playback controller — required by ContentView, PlayerView,
-                // and LyricsPanel.
+                // LyricsPanel, and PlaylistView.
                 .environment(appState.playbackController)
+                // Playlist collection — required by PlaylistView and PlayerView.
+                .environment(appState.playlistCollection)
                 // EQ coordinator — required by PlayerView's EQ toolbar button.
                 .environmentObject(appState.eqCoordinator)
                 .focusedSceneObject(appState)
@@ -1096,6 +1096,8 @@ struct HarmoniaPlayerApp: App {
             MiniPlayerView()
                 .environmentObject(appState)
                 .environment(appState.playbackController)
+                .environment(appState.playlistCollection)
+                .environment(appState.settingsStore)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
@@ -1235,20 +1237,21 @@ struct ErrorAlert: ViewModifier {
 ### 6.5 Drag-and-Drop
 
 Drag-and-drop validation goes through `FileDropService` via
-`AppState.handleFileDrop(urls:)`. Views should never validate URLs or call
-`load(urls:)` directly:
+`PlaylistCollection.handleFileDrop(urls:)`. Views should never validate
+URLs or call `load(urls:)` directly:
 
 ```swift
 struct PlaylistView: View {
-    @EnvironmentObject private var appState: AppState
+    @Environment(PlaylistCollection.self) private var playlistCollection
 
     var body: some View {
-        List(appState.playlist.tracks) { track in
+        List(playlistCollection.playlist.tracks) { track in
             TrackRow(track: track)
         }
         .dropDestination(for: AudioFileItem.self) { items, _ in
+            guard !playlistCollection.isPerformingBlockingOperation else { return false }
             Task {
-                await appState.handleFileDrop(urls: items.map { $0.url })
+                await playlistCollection.handleFileDrop(urls: items.map { $0.url })
             }
             return true
         }
@@ -1277,6 +1280,8 @@ Test infrastructure lives in `HarmoniaPlayerTests/FakeInfrastructure/`:
 | `StubLyricsService` | `LyricsService` | Configurable: `stubbedResolution` dictates `resolveAvailability` output; `resolveAvailabilityCallCount` and `lastResolvedTrack` for assertion. Defined inline in `FakeCoreProvider.swift` (Slice 9-J) |
 | `FakeEQService` | `EQService` | Call counts (`setEnabledCallCount`, `setPreampCallCount`, `setBandGainsCallCount`) plus last-value capture; defined inline in `FakeCoreProvider.swift`, not a separate file (Slice 9-K) |
 | `FakeNowPlayingService` | `NowPlayingService` | Push call counters, last-value captures, `updatedElapsedHistory` array, and pull-side callback properties tests can invoke directly to simulate system commands. Standalone file in `FakeInfrastructure/` (Slice 9-L) |
+| `FakePlaylistContext` | `PlaylistContext` | In-memory playlist state passed to `PlaybackController.init` in the controller tests: one empty playlist at index 0, no selection |
+| `FakePlaylistStore` | `PlaylistStore` | In-memory `stored` playlists with `saveCallCount` and an optional `loadError`; shared between two collections to simulate a relaunch |
 | `MockIAPManager` | `IAPManager` | Configurable `purchaseResult` enum, `entitlementAfterRefresh` applied by `refreshEntitlements()` (Slice 16-A), call counts |
 
 ### 7.2 @MainActor Test Classes (Swift 6)
@@ -1323,9 +1328,9 @@ final class PlaybackControllerTransportTests: XCTestCase {
             playbackService: fake,
             alertCenter:     alertCenter,
             settingsStore:   SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            playlistContext: context,
             userDefaults:    defaults
         )
-        sut.playlistContext = context
         return Fixture(sut: sut, fake: fake, context: context, alertCenter: alertCenter)
     }
 
@@ -1357,10 +1362,10 @@ Key points:
   `async` `tearDown`; building the SUT in `makeSUT()` (instead of assigning
   fixture properties in a synchronous `setUp()`) keeps the file free of
   strict-concurrency warnings
-- Seed `FakePlaylistContext.playlists` with `Track(url:)` values and keep
-  the context alive for the test — the controller holds it weakly
-- A test that does construct an `AppState` (composition-root and playlist
-  tests) injects a fresh `FakePlaylistStore()` alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. Tests that exercise relaunch (a second `AppState` over the same data) must share one `FakePlaylistStore` instance across both.
+- Seed `FakePlaylistContext.playlists` with `Track(url:)` values and pass
+  the context to the controller's `init`
+- A test that does construct an `AppState` (composition-root and cross-store
+  tests) injects a fresh `FakePlaylistStore()` alongside the isolated `UserDefaults` — `AppState` defaults `playlistStore` to a real `FilePlaylistStore` writing to the shared Application Support directory, so any test that omits it cross-contaminates the on-disk `playlists.json`. A `PlaylistCollection` test builds the collection directly on a `FakePlaylistStore`; tests that exercise relaunch (a second collection over the same data) share one store instance across both.
 - Setup helpers like `loadTrackIntoSUT()` should reset call counts so
   assertions target the operation under test, not the setup
 
@@ -1397,24 +1402,50 @@ let relaunched = SettingsStore(iapManager: mockIAP, userDefaults: testDefaults)
 XCTAssertEqual(relaunched.replayGainMode, .album)
 
 // Playback controller built directly — playlist state comes from a
-// FakePlaylistContext; relaunch is a second controller on the same suite
+// FakePlaylistContext passed at init; relaunch is a second controller on
+// the same suite
 let context = FakePlaylistContext()
 let controller = PlaybackController(
     playbackService: fakePlayback,
     alertCenter: AlertCenter(),
     settingsStore: settingsStore,
+    playlistContext: context,
     userDefaults: testDefaults
 )
-controller.playlistContext = context
 context.playlists[0].tracks = [Track(url: url)]
 controller.cycleRepeatMode()                      // persists hp.repeatMode on change
 let relaunchedController = PlaybackController(
     playbackService: FakePlaybackService(),
     alertCenter: AlertCenter(),
     settingsStore: settingsStore,
+    playlistContext: FakePlaylistContext(),
     userDefaults: testDefaults
 )
 XCTAssertEqual(relaunchedController.repeatMode, .all)
+
+// Playlist collection built directly — relaunch is a second collection on
+// the same FakePlaylistStore and suite
+let store = FakePlaylistStore()
+let collection = PlaylistCollection(
+    tagReaderService: fakeTagReader,
+    fileDropService: FileDropService(),
+    playlistStore: store,
+    undoManager: UndoManager(),
+    alertCenter: AlertCenter(),
+    settingsStore: settingsStore,
+    userDefaults: testDefaults
+)
+await collection.load(urls: [url])                // saves to the store
+let relaunchedCollection = PlaylistCollection(
+    tagReaderService: FakeTagReaderService(),
+    fileDropService: FileDropService(),
+    playlistStore: store,
+    undoManager: UndoManager(),
+    alertCenter: AlertCenter(),
+    settingsStore: settingsStore,
+    userDefaults: testDefaults
+)
+XCTAssertEqual(relaunchedCollection.playlist.tracks.count, 1)
 
 // Stub a lyrics resolution (Slice 14-A: the SUT is LyricsStore, built
 // directly — no AppState needed)
@@ -1479,9 +1510,10 @@ AVAssetReaderDecoder, AVAudioEngine, AVMetadataTagReader (AVFoundation)
    - Any other file importing either is a boundary violation
 
 5. **Views use AppState and the feature stores only**
-   - No ViewModels — AppState plus the extracted `@Observable` feature
-     stores (`AlertCenter`, `LyricsStore`, `SettingsStore`,
-     `PlaybackController`) are the observable state
+   - No ViewModels — the extracted `@Observable` feature stores
+     (`AlertCenter`, `LyricsStore`, `SettingsStore`, `PlaybackController`,
+     `PlaylistCollection`) are the observable state; AppState is their
+     composition root
    - No direct service access from Views
    - Async store methods dispatched via `Task { await ... }`
 

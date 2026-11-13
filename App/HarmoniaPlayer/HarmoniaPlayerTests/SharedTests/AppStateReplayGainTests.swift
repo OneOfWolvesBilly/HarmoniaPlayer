@@ -8,7 +8,8 @@
 import XCTest
 @testable import Harmonia_Player
 
-/// Tests for Slice 8-C: ReplayGain mode selection and volume gain application.
+/// Cross-component ReplayGain tests on AppState: the root-wired mode-change
+/// closure and the EQ × ReplayGain signal-chain interaction.
 @MainActor
 final class AppStateReplayGainTests: XCTestCase {
 
@@ -52,7 +53,7 @@ final class AppStateReplayGainTests: XCTestCase {
     private func loadTrack(
         replayGainTrack: Double? = nil,
         replayGainAlbum: Double? = nil
-    ) async -> Track {
+    ) async throws -> Track {
         let url = URL(fileURLWithPath: "/tmp/rg-test-\(UUID().uuidString).mp3")
         let track = Track(
             url: url,
@@ -61,8 +62,8 @@ final class AppStateReplayGainTests: XCTestCase {
             replayGainAlbum: replayGainAlbum
         )
         fakeTagReader.stubbedMetadata[url] = track
-        await sut.load(urls: [url])
-        return sut.playlist.tracks.last!
+        await sut.playlistCollection.load(urls: [url])
+        return try XCTUnwrap(sut.playlistCollection.playlist.tracks.last)
     }
 
     /// Returns the expected effective volume after applying gainDB on top of baseVolume, clamped to [0, 1].
@@ -74,9 +75,9 @@ final class AppStateReplayGainTests: XCTestCase {
 
     func testReplayGain_ModeSwitch_DuringPlayback_AppliesImmediately() async throws {
         let gainDB = -6.0
-        let track = await loadTrack(replayGainTrack: gainDB, replayGainAlbum: -3.0)
+        let track = try await loadTrack(replayGainTrack: gainDB, replayGainAlbum: -3.0)
         sut.settingsStore.replayGainMode = .off
-        await sut.play(trackID: track.id)
+        await sut.playbackController.play(trackID: track.id)
 
         // Switch to track mode while playing — should apply immediately
         sut.settingsStore.replayGainMode = .track
@@ -89,7 +90,7 @@ final class AppStateReplayGainTests: XCTestCase {
     }
 
     func testReplayGain_ModeSwitch_WhenStopped_DoesNotCallSetVolume() async throws {
-        let track = await loadTrack(replayGainTrack: -6.0)
+        let track = try await loadTrack(replayGainTrack: -6.0)
         _ = track  // loaded but not played
         let callCountBefore = fakePlaybackService.setVolumeCallCount
 
@@ -99,7 +100,7 @@ final class AppStateReplayGainTests: XCTestCase {
         XCTAssertEqual(fakePlaybackService.setVolumeCallCount, callCountBefore)
     }
 
-    // MARK: - EQ + ReplayGain interaction (Slice 9-K)
+    // MARK: - EQ + ReplayGain interaction
 
     /// EQ preamp and ReplayGain operate on independent signal-chain
     /// stages: preamp lives in the EQ node (delivered via `EQService`)
@@ -108,7 +109,6 @@ final class AppStateReplayGainTests: XCTestCase {
     /// contributions therefore add — they must never multiply or
     /// double-apply.
     ///
-    /// Spec §9-K matrix row `testEQReplayGainInteraction_AdditiveCombination`:
     /// - preamp = -3 dB, RG = -2 dB, master volume = 0 dB (linear 1.0)
     /// - Total system gain in dB = -3 + (-2) + 0 = **-5 dB**
     ///
@@ -118,7 +118,7 @@ final class AppStateReplayGainTests: XCTestCase {
     /// -2 dB (RG only — preamp was NOT folded into setVolume).
     func testEQReplayGainInteraction_AdditiveCombination() async throws {
         // Given: track tagged with RG = -2 dB
-        let track = await loadTrack(replayGainTrack: -2.0)
+        let track = try await loadTrack(replayGainTrack: -2.0)
         sut.settingsStore.replayGainMode = .track
         await sut.playbackController.setVolume(1.0)
 
@@ -126,7 +126,7 @@ final class AppStateReplayGainTests: XCTestCase {
         sut.eqCoordinator.setPreamp(-3)
 
         // When: the track plays
-        await sut.play(trackID: track.id)
+        await sut.playbackController.play(trackID: track.id)
 
         // Then: EQ preamp reached the EQ node uncontaminated
         let actualPreamp = try XCTUnwrap(fakeEQService.lastSetPreamp)

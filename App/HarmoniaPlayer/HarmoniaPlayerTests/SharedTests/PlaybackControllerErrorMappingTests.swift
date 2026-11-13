@@ -46,9 +46,9 @@ final class PlaybackControllerErrorMappingTests: XCTestCase {
             playbackService: fake,
             alertCenter: alertCenter,
             settingsStore: SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            playlistContext: context,
             userDefaults: defaults
         )
-        sut.playlistContext = context
         return Fixture(sut: sut, fake: fake, context: context, alertCenter: alertCenter)
     }
 

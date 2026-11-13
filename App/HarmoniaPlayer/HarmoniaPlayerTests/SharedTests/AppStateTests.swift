@@ -11,10 +11,10 @@ import XCTest
 /// Unit tests for AppState wiring
 ///
 /// Validates that AppState correctly:
-/// - Wires dependencies (IAP → Flags → Factory → Services)
-/// - Exposes correct published state
-/// - Initializes without crashing
-/// - Does not execute behavior (Slice 1)
+/// - Wires dependencies (IAP → Flags → Factory → Services → Stores)
+/// - Hands its injected dependencies to the stores it constructs
+/// - Wires the stores' notifications to one another
+/// - Initializes without crashing and does not execute behavior
 ///
 /// Note: @MainActor required because AppState is @MainActor isolated.
 /// AppState.nonisolated deinit workaround is required for Xcode 26 beta.
@@ -69,13 +69,13 @@ final class AppStateTests: XCTestCase {
         )
 
         // Then: Dependencies are wired
-        XCTAssertFalse(appState.isProUnlocked,
+        XCTAssertFalse(appState.settingsStore.isProUnlocked,
                        "Free user should not have Pro unlocked")
         XCTAssertFalse(appState.settingsStore.featureFlags.supportsFLAC,
                        "Free tier should not support FLAC")
-        XCTAssertNotNil(appState.playbackService,
+        XCTAssertNotNil(appState.playbackController.playbackService,
                         "Playback service should be created")
-        XCTAssertNotNil(appState.tagReaderService,
+        XCTAssertNotNil(appState.playlistCollection.tagReaderService,
                         "Tag reader service should be created")
     }
 
@@ -112,13 +112,13 @@ final class AppStateTests: XCTestCase {
         )
 
         // Then: Dependencies are wired with Pro features
-        XCTAssertTrue(appState.isProUnlocked,
+        XCTAssertTrue(appState.settingsStore.isProUnlocked,
                       "Pro user should have Pro unlocked")
         XCTAssertTrue(appState.settingsStore.featureFlags.supportsFLAC,
                       "Pro tier should support FLAC")
-        XCTAssertNotNil(appState.playbackService,
+        XCTAssertNotNil(appState.playbackController.playbackService,
                         "Playback service should be created")
-        XCTAssertNotNil(appState.tagReaderService,
+        XCTAssertNotNil(appState.playlistCollection.tagReaderService,
                         "Tag reader service should be created")
     }
 
@@ -167,8 +167,7 @@ final class AppStateTests: XCTestCase {
         )
 
         // Then: Services are created but no behavior executed
-        // (Services are placeholders in Slice 1)
-        XCTAssertEqual(appState.playbackService.state, .idle,
+        XCTAssertEqual(appState.playbackController.playbackService.state, .idle,
                        "Playback should remain idle (no auto-play)")
         XCTAssertTrue(true, "AppState should not execute playback/playlist behavior")
     }
@@ -195,21 +194,7 @@ final class AppStateTests: XCTestCase {
                        "AppState must construct SettingsStore on its injected UserDefaults")
     }
 
-    // MARK: - Tests: Initial Error State (Slice 1-E)
-
-    /// Verifies that `lastError` is `nil` on init.
-    /// Nothing in Slice 1 sets this property; it is defined here
-    /// for Slice 4 (playback) to assign.
-    func testAppState_InitialLastError_IsNil() {
-        // Given / When: Fresh AppState
-        let sut = makeSUT()
-
-        // Then: No error present before any playback attempt
-        XCTAssertNil(sut.lastError,
-                     "lastError should be nil on init")
-    }
-
-    // MARK: - Tests: Slice 1-F — TagReader Wiring Verification
+    // MARK: - Tests: TagReader Wiring Verification
 
     /// `makeTagReaderService()` is called exactly once during `AppState.init`.
     func testAppState_Init_CallsMakeTagReaderService() {
@@ -231,11 +216,12 @@ final class AppStateTests: XCTestCase {
         let sut = makeSUT()
 
         // Then
-        XCTAssertNotNil(sut.tagReaderService,
+        XCTAssertNotNil(sut.playlistCollection.tagReaderService,
                         "tagReaderService should be non-nil after init")
     }
 
-    /// `tagReaderService` stored in AppState is the exact instance the provider returned.
+    /// `tagReaderService` stored in the playlist collection is the exact
+    /// instance the provider returned.
     ///
     /// Injects a known `FakeTagReaderService` via `FakeCoreProvider(tagReader:)`
     /// so the `===` identity check is unambiguous.
@@ -248,9 +234,9 @@ final class AppStateTests: XCTestCase {
         // When
         let sut = AppState(iapManager: iap, provider: provider, userDefaults: makeIsolatedDefaults(), playlistStore: FakePlaylistStore())
 
-        // Then: AppState holds the exact instance the provider returned
+        // Then: the collection holds the exact instance the provider returned
         XCTAssertTrue(
-            sut.tagReaderService === knownFake,
+            sut.playlistCollection.tagReaderService === knownFake,
             "AppState should wire the exact TagReaderService instance returned by the provider"
         )
     }
@@ -270,7 +256,7 @@ final class AppStateTests: XCTestCase {
 
         // Then: No metadata reads triggered by init
         XCTAssertEqual(knownFake.readMetadataCallCount, 0,
-                       "AppState.init must not call readMetadata — no eager fetch in Slice 1")
+                       "AppState.init must not call readMetadata — no eager fetch")
     }
 
     // MARK: - Tests: Playback controller wiring
@@ -297,7 +283,7 @@ final class AppStateTests: XCTestCase {
 
     /// Verifies the root wiring from the playback controller's current-track
     /// change to the lyrics store's resolution.
-    func testInit_WiresCurrentTrackChangeToLyricsStore() async {
+    func testInit_WiresCurrentTrackChangeToLyricsStore() async throws {
         // Given: a lyrics service stub that records resolution requests
         let stub = StubLyricsService()
         let provider = FakeCoreProvider(lyricsService: stub)
@@ -307,8 +293,8 @@ final class AppStateTests: XCTestCase {
             userDefaults: makeIsolatedDefaults(),
             playlistStore: FakePlaylistStore()
         )
-        await appState.load(urls: [URL(fileURLWithPath: "/tmp/lyrics-wiring.mp3")])
-        let track = appState.playlist.tracks[0]
+        await appState.playlistCollection.load(urls: [URL(fileURLWithPath: "/tmp/lyrics-wiring.mp3")])
+        let track = try XCTUnwrap(appState.playlistCollection.playlist.tracks.first)
 
         // When: the controller changes the current track
         await appState.playbackController.play(trackID: track.id)
@@ -316,6 +302,79 @@ final class AppStateTests: XCTestCase {
         // Then: the lyrics store resolved lyrics for that track
         XCTAssertEqual(stub.lastResolvedTrack?.id, track.id,
                        "a currentTrack change must reach LyricsStore.updateResolution(for:)")
+    }
+
+    /// Verifies that the playback controller reads playlist state from the
+    /// playlist collection AppState constructed for it.
+    func testInit_PlaybackControllerReadsPlaylistCollection() async throws {
+        // Given: one track loaded through the collection
+        let appState = makeSUT()
+        await appState.playlistCollection.load(urls: [URL(fileURLWithPath: "/tmp/context-wiring.mp3")])
+        let track = try XCTUnwrap(appState.playlistCollection.playlist.tracks.first)
+
+        // When: play() with no current track resolves from the context
+        await appState.playbackController.play()
+
+        // Then: the controller played the collection's track
+        XCTAssertEqual(appState.playbackController.currentTrack, track,
+                       "the controller must resolve tracks in appState.playlistCollection")
+    }
+
+    // MARK: - Tests: Playlist collection wiring
+
+    /// Verifies that AppState hands its injected `PlaylistStore` to the
+    /// playlist collection, so persisted playlists are restored at init.
+    func testInit_PlaylistCollectionRestoresFromInjectedStore() {
+        // Given: a store seeded with one playlist
+        let store = FakePlaylistStore(stored: [Playlist(name: "Seeded")])
+
+        // When: AppState is built on that store
+        let appState = AppState(
+            iapManager: MockIAPManager(),
+            provider: FakeCoreProvider(),
+            userDefaults: makeIsolatedDefaults(),
+            playlistStore: store
+        )
+
+        // Then: the collection restored the persisted playlists
+        XCTAssertEqual(appState.playlistCollection.playlists.first?.name, "Seeded",
+                       "AppState must construct PlaylistCollection on its injected PlaylistStore")
+    }
+
+    // MARK: - Tests: Error dismissal wiring
+
+    /// Given the playback controller is in `.error(…)` and the alert store's
+    /// error surface is populated,
+    /// when `alertCenter.clearLastError()` is called (the error alert's
+    /// dismiss action),
+    /// then the controller's `playbackState` becomes `.stopped` through the
+    /// root-wired `onErrorCleared` closure and the store's surface is cleared.
+    func testClearLastError_ErrorState_BecomesStopped() {
+        // Given
+        let sut = makeSUT()
+        sut.playbackController.playbackState = .error(.failedToDecode)
+        sut.alertCenter.lastError = .failedToDecode
+        sut.alertCenter.lastErrorDetail = "failedToDecode: /tmp/broken.mp3"
+        sut.alertCenter.failedTrackName = "Broken Track"
+        sut.alertCenter.showFileNotFoundAlert = true
+        sut.alertCenter.skippedInaccessibleNames = ["Broken Track"]
+
+        // When
+        sut.alertCenter.clearLastError()
+
+        // Then
+        XCTAssertEqual(sut.playbackController.playbackState, .stopped,
+                       "dismissing the error alert must transition the controller from .error to .stopped")
+        XCTAssertNil(sut.alertCenter.lastError,
+                     "clearLastError() must clear the store's lastError")
+        XCTAssertNil(sut.alertCenter.lastErrorDetail,
+                     "clearLastError() must clear the store's lastErrorDetail")
+        XCTAssertNil(sut.alertCenter.failedTrackName,
+                     "clearLastError() must clear the store's failedTrackName")
+        XCTAssertFalse(sut.alertCenter.showFileNotFoundAlert,
+                       "clearLastError() must lower the store's showFileNotFoundAlert")
+        XCTAssertTrue(sut.alertCenter.skippedInaccessibleNames.isEmpty,
+                      "clearLastError() must clear the store's skippedInaccessibleNames")
     }
 
     // MARK: - Tests: showPaywallIfNeeded facade

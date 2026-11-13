@@ -41,9 +41,9 @@ final class PlaybackControllerPersistenceTests: XCTestCase {
             playbackService: FakePlaybackService(),
             alertCenter: AlertCenter(),
             settingsStore: SettingsStore(iapManager: MockIAPManager(), userDefaults: defaults),
+            playlistContext: FakePlaylistContext(),
             userDefaults: defaults
         )
-        sut.playlistContext = nil
         return sut
     }
 

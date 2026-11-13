@@ -106,24 +106,26 @@ Repeat for each commit in the plan.
 ### 4.2 Test integrity
 
 **One operation per test.** Setup and seed operations must clear the
-undo stack (or equivalent state) before the operation under test:
+counts, the undo stack, or equivalent state before the operation under
+test:
 
 ```swift
-func testPlay_CallsPlaybackServicePlay() async {
-    // Setup: load a track so play() can proceed past the guards.
-    // loadTrackIntoSUT() calls play(trackID:) internally, which bumps
-    // counts and registers undo actions.
-    await loadTrackIntoSUT()
+func testUndoRemoveTrack_ReInsertsTrack() async throws {
+    // Setup: load two tracks so removeTrack has a target.
+    // load(urls:) registers its own undo action, which must not be the
+    // one the test undoes.
+    let (sut, undoManager) = makeSUT()
+    await sut.load(urls: [url("x"), url("y")])
 
-    // Clear counts and undo stack so the next operation is isolated.
-    fakePlaybackService.resetCounts()
-    sut.undoManager.removeAllActions()
+    // Clear the undo stack so the next operation is isolated.
+    undoManager.removeAllActions()
 
     // Operation under test — assertions target THIS call only.
-    await sut.play()
+    let idToRemove = try XCTUnwrap(sut.playlist.tracks.first).id
+    sut.removeTrack(idToRemove)
+    undoManager.undo()
 
-    XCTAssertEqual(fakePlaybackService.playCallCount, 1)
-    XCTAssertEqual(sut.playbackState, .playing)
+    XCTAssertEqual(sut.playlist.tracks.count, 2)
 }
 ```
 

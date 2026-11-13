@@ -24,8 +24,12 @@
 //    sampleRate, channels, fileSize, fileFormat, comment.
 //  - TableColumn definitions are split across multiple @TableColumnBuilder
 //    functions to stay within Swift type-checker complexity limits.
-//  - No import HarmoniaCore — all state access goes through AppState.
-//  - All UI strings use NSLocalizedString(bundle:appState.languageBundle)
+//  - Playlist state and operations come from `PlaylistCollection`, the
+//    playing-track / shuffle reads from `PlaybackController`, the tier and
+//    the UI string bundle from `SettingsStore`, and the import-skip warning
+//    from `AlertCenter`, all observed via `@Environment` (injected by
+//    `HarmoniaPlayerApp`). No import HarmoniaCore.
+//  - All UI strings use NSLocalizedString(bundle: settingsStore.languageBundle)
 //    for runtime language switching support.
 //
 
@@ -34,7 +38,9 @@ import UniformTypeIdentifiers
 
 struct PlaylistView: View {
 
-    @EnvironmentObject private var appState: AppState
+    @Environment(PlaylistCollection.self) private var playlistCollection
+    @Environment(PlaybackController.self) private var playbackController
+    @Environment(SettingsStore.self) private var settingsStore
 
     /// Alert-surface store — read for the import-skip warning after an
     /// M3U8 import from the tab context menu.
@@ -90,13 +96,13 @@ struct PlaylistView: View {
     // MARK: - Localization helper
 
     private func L(_ key: String) -> String {
-        NSLocalizedString(key, bundle: appState.languageBundle, comment: "")
+        NSLocalizedString(key, bundle: settingsStore.languageBundle, comment: "")
     }
 
     // MARK: - Computed
 
     private var totalDuration: TimeInterval {
-        appState.playlist.tracks.map { $0.duration }.reduce(0, +)
+        playlistCollection.playlist.tracks.map { $0.duration }.reduce(0, +)
     }
 
     private func formatTotalDuration(_ seconds: TimeInterval) -> String {
@@ -124,7 +130,7 @@ struct PlaylistView: View {
             toolbarRow
             Divider()
 
-            if appState.playlist.tracks.isEmpty {
+            if playlistCollection.playlist.tracks.isEmpty {
                 emptyStateView
             } else {
                 tableView
@@ -133,16 +139,16 @@ struct PlaylistView: View {
             }
         }
         .dropDestination(for: AudioFileItem.self) { items, _ in
-            guard !appState.isPerformingBlockingOperation else { return false }
+            guard !playlistCollection.isPerformingBlockingOperation else { return false }
             let urls = items.map(\.url)
-            Task { await appState.handleFileDrop(urls: urls) }
+            Task { await playlistCollection.handleFileDrop(urls: urls) }
             return true
         }
         .onReceive(NotificationCenter.default.publisher(for: .openFilePicker)) { _ in
             openFilePicker()
         }
         .onReceive(NotificationCenter.default.publisher(for: .renameActivePlaylist)) { _ in
-            beginRename(at: appState.activePlaylistIndex)
+            beginRename(at: playlistCollection.activePlaylistIndex)
         }
     }
 
@@ -151,7 +157,7 @@ struct PlaylistView: View {
     private var playlistTabBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 0) {
-                ForEach(Array(appState.playlists.enumerated()), id: \.element.id) { index, pl in
+                ForEach(Array(playlistCollection.playlists.enumerated()), id: \.element.id) { index, pl in
                     playlistTab(index: index, playlist: pl)
                 }
             }
@@ -166,7 +172,7 @@ struct PlaylistView: View {
             // child views win SwiftUI hit testing on their own bounds; this
             // contextMenu fires only when no tab is under the cursor.
             Button(L("ctx_new_playlist")) {
-                appState.newPlaylist(name: "")
+                playlistCollection.newPlaylist(name: "")
                 NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
             }
             Button(L("ctx_import_playlist")) { importPlaylist() }
@@ -175,13 +181,13 @@ struct PlaylistView: View {
 
     @ViewBuilder
     private func playlistTab(index: Int, playlist: Playlist) -> some View {
-        let isActive   = index == appState.activePlaylistIndex
+        let isActive   = index == playlistCollection.activePlaylistIndex
         let isRenaming = renamingIndex == index
-        let isPlaying  = playlist.id == appState.playingPlaylistID
+        let isPlaying  = playlist.id == playbackController.playingPlaylistID
 
         Button {
             if renamingIndex != nil { commitRename() }
-            appState.switchPlaylist(to: index)
+            playlistCollection.switchPlaylist(to: index)
         } label: {
             HStack(spacing: 4) {
                 if isPlaying {
@@ -220,11 +226,11 @@ struct PlaylistView: View {
             Button(L("ctx_export_playlist")) { exportPlaylist(at: index) }
             Divider()
             Button(L("ctx_delete"), role: .destructive) {
-                appState.deletePlaylist(at: index)
+                playlistCollection.deletePlaylist(at: index)
             }
             Divider()
             Button(L("ctx_new_playlist")) {
-                appState.newPlaylist(name: "")
+                playlistCollection.newPlaylist(name: "")
                 NotificationCenter.default.post(name: .renameActivePlaylist, object: nil)
             }
             Button(L("ctx_import_playlist")) { importPlaylist() }
@@ -252,7 +258,7 @@ struct PlaylistView: View {
                 }
                 .help(L("help_reset_columns"))
             }
-            if appState.isShuffled {
+            if playbackController.isShuffled {
                 Button {
                     showShuffleQueue.toggle()
                 } label: {
@@ -284,23 +290,25 @@ struct PlaylistView: View {
     // column count; grouping into sub-functions restores linear inference.
 
     private var tableView: some View {
-        Table(of: Track.self,
-              selection: $appState.selectedTrackIDs,
+        @Bindable var playlistCollection = playlistCollection
+
+        return Table(of: Track.self,
+              selection: $playlistCollection.selectedTrackIDs,
               sortOrder: $sortOrder,
               columnCustomization: $columnCustomization) {
             coreColumns
             tagColumns
             technicalColumns
         } rows: {
-            ForEach(appState.playlist.tracks) { track in
+            ForEach(playlistCollection.playlist.tracks) { track in
                 // Manual drag-to-reorder is offered only when no column sort is
-                // active; the AppState guard enforces the same rule in the model.
+                // active; the store's guard enforces the same rule in the model.
                 if sortOrder.isEmpty {
                     TableRow(track)
                         .draggable(PlaylistReorderItem(id: track.id))
                         .dropDestination(for: PlaylistReorderItem.self) { items in
                             if let dragged = items.first {
-                                appState.moveTrack(id: dragged.id, before: track.id)
+                                playlistCollection.moveTrack(id: dragged.id, before: track.id)
                             }
                         }
                 } else {
@@ -317,31 +325,31 @@ struct PlaylistView: View {
         .contextMenu(forSelectionType: Track.ID.self) { ids in
             if let id = ids.first {
                 Button(L("ctx_play")) {
-                    Task { await appState.play(trackID: id) }
+                    Task { await playbackController.play(trackID: id) }
                 }
                 Button(L("ctx_play_next")) {
-                    appState.playNext(id)
+                    playlistCollection.playNext(id, afterCurrent: playbackController.currentTrack?.id)
                 }
                 Divider()
                 Button(L("ctx_get_info")) {
-                    appState.showFileInfo(trackID: id)
+                    playlistCollection.showFileInfo(trackID: id)
                 }
                 Divider()
                 Button(L("ctx_remove"), role: .destructive) {
-                    appState.removeTracks(ids)
-                    appState.selectedTrackIDs.subtract(ids)
+                    playlistCollection.removeTracks(ids)
+                    playlistCollection.selectedTrackIDs.subtract(ids)
                 }
             }
         } primaryAction: { ids in
             if let id = ids.first {
-                Task { await appState.play(trackID: id) }
+                Task { await playbackController.play(trackID: id) }
             }
         }
         .accessibilityIdentifier("playlist-list")
         .dropDestination(for: AudioFileItem.self) { items, _ in
-            guard !appState.isPerformingBlockingOperation else { return false }
+            guard !playlistCollection.isPerformingBlockingOperation else { return false }
             let urls = items.map(\.url)
-            Task { await appState.handleFileDrop(urls: urls) }
+            Task { await playlistCollection.handleFileDrop(urls: urls) }
             return true
         }
         .onAppear {
@@ -357,9 +365,9 @@ struct PlaylistView: View {
     @TableColumnBuilder<Track, KeyPathComparator<Track>>
     private var coreColumns: some TableColumnContent<Track, KeyPathComparator<Track>> {
         TableColumn("") { track in
-            Image(systemName: appState.currentTrack?.id == track.id
+            Image(systemName: playbackController.currentTrack?.id == track.id
                   ? "speaker.wave.2.fill" : "music.note")
-                .foregroundStyle(appState.currentTrack?.id == track.id
+                .foregroundStyle(playbackController.currentTrack?.id == track.id
                                  ? Color.accentColor : Color.secondary)
                 .frame(width: 16)
                 .opacity(track.isAccessible ? 1.0 : 0.6)
@@ -367,9 +375,9 @@ struct PlaylistView: View {
         .width(24)
 
         TableColumn(L("col_title"), value: \.title) { track in
-            let isFormatGated = AppState.proOnlyFormats
+            let isFormatGated = PlaylistCollection.proOnlyFormats
                 .contains(track.url.pathExtension.lowercased())
-                && !appState.isProUnlocked
+                && !settingsStore.isProUnlocked
             Text(track.title)
                 .lineLimit(1)
                 .foregroundStyle((track.isAccessible && !isFormatGated)
@@ -381,9 +389,9 @@ struct PlaylistView: View {
         .customizationID("col.title")
 
         TableColumn(L("col_artist"), value: \.artist) { track in
-            let isFormatGated = AppState.proOnlyFormats
+            let isFormatGated = PlaylistCollection.proOnlyFormats
                 .contains(track.url.pathExtension.lowercased())
-                && !appState.isProUnlocked
+                && !settingsStore.isProUnlocked
             Text(track.artist.isEmpty ? "—" : track.artist)
                 .lineLimit(1)
                 .foregroundStyle((track.isAccessible && !isFormatGated)
@@ -395,9 +403,9 @@ struct PlaylistView: View {
         .customizationID("col.artist")
 
         TableColumn(L("col_duration"), value: \.duration) { track in
-            let isFormatGated = AppState.proOnlyFormats
+            let isFormatGated = PlaylistCollection.proOnlyFormats
                 .contains(track.url.pathExtension.lowercased())
-                && !appState.isProUnlocked
+                && !settingsStore.isProUnlocked
             Text(formatDuration(track.duration))
                 .monospacedDigit()
                 .foregroundStyle((track.isAccessible && !isFormatGated)
@@ -549,7 +557,7 @@ struct PlaylistView: View {
 
     private func handleSortOrderChange() {
         guard let first = sortOrder.first else {
-            appState.restoreInsertionOrder()
+            playlistCollection.restoreInsertionOrder()
             return
         }
         let key: PlaylistSortKey
@@ -573,8 +581,8 @@ struct PlaylistView: View {
         default:                     key = .none
         }
         let ascending = first.order == .forward
-        let sorted = appState.playlist.tracks.sorted(using: sortOrder)
-        appState.applySort(sorted, key: key, ascending: ascending)
+        let sorted = playlistCollection.playlist.tracks.sorted(using: sortOrder)
+        playlistCollection.applySort(sorted, key: key, ascending: ascending)
     }
 
     // MARK: - Empty State
@@ -598,7 +606,7 @@ struct PlaylistView: View {
 
     private var footerView: some View {
         HStack {
-            let count = appState.playlist.tracks.count
+            let count = playlistCollection.playlist.tracks.count
             let word = count == 1 ? L("footer_track_singular") : L("footer_track_plural")
             Text("\(count) \(word)")
                 .font(.caption)
@@ -618,10 +626,10 @@ struct PlaylistView: View {
     // MARK: - Shuffle Queue Popover
 
     private var shuffleQueuePopover: some View {
-        let queue = appState.shuffleQueue
-        let currentIndex = appState.shuffleQueueIndex
+        let queue = playbackController.shuffleQueue
+        let currentIndex = playbackController.shuffleQueueIndex
         let tracks = queue.compactMap { id in
-            appState.playlist.tracks.first { $0.id == id }
+            playlistCollection.playlist.tracks.first { $0.id == id }
         }
 
         return VStack(alignment: .leading, spacing: 0) {
@@ -735,8 +743,8 @@ struct PlaylistView: View {
     // MARK: - Inline Rename
 
     private func beginRename(at index: Int) {
-        guard appState.playlists.indices.contains(index) else { return }
-        renameText = appState.playlists[index].name
+        guard playlistCollection.playlists.indices.contains(index) else { return }
+        renameText = playlistCollection.playlists[index].name
         renamingIndex = index
         DispatchQueue.main.async { isRenameFieldFocused = true }
     }
@@ -744,8 +752,8 @@ struct PlaylistView: View {
     private func commitRename() {
         guard let index = renamingIndex else { return }
         let trimmed = renameText.trimmingCharacters(in: .whitespaces)
-        let finalName = trimmed.isEmpty ? appState.playlists[index].name : trimmed
-        appState.renamePlaylist(at: index, name: finalName)
+        let finalName = trimmed.isEmpty ? playlistCollection.playlists[index].name : trimmed
+        playlistCollection.renamePlaylist(at: index, name: finalName)
         isRenameFieldFocused = false
         renamingIndex = nil
     }
@@ -768,14 +776,14 @@ struct PlaylistView: View {
             UTType.wav,
             UTType(filenameExtension: "m4a")  ?? .audio,
             UTType(filenameExtension: "alac") ?? .audio,
-            // v0.1 frozen: Pro formats hidden. Re-enable in v0.2.
+            // Pro formats hidden.
             // UTType(filenameExtension: "flac") ?? .audio,
             // UTType(filenameExtension: "dsf")  ?? .audio,
             // UTType(filenameExtension: "dff")  ?? .audio,
             UTType.folder
         ]
         if panel.runModal() == .OK {
-            Task { await appState.handleFileDrop(urls: panel.urls) }
+            Task { await playlistCollection.handleFileDrop(urls: panel.urls) }
         }
     }
 
@@ -790,14 +798,14 @@ struct PlaylistView: View {
     /// playlist, so right-clicking a non-active tab exports that tab's contents
     /// without changing the current selection.
     private func exportPlaylist(at index: Int) {
-        guard appState.playlists.indices.contains(index) else { return }
+        guard playlistCollection.playlists.indices.contains(index) else { return }
 
         let panel = NSSavePanel()
         panel.title = L("panel_export_title")
         if let m3u8Type = UTType(filenameExtension: "m3u8") {
             panel.allowedContentTypes = [m3u8Type]
         }
-        panel.nameFieldStringValue = "\(appState.playlists[index].name).m3u8"
+        panel.nameFieldStringValue = "\(playlistCollection.playlists[index].name).m3u8"
         panel.canCreateDirectories = true
 
         let useRelative = NSButton(
@@ -815,7 +823,7 @@ struct PlaylistView: View {
 
         Task {
             do {
-                try appState.writeExport(playlistAt: index, to: url, pathStyle: pathStyle)
+                try playlistCollection.writeExport(playlistAt: index, to: url, pathStyle: pathStyle)
             } catch {
                 await MainActor.run {
                     let alert = NSAlert()
@@ -835,8 +843,8 @@ struct PlaylistView: View {
     /// Used by the tab bar empty-area right-click "Import Playlist…" context
     /// menu item. Behaviour mirrors `HarmoniaPlayerCommands.importPlaylist(appState:)`
     /// — same NSOpenPanel filter, same skipped-files warning alert — and shares
-    /// the same `appState.importPlaylist(from:)` flow that creates a new tab
-    /// named after the .m3u8 filename.
+    /// the same `playlistCollection.importPlaylist(from:)` flow that creates a
+    /// new tab named after the .m3u8 filename.
     private func importPlaylist() {
         let panel = NSOpenPanel()
         panel.title = L("panel_import_title")
@@ -849,7 +857,7 @@ struct PlaylistView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         Task {
-            await appState.importPlaylist(from: url)
+            await playlistCollection.importPlaylist(from: url)
             let skipped = alertCenter.skippedImportURLs
             if !skipped.isEmpty {
                 await MainActor.run {

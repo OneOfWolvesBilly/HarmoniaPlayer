@@ -1,13 +1,14 @@
 //
-//  AppState+M3U8.swift
+//  PlaylistCollection+M3U8.swift
 //  HarmoniaPlayer / Shared / Models
 //
-//  PURPOSE: M3U8 playlist import and export.
+//  SPDX-License-Identifier: MIT
 //
 
 import Foundation
 
-extension AppState {
+/// M3U8 playlist import and export.
+extension PlaylistCollection {
 
     // MARK: - M3U8 Import / Export
 
@@ -47,19 +48,21 @@ extension AppState {
     /// Reads an M3U8 file, creates a new playlist tab named after the filename,
     /// and re-reads metadata via `TagReaderService` for each resolved URL.
     ///
-    /// Files not found on disk are skipped and recorded in `skippedImportURLs`,
-    /// which the view layer observes to present a warning alert.
+    /// Files not found on disk are skipped and recorded in the alert store's
+    /// `skippedImportURLs`, which the view layer observes to present a warning
+    /// alert.
     ///
-    /// Called by `HarmoniaPlayerCommands` after `NSOpenPanel` resolves the source URL.
+    /// Called by `HarmoniaPlayerCommands` and the playlist view after
+    /// `NSOpenPanel` resolves the source URL.
     ///
     /// - Parameter url: Source `.m3u8` file URL (provided by NSOpenPanel).
     func importPlaylist(from url: URL) async {
         isPerformingBlockingOperation = true
         defer { isPerformingBlockingOperation = false }
-        skippedImportURLs = []
+        alertCenter.skippedImportURLs = []
 
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
-            lastError = .failedToOpenFile
+            alertCenter.lastError = .failedToOpenFile
             return
         }
 
@@ -97,7 +100,7 @@ extension AppState {
         }
 
         if !skipped.isEmpty {
-            skippedImportURLs = skipped
+            alertCenter.skippedImportURLs = skipped
         }
         saveState()
     }

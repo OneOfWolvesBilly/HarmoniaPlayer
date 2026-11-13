@@ -104,14 +104,15 @@ struct HarmoniaPlayerApp: App {
                 // state and take no injection.
                 .environment(appState.lyricsStore)
                 // Settings store — required by PaywallView (presented as a
-                // sheet from ContentView). The Mini Player, Equalizer, and
-                // File Info subtrees read settings state only through
-                // AppState's forwarders and take no injection.
+                // sheet from ContentView) and PlaylistView. The Equalizer and
+                // File Info subtrees read the string bundle only through
+                // AppState's forwarder and take no injection.
                 .environment(appState.settingsStore)
-                // Playback controller — required by ContentView, PlayerView, and
-                // LyricsPanel. PlaylistView still reads playback state through
-                // AppState's forwarders.
+                // Playback controller — required by ContentView, PlayerView,
+                // LyricsPanel, and PlaylistView.
                 .environment(appState.playbackController)
+                // Playlist collection — required by PlaylistView and PlayerView.
+                .environment(appState.playlistCollection)
                 // EQ coordinator — required by PlayerView's EQ toolbar button,
                 // which reads `isEnabled` directly.
                 .environmentObject(appState.eqCoordinator)
@@ -151,6 +152,10 @@ struct HarmoniaPlayerApp: App {
             MiniPlayerView()
                 .environmentObject(appState)
                 .environment(appState.playbackController)
+                // Playlist collection and settings store — the picker, the
+                // track list, the tier check, and the string bundle.
+                .environment(appState.playlistCollection)
+                .environment(appState.settingsStore)
         }
         .windowResizability(.contentSize)
         .defaultPosition(.topTrailing)
@@ -182,6 +187,8 @@ struct HarmoniaPlayerApp: App {
             if let trackID {
                 FileInfoView(trackID: trackID)
                     .environmentObject(appState)
+                    // Playlist collection — the track lookup by id.
+                    .environment(appState.playlistCollection)
             } else {
                 EmptyView()
             }

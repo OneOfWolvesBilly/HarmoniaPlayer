@@ -23,13 +23,14 @@
 //    and resizable. Multiple File Info windows can be open simultaneously,
 //    one per track ID.
 //  - Receives the `trackID` as a value-based window payload; the view looks
-//    up the current `Track` from `AppState.playlist` on every render so the
-//    data stays in sync with any playlist updates (e.g. future v0.2 tag edits).
+//    up the current `Track` from `PlaylistCollection.playlist` on every
+//    render so the data stays in sync with any playlist updates.
 //  - When the track is no longer present in the active playlist (removed
 //    by the user), the view shows a localized "unavailable" placeholder
 //    but keeps the window open so the user can close it explicitly.
-//  - `AppState` is provided via `@EnvironmentObject` by the `WindowGroup`
-//    content closure in `HarmoniaPlayerApp`.
+//  - `PlaylistCollection` is observed via `@Environment` and `AppState` is
+//    provided via `@EnvironmentObject` (for `languageBundle`), both injected
+//    by the `WindowGroup` content closure in `HarmoniaPlayerApp`.
 //  - Source editing is deferred to the v0.2 Tag Editor. This view does not
 //    write xattrs; it only reads kMDItemWhereFroms for display via
 //    `ExtendedAttributeService`.
@@ -50,6 +51,7 @@ struct FileInfoView: View {
     // MARK: - Environment
 
     @EnvironmentObject private var appState: AppState
+    @Environment(PlaylistCollection.self) private var playlistCollection
 
     // MARK: - State
 
@@ -66,7 +68,7 @@ struct FileInfoView: View {
     /// The view renders an "unavailable" placeholder in that case and keeps
     /// the window open so the user can close it explicitly.
     private var track: Track? {
-        appState.playlist.tracks.first { $0.id == trackID }
+        playlistCollection.playlist.tracks.first { $0.id == trackID }
     }
 
     // MARK: - Localization helper

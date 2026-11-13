@@ -11,13 +11,12 @@ import Foundation
 /// playlists it resolves tracks in, the index of the playlist the user is
 /// looking at, and the current table selection.
 ///
-/// `AppState` conforms today; the playlist store conforms once the
-/// playlist state moves out of `AppState`.
+/// `PlaylistCollection` conforms; the composition root passes it to
+/// `PlaybackController.init`. Controller tests substitute an in-memory
+/// double.
 @MainActor
 protocol PlaylistContext: AnyObject {
     var playlists: [Playlist] { get set }
     var activePlaylistIndex: Int { get set }
     var selectedTrackIDs: Set<Track.ID> { get }
 }
-
-extension AppState: PlaylistContext {}

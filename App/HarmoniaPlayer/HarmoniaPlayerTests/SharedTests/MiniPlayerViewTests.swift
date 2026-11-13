@@ -4,7 +4,7 @@
 //
 //  SPDX-License-Identifier: MIT
 //
-//  Slice 8-B — Mini Player tests.
+//  Mini Player tests.
 //
 //  Tests cover:
 //    - MarqueeText @AppStorage default values
@@ -69,15 +69,15 @@ final class MiniPlayerViewTests: XCTestCase {
 
     func testMiniPlayerView_InitializesWithNoTrack() {
         let appState = makeSUT()
-        XCTAssertNil(appState.currentTrack)
+        XCTAssertNil(appState.playbackController.currentTrack)
         _ = MiniPlayerView().environmentObject(appState)
     }
 
     func testMiniPlayerView_InitializesAfterLoad() async {
         let appState = makeSUT()
         let url = URL(fileURLWithPath: "/tmp/test.mp3")
-        await appState.load(urls: [url])
-        XCTAssertFalse(appState.playlist.tracks.isEmpty)
+        await appState.playlistCollection.load(urls: [url])
+        XCTAssertFalse(appState.playlistCollection.playlist.tracks.isEmpty)
         _ = MiniPlayerView().environmentObject(appState)
     }
 
@@ -85,21 +85,21 @@ final class MiniPlayerViewTests: XCTestCase {
 
     func testSwitchMiniPlayerPlaylist_ChangesActiveIndex() async {
         let appState = makeSUT()
-        appState.newPlaylist(name: "Playlist 2")
-        XCTAssertEqual(appState.playlists.count, 2)
+        appState.playlistCollection.newPlaylist(name: "Playlist 2")
+        XCTAssertEqual(appState.playlistCollection.playlists.count, 2)
 
         await appState.switchMiniPlayerPlaylist(to: 1)
 
-        XCTAssertEqual(appState.activePlaylistIndex, 1)
+        XCTAssertEqual(appState.playlistCollection.activePlaylistIndex, 1)
     }
 
     func testSwitchMiniPlayerPlaylist_OutOfRange_IsNoOp() async {
         let appState = makeSUT()
-        let originalIndex = appState.activePlaylistIndex
+        let originalIndex = appState.playlistCollection.activePlaylistIndex
 
         await appState.switchMiniPlayerPlaylist(to: 99)
 
-        XCTAssertEqual(appState.activePlaylistIndex, originalIndex)
+        XCTAssertEqual(appState.playlistCollection.activePlaylistIndex, originalIndex)
     }
 
     func testSwitchMiniPlayerPlaylist_StopsPlayback() async {
@@ -111,7 +111,7 @@ final class MiniPlayerViewTests: XCTestCase {
             userDefaults: makeIsolatedDefaults(),
             playlistStore: FakePlaylistStore()
         )
-        appState.newPlaylist(name: "Playlist 2")
+        appState.playlistCollection.newPlaylist(name: "Playlist 2")
 
         await appState.switchMiniPlayerPlaylist(to: 1)
 

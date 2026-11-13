@@ -22,7 +22,7 @@ extension PlaybackController {
     ///
     /// No-op if playlist is empty.
     func playNextTrack() async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
         let tracks = context.playlists[context.activePlaylistIndex].tracks
         guard !tracks.isEmpty else { return }
 
@@ -74,7 +74,7 @@ extension PlaybackController {
     ///
     /// No-op if playlist is empty.
     func playPreviousTrack() async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
         let tracks = context.playlists[context.activePlaylistIndex].tracks
         guard !tracks.isEmpty else { return }
 
@@ -125,7 +125,7 @@ extension PlaybackController {
     /// Inaccessible tracks are skipped and listed in the file-not-found
     /// alert. No-op if no track has been played.
     func trackDidFinishPlaying() async {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
         guard let lastID = lastPlayedTrackID else { return }
         guard let playingIndex = context.playlists.firstIndex(where: { $0.id == playingPlaylistID }) else {
             await stop()
@@ -147,7 +147,7 @@ extension PlaybackController {
                     // Format gate disabled — Pro formats cannot enter the playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
                     // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                    // let isFormatGated = PlaylistCollection.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
                     // if isFormatGated && alertCenter.paywallDismissedThisSession {
                     //     nextIndex += 1
                     //     continue
@@ -193,7 +193,7 @@ extension PlaybackController {
                     // Format gate disabled — Pro formats cannot enter the playlist.
                     // Silently skip format-gated tracks if user dismissed paywall this session.
                     // let nextExt = next.url.pathExtension.lowercased()
-                    // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                    // let isFormatGated = PlaylistCollection.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
                     // if isFormatGated && alertCenter.paywallDismissedThisSession {
                     //     nextIndex += 1
                     //     continue
@@ -239,7 +239,7 @@ extension PlaybackController {
                 // Format gate disabled — Pro formats cannot enter the playlist.
                 // Silently skip format-gated tracks if user dismissed paywall this session.
                 // let nextExt = next.url.pathExtension.lowercased()
-                // let isFormatGated = AppState.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
+                // let isFormatGated = PlaylistCollection.proOnlyFormats.contains(nextExt) && !settingsStore.featureFlags.supportsFLAC
                 // if isFormatGated && alertCenter.paywallDismissedThisSession {
                 //     nextIndex = (nextIndex + 1) % count
                 //     attempts += 1
@@ -294,7 +294,7 @@ extension PlaybackController {
     /// If `startID` is provided, places it first so the currently playing
     /// track stays at the head of the new queue.
     func buildShuffleQueue(startingWith startID: Track.ID? = nil) {
-        guard let context = playlistContext else { return }
+        let context = playlistContext
         var ids = context.playlists[context.activePlaylistIndex].tracks
             .filter { $0.isAccessible }
             .map { $0.id }
