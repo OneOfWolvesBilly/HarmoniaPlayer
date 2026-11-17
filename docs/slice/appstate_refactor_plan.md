@@ -39,7 +39,7 @@ test targets from the Swift 5 language mode to Swift 6.
   milestone: it precedes the Pro tier (v2.0.0) but carries no version
   label of its own. Releases are cut by tagging `main`, so each completed
   stage ships with whichever release is tagged after it lands
-  (`HarmoniaPlayer_development_plan.md` §11.16). The same milestone also
+  (`HarmoniaPlayer_development_plan.md` §11.17). The same milestone also
   carries candidate slices outside this program (window-menu declarative
   semantics, lyrics expansion backlog, …), numbered when they open.
 - **Out of scope.** HarmoniaCore (hexagonal architecture is clean; only

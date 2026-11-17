@@ -807,7 +807,7 @@ Slice 6, the gate moved twice as scope expanded:
   own numbered slice instead.
 - **AppState decomposition refactor (pre-Pro milestone)** — the program
   that precedes the Pro tier. It carries no version label of its own:
-  releases are cut by tagging `main` (§11.16), so each completed stage
+  releases are cut by tagging `main` (§11.17), so each completed stage
   ships with whichever release is tagged after it lands. Design
   authority: `docs/slice/appstate_refactor_plan.md`.
   Opened stages: Slice 10 (token cleanup), Slice 12 (strict-concurrency
@@ -821,7 +821,9 @@ Slice 6, the gate moved twice as scope expanded:
   Slice 17 (crash-on-exception policy) is a defect-fix slice against the
   shipped app, outside the program — see §11.12. Slice 18 (correcting the
   window descriptions in the living docs) is a documentation-only
-  housekeeping slice, outside the program — see §11.13.
+  housekeeping slice, outside the program — see §11.13. Slice 21 (File
+  Info source row overlap) is a defect-fix slice against the shipped app,
+  outside the program — see §11.16.
 
 ### 11.2 Slice 7: UX and Data Layer (Free)
 
@@ -1024,7 +1026,7 @@ main-thread exception terminates the process and writes a crash report,
 adds a Debug-only launch-argument trigger to verify it in the real app,
 and guards the registration with a hosted unit test. The Slice 9-AA
 window-lifecycle decisions (D5) are unchanged. Ships in v1.0.1
-(see §11.16).
+(see §11.17).
 
 | Slice | Content | Status |
 |---|---|---|
@@ -1096,7 +1098,25 @@ terminate-time save-all, and the Mini Player playlist switch.
 |---|---|---|
 | 20 | PlaylistCollection extraction (incl. M3U8) + playlist → playback reaction closures + PlaylistContext at controller init + facade removal + @Environment view migration + test migration | ✅ |
 
-### 11.16 Version Targets
+### 11.16 Slice 21: File Info Source Row Overlap (defect fix)
+
+**Spec:** `docs/slice/slice_21_micro.md`
+
+Defect-fix slice against the shipped app, outside the AppState
+decomposition refactor program. The File Info window's SOURCE section
+caps each `kMDItemWhereFroms` row at two lines; once the user clicks into
+a URL that needs more, the field editor behind the selectable text lays
+the whole string out while the row keeps its two-line height, and the
+extra lines are painted over the next source. This slice removes the cap
+so every source row is as tall as its text, keys the rows by position so
+identical sources render as separate rows, and keeps the text selectable.
+Ships in v1.0.1 (see §11.17).
+
+| Slice | Content | Status |
+|---|---|---|
+| 21 | Source rows grow with their text; rows keyed by position | ⬜ |
+
+### 11.17 Version Targets
 
 | Version | Gate | Description |
 |---|---|---|
@@ -1112,7 +1132,7 @@ slice has not opened yet has no slice number (no reservations).
 |---|---|---|
 | 11 | Sleep/wake playback recovery | ✅ |
 | 17 | Crash-on-exception policy | ✅ |
-| at open | File Info SOURCE section: a long URL overlaps the next row | not opened |
+| 21 | File Info SOURCE section: a long URL overlaps the next row | ⬜ |
 | at open | Settings window cannot be enlarged to fit its form without scrolling | not opened |
 | at open | Change-time persistence of `volume` and `activePlaylistIndex` (BL-17A-01) | not opened |
 | at open | Playlist interaction latency and CPU load while playing | not opened |
