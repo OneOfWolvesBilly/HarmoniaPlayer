@@ -319,12 +319,12 @@ struct FileInfoView: View {
                         .padding(.horizontal, 16)
                         .padding(.top, 4)
                 } else {
-                    ForEach(whereSources, id: \.self) { source in
+                    ForEach(Array(whereSources.enumerated()), id: \.offset) { _, source in
                         Text(source)
                             .font(.body)
                             .foregroundStyle(Color.primary)
                             .textSelection(.enabled)
-                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 16)
                     }
                 }

@@ -257,7 +257,8 @@ File Info window, showing:
 - **Technical info:** bitrate, sample rate, channel count, file size,
   file format
 - **Source URLs:** files downloaded from the web have their
-  `kMDItemWhereFroms` source URL shown (read-only)
+  `kMDItemWhereFroms` source URLs shown, each in full on its own row
+  (read-only, selectable for copying)
 
 File Info is a standalone window: it is resizable, draggable, and does
 not block the main window, so you can keep playing music and continue
