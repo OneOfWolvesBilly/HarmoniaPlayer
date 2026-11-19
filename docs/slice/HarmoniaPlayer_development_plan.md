@@ -1114,7 +1114,7 @@ Ships in v1.0.1 (see §11.17).
 
 | Slice | Content | Status |
 |---|---|---|
-| 21 | Source rows grow with their text; rows keyed by position | ⬜ |
+| 21 | Source rows grow with their text; rows keyed by position | ✅ |
 
 ### 11.17 Version Targets
 
@@ -1132,7 +1132,7 @@ slice has not opened yet has no slice number (no reservations).
 |---|---|---|
 | 11 | Sleep/wake playback recovery | ✅ |
 | 17 | Crash-on-exception policy | ✅ |
-| 21 | File Info SOURCE section: a long URL overlaps the next row | ⬜ |
+| 21 | File Info SOURCE section: a long URL overlaps the next row | ✅ |
 | at open | Settings window cannot be enlarged to fit its form without scrolling | not opened |
 | at open | Change-time persistence of `volume` and `activePlaylistIndex` (BL-17A-01) | not opened |
 | at open | Playlist interaction latency and CPU load while playing | not opened |

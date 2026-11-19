@@ -22,7 +22,7 @@ or window width.
 
 | Sub-slice | Content | Tier | Status |
 |---|---|---|---|
-| 21-A | Source rows grow with their text; rows keyed by position | Free | ⬜ |
+| 21-A | Source rows grow with their text; rows keyed by position | Free | ✅ |
 
 ### Goals
 
@@ -74,7 +74,7 @@ ships).
 
 ---
 
-## Slice 21-A: Source rows grow with their text ⬜
+## Slice 21-A: Source rows grow with their text ✅
 
 ### Goal
 
@@ -184,6 +184,32 @@ here could only assert fixture state or a language guarantee. The slice
 is verified by AC1 (source inspection), AC2–AC4 (manual, screenshots at
 two widths with the click / click-away sequence), and AC5–AC6 (no
 regression in the suite or the warning baseline).
+
+Execution amendments (recorded at close-out):
+
+- Red set empty, as the matrix states; green is the single `sourceSection`
+  change plus the user-guide bullet.
+- AC5 on a clean build: unit target 563 passed / 5 skipped / 0 failed,
+  unchanged. The UITests runner did not start under the command-line run
+  (macOS automation authentication cancelled), so the 9 UITests are
+  confirmed from Xcode's ⌘U rather than from that run.
+- AC2 observed at 400 pt with the reference track: the first URL on three
+  lines with no `…`, the second source below; unchanged after a click
+  into the row and after a click elsewhere. AC3 at 900 pt: two lines,
+  unchanged after a click. AC4: a file without the attribute shows
+  "(none)"; a file whose attribute holds `https://vd6s.net/` twice plus a
+  311-character URL shows three rows — the short URL twice, then the long
+  URL on six lines — with no overlap.
+- Warning re-measurement on the clean build (deduplicated
+  `file:line:col: warning:` lines, the Slice 19 / 20 method): total 417,
+  app target 32 (`PlaylistView.swift` 16, `HarmoniaPlayerApp.swift` 14,
+  `AppDelegate.swift` 2), `FileInfoView.swift` 0 (AC6).
+- `user_guide.md`, read in full for AC8: the File Info "Technical info"
+  bullet lists bitrate, sample rate, channel count, file size, and file
+  format, while the window's TECHNICAL section shows format, codec,
+  encoding, duration, bit rate, sample rate, and channels, with file size
+  under LOCATION. Outside this slice's frozen scope; left for a
+  documentation pass.
 
 ### Implementation notes
 

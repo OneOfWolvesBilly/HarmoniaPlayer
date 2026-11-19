@@ -214,6 +214,13 @@ kinds, and no file gains a diagnostic. `PlaylistCollection.swift`,
 test files, the seven `PlaybackController*Tests.swift` files, and
 `IntegrationTests.swift` build with zero warnings.
 
+**Slice 21-A re-measurement.** The File Info source-row fix touched one
+file carrying no row. Re-measured on a clean build with the same counting
+method: `FileInfoView.swift` keeps zero warnings; the app-target rows
+(`PlaylistView.swift` 16, `HarmoniaPlayerApp.swift` 14,
+`AppDelegate.swift` 2) and the deduplicated total (417) are unchanged.
+The tables below stand as recorded.
+
 **App target — 32**
 
 | File | Warnings | Dominant kind |
